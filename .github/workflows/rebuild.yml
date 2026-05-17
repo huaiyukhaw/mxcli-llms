@@ -1,0 +1,64 @@
+name: Rebuild mxcli llms docs
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC daily — low-traffic window
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false  # never kill an in-flight deploy
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push dist/ commit
+      pages: write      # deploy to GitHub Pages
+      id-token: write   # OIDC token for Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/build.py
+
+      - name: Commit dist/ if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet dist/; then
+            RELEASE=$(python -c "import json; d=json.load(open('dist/meta.json')); print(d['mxcli_release'])")
+            COMMIT=$(python -c "import json; d=json.load(open('dist/meta.json')); print(d['mxcli_commit'])")
+            git add dist/
+            git commit -m "chore(docs): sync mxcli ${RELEASE} @ ${COMMIT}"
+            git push
+          else
+            echo "No dist/ changes to commit."
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
