@@ -1,0 +1,1 @@
+# [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)

@@ -1,0 +1,1 @@
+# [DESCRIBE ENTITY](#describe-entity-1)

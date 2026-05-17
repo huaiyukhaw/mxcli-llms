@@ -1,0 +1,1 @@
+# [CREATE IMAGE COLLECTION](#create-image-collection-1)

@@ -1,0 +1,3 @@
+# [Skills and CLAUDE.md](#skills-and-claudemd)
+
+Skills are markdown files that teach AI assistants how to write correct MDL. Each skill covers a specific topic – creating pages, writing microflows, managing security – and contains syntax references, examples, and validation checklists. When an AI assistant needs to generate MDL, it reads the relevant skill first, which dramatically improves output quality.

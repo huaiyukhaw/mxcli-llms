@@ -1,0 +1,1 @@
+# [DESCRIBE ASSOCIATION](#describe-association-1)

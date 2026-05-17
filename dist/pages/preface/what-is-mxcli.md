@@ -1,0 +1,3 @@
+# [What is mxcli?](#what-is-mxcli)
+
+**mxcli** is a command-line tool that enables developers and AI coding assistants to read, understand, and modify Mendix application projects. Mendix projects are stored in binary `.mpr` files that cannot be read or edited as text. mxcli bridges this gap by providing a text-based interface using MDL (Mendix Definition Language), a SQL-like syntax for querying and manipulating Mendix models.
