@@ -32,6 +32,23 @@ Then in any Claude Code session:
 /mxcli how do I run a deployment?
 ```
 
+> **Claude Desktop users:** `huaiyukhaw.github.io` and `mxcli.org` may be blocked by default. Allow both domains using either method:
+>
+> **Option A — Desktop app UI:** Open Claude Desktop → Settings → **Allow network egress** → Domain allowlist, and add `huaiyukhaw.github.io` and `mxcli.org`.
+>
+> **Option B — settings.json:** Add to `~/.claude/settings.json`:
+>
+> ```json
+> {
+>   "permissions": {
+>     "allow": [
+>       "WebFetch(domain:huaiyukhaw.github.io)",
+>       "WebFetch(domain:mxcli.org)"
+>     ]
+>   }
+> }
+> ```
+
 **For persistent context without the skill** — add `llms.txt` to your `CLAUDE.md`. At ~11K tokens it fits comfortably inside Claude's 200K context window. Claude can then `WebFetch` individual pages when it needs the full content of a specific section.
 
 ```markdown
