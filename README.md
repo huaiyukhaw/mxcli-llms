@@ -6,10 +6,10 @@ Curated [mxcli](https://www.mxcli.org) documentation for AI coding assistants â€
 
 ## The files
 
-| File | Size | What it is |
-|---|---|---|
-| [`llms.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms.txt) | ~45 KB | [llms.txt-spec](https://llmstxt.org/) index: title, section headers, one link + blurb per page |
-| [`llms-full.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt) | ~960 KB | Entire mxcli book as a single Markdown file â€” use this for in-context reference |
+| File | Size | What it is | Use when |
+|---|---|---|---|
+| [`llms.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms.txt) | ~45 KB | [llms.txt-spec](https://llmstxt.org/) index: title, section headers, one link + blurb per page | Persistent context in Claude / Claude Code (fits in the 200K token window) |
+| [`llms-full.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt) | ~960 KB | Entire mxcli book as a single Markdown file | RAG-based tools (Cursor, Windsurf, Continue.dev, Copilot) that chunk and embed; or one-off Claude queries |
 
 ---
 
@@ -17,15 +17,16 @@ Curated [mxcli](https://www.mxcli.org) documentation for AI coding assistants â€
 
 ### Claude Code
 
-Add to your project's `CLAUDE.md` so every Claude Code session has mxcli docs in context:
+**For persistent context** â€” add `llms.txt` to your `CLAUDE.md`. At ~11K tokens it fits comfortably inside Claude's 200K context window. Claude can then `WebFetch` individual pages when it needs the full content of a specific section.
 
 ```markdown
 ## mxcli reference
-Use WebFetch on https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
-for mxcli CLI documentation.
+Use WebFetch on https://huaiyukhaw.github.io/mxcli-llms/llms.txt
+for an index of all mxcli documentation. Fetch individual page URLs
+from that index when you need the full content of a specific section.
 ```
 
-Or fetch on demand in any session:
+**For one-off queries** â€” fetch `llms-full.txt` on demand. It covers ~245K tokens so later chapters may be truncated, but it's enough for most questions:
 
 ```
 Use WebFetch to read https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
