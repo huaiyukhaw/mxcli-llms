@@ -6,6 +6,14 @@ venv/
 .env
 .pytest_cache/
 
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude Code project instructions (contains personal/internal content)
+CLAUDE.md
+
 # Legacy root-level outputs from scrape_mxcli.py
 /llms.txt
 /llms-full.txt
