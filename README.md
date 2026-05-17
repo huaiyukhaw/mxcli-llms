@@ -8,10 +8,8 @@ Curated [mxcli](https://www.mxcli.org) documentation for AI coding assistants �
 
 | File | Size | What it is |
 |---|---|---|
-| [`llms.txt`](https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms.txt) | ~45 KB | [llms.txt-spec](https://llmstxt.org/) index: title, section headers, one link + blurb per page |
-| [`llms-full.txt`](https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt) | ~960 KB | Entire mxcli book as a single Markdown file — use this for in-context reference |
-
-> **Replace `YOUR_GITHUB_USERNAME`** with your actual GitHub username in all URLs below.
+| [`llms.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms.txt) | ~45 KB | [llms.txt-spec](https://llmstxt.org/) index: title, section headers, one link + blurb per page |
+| [`llms-full.txt`](https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt) | ~960 KB | Entire mxcli book as a single Markdown file — use this for in-context reference |
 
 ---
 
@@ -23,14 +21,14 @@ Add to your project's `CLAUDE.md` so every Claude Code session has mxcli docs in
 
 ```markdown
 ## mxcli reference
-Use WebFetch on https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt
+Use WebFetch on https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 for mxcli CLI documentation.
 ```
 
 Or fetch on demand in any session:
 
 ```
-Use WebFetch to read https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt
+Use WebFetch to read https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 then answer: how do I run a deployment?
 ```
 
@@ -38,7 +36,7 @@ then answer: how do I run a deployment?
 
 1. Open **Settings** (⌘/Ctrl+Shift+J) → **Features** → **Docs**
 2. Click **+ Add new doc**
-3. Paste: `https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt`
+3. Paste: `https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt`
 4. Reference it in chat with `@mxcli-llms`
 
 ### GitHub Copilot
@@ -46,7 +44,7 @@ then answer: how do I run a deployment?
 Commit `llms-full.txt` to your repo root — Copilot reads workspace files as context:
 
 ```bash
-curl -o llms-full.txt https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt
+curl -o llms-full.txt https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 git add llms-full.txt && git commit -m "chore: add mxcli docs for Copilot context"
 ```
 
@@ -55,7 +53,7 @@ git add llms-full.txt && git commit -m "chore: add mxcli docs for Copilot contex
 In the Cascade panel, type `@docs` and add the URL:
 
 ```
-https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt
+https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 ```
 
 ### Continue.dev
@@ -67,7 +65,7 @@ Add to `~/.continue/config.json`:
   "docs": [
     {
       "title": "mxcli",
-      "startUrl": "https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/llms-full.txt"
+      "startUrl": "https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt"
     }
   ]
 }
@@ -86,7 +84,7 @@ The scraper fetches two static endpoints from `mxcli.org` — both are pre-rende
 Every file is rebuilt daily at 02:00 UTC. The build is also triggerable manually from the Actions tab. Check `meta.json` to see what version is currently published:
 
 ```bash
-curl -s https://YOUR_GITHUB_USERNAME.github.io/mxcli-llms/meta.json | python -m json.tool
+curl -s https://huaiyukhaw.github.io/mxcli-llms/meta.json | python -m json.tool
 ```
 
 ```json
