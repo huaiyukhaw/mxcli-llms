@@ -5,6 +5,9 @@ on:
     - cron: '0 2 * * *'   # 02:00 UTC daily — low-traffic window
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: pages
   cancel-in-progress: false  # never kill an in-flight deploy
