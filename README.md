@@ -17,7 +17,22 @@ Curated [mxcli](https://www.mxcli.org) documentation for AI coding assistants �
 
 ### Claude Code
 
-**For persistent context** — add `llms.txt` to your `CLAUDE.md`. At ~11K tokens it fits comfortably inside Claude's 200K context window. Claude can then `WebFetch` individual pages when it needs the full content of a specific section.
+**Bundled skill** — this repo ships a `/mxcli` skill at [`.claude/skills/mxcli/SKILL.md`](.claude/skills/mxcli/SKILL.md). Clone the repo and the skill is available automatically in any Claude Code session opened in this directory:
+
+```
+/mxcli how do I run a deployment?
+```
+
+To use the skill globally (in any project), copy it to your user skills directory:
+
+```bash
+mkdir -p ~/.agents/skills/mxcli
+curl -o ~/.agents/skills/mxcli/SKILL.md \
+  https://raw.githubusercontent.com/huaiyukhaw/mxcli-llms/main/.claude/skills/mxcli/SKILL.md
+ln -s ~/.agents/skills/mxcli ~/.claude/skills/mxcli
+```
+
+**For persistent context without the skill** — add `llms.txt` to your `CLAUDE.md`. At ~11K tokens it fits comfortably inside Claude's 200K context window. Claude can then `WebFetch` individual pages when it needs the full content of a specific section.
 
 ```markdown
 ## mxcli reference
