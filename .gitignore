@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# Legacy root-level outputs from scrape_mxcli.py
+/llms.txt
+/llms-full.txt
