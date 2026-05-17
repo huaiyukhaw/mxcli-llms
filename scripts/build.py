@@ -24,6 +24,7 @@ from markdownify import markdownify as to_md
 BASE_URL = "https://www.mxcli.org"
 TOC_URL = f"{BASE_URL}/toc.html"
 PRINT_URL = f"{BASE_URL}/print.html"
+PAGES_BASE_URL = "https://huaiyukhaw.github.io/mxcli-llms"
 
 SITE_TITLE = "mxcli Documentation"
 SITE_DESCRIPTION = (
@@ -92,7 +93,9 @@ def fetch_print() -> str:
 def write_outputs(outputs: dict[str, str], dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     for filename, content in outputs.items():
-        (dest / filename).write_text(content, encoding="utf-8")
+        out_path = dest / filename
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
 
 
 def fetch_github_metadata(token: str | None) -> dict:
@@ -233,16 +236,17 @@ def parse_toc(html: str) -> list[dict]:
 
 # ── print.html parsing ────────────────────────────────────────────────────────
 
-def parse_print(html: str) -> tuple[str, dict[str, str]]:
+def parse_print(html: str) -> tuple[str, dict[str, str], dict[str, str]]:
     """
-    Extract full book Markdown and per-section blurbs from print.html.
+    Extract full book Markdown, per-section blurbs, and per-section Markdown from print.html.
 
     Returns:
-        full_md : entire book as Markdown string
-        blurbs  : {section title → first paragraph text (truncated)}
+        full_md  : entire book as Markdown string
+        blurbs   : {section title → first paragraph text (truncated)}
+        sections : {section title → full section Markdown}
 
-    Blurb lookup is exact-match on heading text vs TOC entry title. Unmatched
-    TOC entries get no blurb — acceptable per llms.txt spec.
+    All lookups are exact-match on heading text vs TOC entry title. Unmatched
+    TOC entries get no blurb or section file — acceptable per llms.txt spec.
     """
     soup = BeautifulSoup(html, "html.parser")
     # mdBook print.html nests content in div#content > div#content-main
@@ -269,20 +273,31 @@ def parse_print(html: str) -> tuple[str, dict[str, str]]:
         for el in body.select(sel):
             el.decompose()
 
-    # For each h1/h2, walk forward siblings to find the first real paragraph.
+    # For each h1/h2: extract blurb (first paragraph) and full section Markdown.
     blurbs: dict[str, str] = {}
+    sections: dict[str, str] = {}
     for h in body.find_all(["h1", "h2"]):
         title = h.get_text(strip=True)
+
+        # Collect all siblings up to the next h1/h2 for this section.
+        elements = [h]
         sib = h.find_next_sibling()
-        while sib:
-            if sib.name == "p":
-                text = sib.get_text(" ", strip=True)
+        while sib and sib.name not in ("h1", "h2"):
+            elements.append(sib)
+            sib = sib.find_next_sibling()
+
+        # Blurb: first real paragraph within collected siblings.
+        for el in elements[1:]:
+            if el.name == "p":
+                text = el.get_text(" ", strip=True)
                 if text:
                     blurbs[title] = truncate(text, MAX_BLURB_LEN)
                 break
-            if sib.name in ("h1", "h2"):
-                break
-            sib = sib.find_next_sibling()
+
+        # Full section Markdown.
+        combined = "".join(str(el) for el in elements)
+        sec_md = to_md(combined, heading_style="ATX", bullets="-", strip=["script", "style"])
+        sections[title] = re.sub(r"\n{3,}", "\n\n", sec_md).strip()
 
     full_md = to_md(
         str(body),
@@ -293,7 +308,7 @@ def parse_print(html: str) -> tuple[str, dict[str, str]]:
     # Collapse 3+ blank lines to 2
     full_md = re.sub(r"\n{3,}", "\n\n", full_md).strip()
 
-    return full_md, blurbs
+    return full_md, blurbs, sections
 
 
 # ── Output builders ───────────────────────────────────────────────────────────
@@ -304,12 +319,15 @@ def build_llms_txt(
     *,
     generated_at: str,
     version_stamp: str,
+    url_map: dict[str, str] | None = None,
 ) -> str:
     """
     Produce spec-compliant llms.txt (https://llmstxt.org/).
 
     version_stamp: e.g. "mxcli v0.x.y @ abc1234", or "" before Phase 1.
     generated_at and version_stamp are injected by main() — no datetime.now() here.
+    url_map: optional {original mxcli.org URL → our GitHub Pages Markdown URL}.
+             Unmatched URLs fall back to the original. Pass None to keep all links as-is.
     """
     if version_stamp:
         stamp_line = f"Version: {version_stamp} | Generated: {generated_at}"
@@ -323,10 +341,11 @@ def build_llms_txt(
         "",
         stamp_line,
         "",
-        f"Full content (entire book, single page): {PRINT_URL}",
+        f"Full content (entire book, single page): {PAGES_BASE_URL}/llms-full.txt",
         "",
     ]
 
+    _url_map = url_map or {}
     for entry in toc:
         if entry["is_section"]:
             lines.append("")
@@ -334,7 +353,8 @@ def build_llms_txt(
         else:
             blurb = blurbs.get(entry["title"], "")
             suffix = f": {blurb}" if blurb else ""
-            lines.append(f"- [{entry['title']}]({entry['url']}){suffix}")
+            url = _url_map.get(entry["url"], entry["url"])
+            lines.append(f"- [{entry['title']}]({url}){suffix}")
 
     lines.append("")
     return "\n".join(lines)
@@ -473,8 +493,8 @@ def main() -> None:
         print(f"          {n_sections} part sections, {n_pages} pages")
 
         print("\nStep 3/4  Fetching full book (print.html)...")
-        full_md, blurbs = parse_print(fetch_print())
-        print(f"          {len(full_md):,} chars Markdown | {len(blurbs)} blurbs extracted")
+        full_md, blurbs, sections = parse_print(fetch_print())
+        print(f"          {len(full_md):,} chars Markdown | {len(blurbs)} blurbs | {len(sections)} sections extracted")
 
         unmatched = [
             e["title"] for e in toc
@@ -489,9 +509,28 @@ def main() -> None:
                 for t in unmatched:
                     print(f"             - {t}")
 
+        # Build per-page Markdown files and URL remapping for llms.txt links.
+        url_map: dict[str, str] = {}
+        page_outputs: dict[str, str] = {}
+        for entry in toc:
+            if entry["is_section"]:
+                continue
+            title = entry["title"]
+            if title not in sections:
+                print(f"          [warn] No section match for {title!r} — keeping mxcli.org link")
+                continue
+            orig_url = entry["url"]
+            rel = orig_url.removeprefix(BASE_URL).lstrip("/")   # e.g. preface/vision.html
+            slug = str(Path(rel).with_suffix(""))               # e.g. preface/vision
+            url_map[orig_url] = f"{PAGES_BASE_URL}/pages/{slug}.md"
+            page_outputs[f"pages/{slug}.md"] = sections[title]
+
+        print(f"          {len(page_outputs)} per-page Markdown files built")
+
         print("\nStep 4/4  Building outputs...")
         llms_txt  = build_llms_txt(
-            toc, blurbs, generated_at=generated_at, version_stamp=version_stamp
+            toc, blurbs, generated_at=generated_at, version_stamp=version_stamp,
+            url_map=url_map,
         )
         llms_full = build_llms_full(
             full_md, generated_at=generated_at, version_stamp=version_stamp
@@ -558,6 +597,7 @@ def main() -> None:
             return
 
         write_outputs(outputs, DIST_DIR)
+        write_outputs(page_outputs, DIST_DIR)
         print(f"\nDone. Written to {DIST_DIR}/")
 
     except ScraperError as exc:

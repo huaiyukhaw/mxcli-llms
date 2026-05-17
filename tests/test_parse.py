@@ -98,36 +98,60 @@ class TestStripChapterNumber:
 
 class TestParsePrint:
     def test_returns_nonempty_markdown(self):
-        full_md, blurbs = parse_print(print_html())
+        full_md, blurbs, _ = parse_print(print_html())
         assert len(full_md) > 0
         assert isinstance(blurbs, dict)
 
     def test_blurbs_extracted_for_headings_with_paragraphs(self):
-        _, blurbs = parse_print(print_html())
+        _, blurbs, _ = parse_print(print_html())
         assert "Introduction" in blurbs
         assert "Advanced" in blurbs
 
     def test_no_blurb_for_heading_without_following_paragraph(self):
         # "API Reference" h2 has no paragraph before end of content
-        _, blurbs = parse_print(print_html())
+        _, blurbs, _ = parse_print(print_html())
         assert "API Reference" not in blurbs
 
     def test_blurb_is_first_paragraph_only(self):
-        _, blurbs = parse_print(print_html())
+        _, blurbs, _ = parse_print(print_html())
         assert "second paragraph" not in blurbs.get("Introduction", "")
 
     def test_blurb_respects_max_length(self):
-        _, blurbs = parse_print(print_html())
+        _, blurbs, _ = parse_print(print_html())
         for blurb in blurbs.values():
             assert len(blurb) <= 133  # MAX_BLURB_LEN + len("…")
 
     def test_nav_stripped(self):
-        full_md, _ = parse_print(print_html())
+        full_md, _, _ = parse_print(print_html())
         assert "Home" not in full_md
 
     def test_no_triple_newlines(self):
-        full_md, _ = parse_print(print_html())
+        full_md, _, _ = parse_print(print_html())
         assert "\n\n\n" not in full_md
+
+
+class TestParsePrintSections:
+    def test_sections_keys_match_headings(self):
+        _, _, sections = parse_print(print_html())
+        assert "Introduction" in sections
+        assert "Advanced" in sections
+
+    def test_section_contains_heading_text(self):
+        _, _, sections = parse_print(print_html())
+        assert "Introduction" in sections["Introduction"]
+
+    def test_section_contains_paragraph(self):
+        _, _, sections = parse_print(print_html())
+        assert "introduction paragraph" in sections["Introduction"]
+
+    def test_section_does_not_bleed_into_next(self):
+        _, _, sections = parse_print(print_html())
+        assert "Advanced" not in sections["Introduction"]
+
+    def test_empty_heading_has_section_entry(self):
+        # "API Reference" has no following paragraph but should still get a section entry
+        _, _, sections = parse_print(print_html())
+        assert "API Reference" in sections
 
 
 class TestTruncate:
@@ -188,6 +212,17 @@ class TestBuildLlmsTxt:
         a = build_llms_txt(self.TOC, {}, generated_at="T", version_stamp="V")
         b = build_llms_txt(self.TOC, {}, generated_at="T", version_stamp="V")
         assert a == b
+
+    def test_url_map_remaps_page_links(self):
+        url_map = {"https://example.com/p.html": "https://pages.example.com/p.md"}
+        out = build_llms_txt(self.TOC, {}, generated_at="T", version_stamp="", url_map=url_map)
+        assert "https://pages.example.com/p.md" in out
+        assert "https://example.com/p.html" not in out
+
+    def test_full_content_link_points_to_pages_base(self):
+        out = build_llms_txt(self.TOC, {}, generated_at="T", version_stamp="")
+        assert "llms-full.txt" in out
+        assert "print.html" not in out
 
 
 class TestBuildLlmsFull:
