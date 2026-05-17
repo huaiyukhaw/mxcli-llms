@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>mxcli docs for AI coding assistants</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --bg: #f8f8f6;
+                --surface: #ffffff;
+                --border: #e4e4df;
+                --text: #1a1a18;
+                --muted: #6b6b66;
+                --accent: #2a7a4f;
+                --accent-light: #eaf4ee;
+                --code-bg: #f0f0ec;
+                --code-border: #d8d8d2;
+                --btn-copy-bg: #1a1a18;
+                --btn-copy-fg: #ffffff;
+                --btn-view-bg: transparent;
+                --btn-view-border: #d0d0c8;
+                --radius: 8px;
+                --shadow:
+                    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+            }
+
+            body {
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Helvetica,
+                    Arial,
+                    sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                line-height: 1.6;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+
+            main {
+                flex: 1;
+            }
+
+            a {
+                color: var(--accent);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+
+            /* ── Layout ──────────────────────────────────────────────────────── */
+            .container {
+                max-width: 860px;
+                margin: 0 auto;
+                padding: 0 24px;
+            }
+
+            /* ── Hero ────────────────────────────────────────────────────────── */
+            .hero {
+                padding: 64px 0 48px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .hero-eyebrow {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--accent);
+                background: var(--accent-light);
+                border: 1px solid #c3e0cf;
+                border-radius: 999px;
+                padding: 3px 10px;
+                margin-bottom: 20px;
+            }
+
+            .hero h1 {
+                font-size: clamp(26px, 5vw, 38px);
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                line-height: 1.2;
+                color: var(--text);
+                margin-bottom: 14px;
+            }
+
+            .hero-sub {
+                font-size: 16px;
+                color: var(--muted);
+                max-width: 560px;
+            }
+
+            .version-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                color: var(--muted);
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 5px 12px;
+            }
+
+            .version-badge .dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #22c55e;
+                flex-shrink: 0;
+                box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+            }
+
+            .version-badge.hidden {
+                display: none;
+            }
+
+            /* ── Section headings ────────────────────────────────────────────── */
+            .section {
+                padding: 48px 0;
+                border-bottom: 1px solid var(--border);
+            }
+            .section:last-of-type {
+                border-bottom: none;
+            }
+
+            .section-label {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin-bottom: 8px;
+            }
+
+            .section-title {
+                font-size: 20px;
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+
+            .section-desc {
+                font-size: 14px;
+                color: var(--muted);
+                margin-bottom: 24px;
+            }
+
+            /* ── File cards ──────────────────────────────────────────────────── */
+            .cards {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+
+            .card {
+                flex: 1 1 320px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 24px;
+                box-shadow: var(--shadow);
+            }
+
+            .card-name {
+                font-family:
+                    "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+                font-size: 15px;
+                font-weight: 600;
+                color: var(--text);
+                margin-bottom: 8px;
+            }
+
+            .card-meta {
+                font-size: 13px;
+                color: var(--muted);
+                margin-bottom: 16px;
+                line-height: 1.5;
+            }
+
+            .card-size {
+                font-weight: 600;
+                color: var(--text);
+            }
+
+            .card-actions {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 13px;
+                font-weight: 500;
+                padding: 6px 14px;
+                border-radius: 6px;
+                border: 1px solid transparent;
+                cursor: pointer;
+                transition:
+                    opacity 0.15s,
+                    background 0.15s;
+                text-decoration: none;
+            }
+
+            .btn:hover {
+                opacity: 0.82;
+                text-decoration: none;
+            }
+
+            .btn-primary {
+                background: var(--btn-copy-bg);
+                color: var(--btn-copy-fg);
+            }
+
+            .btn-secondary {
+                background: var(--btn-view-bg);
+                color: var(--text);
+                border-color: var(--btn-view-border);
+            }
+
+            /* ── Code blocks ─────────────────────────────────────────────────── */
+            .code-block {
+                position: relative;
+                background: var(--code-bg);
+                border: 1px solid var(--code-border);
+                border-radius: var(--radius);
+                padding: 16px 20px;
+                margin-top: 16px;
+            }
+
+            .code-block pre {
+                font-family:
+                    "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+                font-size: 13px;
+                line-height: 1.7;
+                color: var(--text);
+                white-space: pre;
+                overflow-x: auto;
+            }
+
+            .copy-btn {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: var(--surface);
+                border: 1px solid var(--code-border);
+                border-radius: 5px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 500;
+                color: var(--muted);
+                cursor: pointer;
+                transition:
+                    color 0.15s,
+                    border-color 0.15s;
+            }
+
+            .copy-btn:hover {
+                color: var(--text);
+                border-color: #aaa;
+            }
+            .copy-btn.copied {
+                color: var(--accent);
+                border-color: #c3e0cf;
+            }
+
+            /* ── Skill block ─────────────────────────────────────────────────── */
+            .skill-intro {
+                background: var(--accent-light);
+                border: 1px solid #c3e0cf;
+                border-radius: var(--radius);
+                padding: 16px 20px;
+                font-size: 14px;
+                color: #1d5c38;
+                margin-bottom: 16px;
+            }
+
+            .skill-intro code {
+                font-family: "SF Mono", "Fira Code", Consolas, monospace;
+                background: rgba(255, 255, 255, 0.6);
+                padding: 1px 5px;
+                border-radius: 3px;
+            }
+
+            /* ── Other tools list ────────────────────────────────────────────── */
+            .tools-list {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .tool-row {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+
+            .tool-name {
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--text);
+                width: 100px;
+                flex-shrink: 0;
+                padding-top: 2px;
+            }
+
+            .tool-body {
+                flex: 1;
+                min-width: 240px;
+            }
+
+            .tool-desc {
+                font-size: 13px;
+                color: var(--muted);
+                margin-bottom: 8px;
+            }
+
+            .inline-code {
+                display: block;
+                font-family: "SF Mono", "Fira Code", Consolas, monospace;
+                font-size: 12px;
+                background: var(--code-bg);
+                border: 1px solid var(--code-border);
+                border-radius: 5px;
+                padding: 8px 12px;
+                color: var(--text);
+                white-space: pre;
+                overflow-x: auto;
+            }
+
+            /* ── Footer ──────────────────────────────────────────────────────── */
+            footer {
+                border-top: 1px solid var(--border);
+                padding: 24px 0;
+                font-size: 13px;
+                color: var(--muted);
+            }
+
+            footer .container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px 24px;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            footer a {
+                color: var(--muted);
+            }
+            footer a:hover {
+                color: var(--text);
+            }
+
+            @media (max-width: 540px) {
+                .hero {
+                    padding: 40px 0 32px;
+                }
+                .section {
+                    padding: 36px 0;
+                }
+                .tool-name {
+                    width: auto;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <div class="container">
+                <!-- ── Hero ─────────────────────────────────────────────────── -->
+                <section class="hero">
+                    <div class="hero-eyebrow">mxcli-llms</div>
+                    <h1>mxcli docs for<br />AI coding assistants</h1>
+                    <p class="hero-sub">
+                        Updated daily from
+                        <a
+                            href="https://www.mxcli.org"
+                            target="_blank"
+                            rel="noopener"
+                            >mxcli.org</a
+                        >. Optimised for Claude Code, Cursor, GitHub Copilot,
+                        Windsurf, and Continue.dev.
+                    </p>
+                    <div class="version-badge hidden" id="badge">
+                        <span class="dot"></span>
+                        <span id="badge-text">loading…</span>
+                    </div>
+                </section>
+
+                <!-- ── The files ─────────────────────────────────────────────── -->
+                <section class="section">
+                    <div class="section-label">The files</div>
+                    <div class="section-title">
+                        Two formats, one source of truth
+                    </div>
+                    <p class="section-desc">
+                        Both files are rebuilt every day at 02:00 UTC and served
+                        from GitHub Pages.
+                    </p>
+
+                    <div class="cards">
+                        <div class="card">
+                            <div class="card-name">llms.txt</div>
+                            <div class="card-meta">
+                                <span class="card-size" id="size-llms-txt"
+                                    >~45 KB</span
+                                >
+                                &nbsp;·&nbsp;
+                                <a
+                                    href="https://llmstxt.org"
+                                    target="_blank"
+                                    rel="noopener"
+                                    >llms.txt-spec</a
+                                >
+                                index — title, section headers, and one link +
+                                blurb per page. Fits comfortably in Claude's
+                                context window (~11K tokens). Use this for
+                                persistent context in
+                                <code style="font-family: inherit"
+                                    >CLAUDE.md</code
+                                >
+                                or as the source for the
+                                <code style="font-family: inherit">/mxcli</code>
+                                skill.
+                            </div>
+                            <div class="card-actions">
+                                <button
+                                    class="btn btn-primary"
+                                    onclick="
+                                        copyURL(
+                                            'https://huaiyukhaw.github.io/mxcli-llms/llms.txt',
+                                            this,
+                                        )
+                                    "
+                                >
+                                    Copy URL
+                                </button>
+                                <a
+                                    class="btn btn-secondary"
+                                    href="https://huaiyukhaw.github.io/mxcli-llms/llms.txt"
+                                    target="_blank"
+                                    rel="noopener"
+                                    >View</a
+                                >
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-name">llms-full.txt</div>
+                            <div class="card-meta">
+                                <span class="card-size" id="size-llms-full"
+                                    >~960 KB</span
+                                >
+                                &nbsp;·&nbsp; The entire mxcli book as a single
+                                Markdown file. Use for RAG-based tools (Cursor,
+                                Windsurf, Continue.dev, Copilot) that chunk and
+                                embed, or for one-off Claude queries when you
+                                need the full reference.
+                            </div>
+                            <div class="card-actions">
+                                <button
+                                    class="btn btn-primary"
+                                    onclick="
+                                        copyURL(
+                                            'https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt',
+                                            this,
+                                        )
+                                    "
+                                >
+                                    Copy URL
+                                </button>
+                                <a
+                                    class="btn btn-secondary"
+                                    href="https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt"
+                                    target="_blank"
+                                    rel="noopener"
+                                    >View</a
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <!-- /container -->
+        </main>
+
+        <footer>
+            <div class="container">
+                <span id="footer-version">Rebuilt daily at 02:00 UTC</span>
+                <span>
+                    <a
+                        href="https://github.com/huaiyukhaw/mxcli-llms"
+                        target="_blank"
+                        rel="noopener"
+                        >GitHub</a
+                    >
+                    &nbsp;·&nbsp;
+                    <a
+                        href="https://huaiyukhaw.github.io/mxcli-llms/meta.json"
+                        target="_blank"
+                        rel="noopener"
+                        >meta.json</a
+                    >
+                    &nbsp;·&nbsp; Content ©
+                    <a
+                        href="https://www.mxcli.org"
+                        target="_blank"
+                        rel="noopener"
+                        >mxcli authors</a
+                    >
+                </span>
+            </div>
+        </footer>
+
+        <script>
+            const BASE = "https://huaiyukhaw.github.io/mxcli-llms";
+
+            function timeAgo(isoStr) {
+                const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+                if (diff < 60) return "just now";
+                if (diff < 3600) return Math.floor(diff / 60) + " min ago";
+                if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+                return Math.floor(diff / 86400) + "d ago";
+            }
+
+            function fmtBytes(n) {
+                if (n >= 1_000_000) return (n / 1_000_000).toFixed(0) + " MB";
+                if (n >= 1_000) return Math.round(n / 1_000) + " KB";
+                return n + " B";
+            }
+
+            document.addEventListener("DOMContentLoaded", () => {
+                document.querySelectorAll(".code-block pre").forEach((pre) => {
+                    pre.textContent = pre.textContent.replace(/^\n/, "");
+                });
+
+                fetch("./meta.json")
+                    .then((r) => r.json())
+                    .then((m) => {
+                        const badge = document.getElementById("badge");
+                        const text = document.getElementById("badge-text");
+                        text.textContent =
+                            m.mxcli_release +
+                            " · updated " +
+                            timeAgo(m.generated_at);
+                        badge.classList.remove("hidden");
+
+                        const llmsTxt = fmtBytes(m.outputs.llms_txt_chars);
+                        const llmsFull = fmtBytes(m.outputs.llms_full_chars);
+                        document.getElementById("size-llms-txt").textContent =
+                            llmsTxt;
+                        document.getElementById("size-llms-full").textContent =
+                            llmsFull;
+
+                        const d = m.generated_at.slice(0, 10);
+                        document.getElementById("footer-version").textContent =
+                            "mxcli " +
+                            m.mxcli_release +
+                            " @ " +
+                            m.mxcli_commit +
+                            " · built " +
+                            d;
+                    })
+                    .catch(() => {});
+            });
+
+            function copyURL(url, btn) {
+                navigator.clipboard.writeText(url).then(() => {
+                    const orig = btn.textContent;
+                    btn.textContent = "Copied!";
+                    setTimeout(() => {
+                        btn.textContent = orig;
+                    }, 1800);
+                });
+            }
+
+            function copyBlock(btn) {
+                const code = btn.nextElementSibling.textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    btn.textContent = "Copied!";
+                    btn.classList.add("copied");
+                    setTimeout(() => {
+                        btn.textContent = "Copy";
+                        btn.classList.remove("copied");
+                    }, 1800);
+                });
+            }
+        </script>
+    </body>
+</html>
