@@ -560,7 +560,9 @@ def main() -> None:
             else:
                 added, removed, changed_sections = compute_diff_stats(old_lines, new_lines)
 
-        if not content_changed:
+        # Treat missing page files as a change so they get created on first run.
+        pages_missing = any(not (DIST_DIR / f).exists() for f in page_outputs)
+        if not content_changed and not pages_missing:
             print("\nContent unchanged -- nothing written.")
             return
 

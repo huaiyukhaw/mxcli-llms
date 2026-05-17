@@ -44,7 +44,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet dist/; then
+          if [ -n "$(git status --porcelain dist/)" ]; then
             RELEASE=$(python -c "import json; d=json.load(open('dist/meta.json')); print(d['mxcli_release'])")
             COMMIT=$(python -c "import json; d=json.load(open('dist/meta.json')); print(d['mxcli_commit'])")
             git add dist/
