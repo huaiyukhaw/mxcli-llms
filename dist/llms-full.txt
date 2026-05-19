@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.10.0 @ 849fb4e
-Generated: 2026-05-17T14:39:20Z
+Version:   mxcli v0.10.0 @ cf0ab07
+Generated: 2026-05-19T06:04:06Z
 
 ---
 
@@ -13244,7 +13244,9 @@ mxcli report -p app.mpr
 
 # [Built-in Rules](#built-in-rules)
 
-mxcli ships with 14 built-in lint rules implemented in Go. These rules are fast and always available.
+mxcli ships with built-in rules implemented in Go. These rules are fast and always available.
+
+The **lint rules** below run with `mxcli lint`. There is also a separate group of **check-time rules** that run with `mxcli check` — see [Check-time Rules](#check-time-rules-mxcli-check) at the bottom of this page.
 
 ## [MDL Rules](#mdl-rules)
 
@@ -13295,6 +13297,17 @@ System and marketplace modules often trigger false positives. Exclude them:
 mxcli lint -p app.mpr --exclude System --exclude Administration
 
 ```
+## [Check-time Rules (`mxcli check`)](#check-time-rules-mxcli-check)
+
+These rules run with `mxcli check` (and the LSP, for real-time diagnostics) rather than `mxcli lint`. They focus on pluggable-widget authoring.
+
+| Rule | Where it fires | Description |
+| --- | --- | --- |
+| **MDL-WIDGET01** | `mxcli check` + LSP | Unknown property key on a pluggable widget. The property is not in the widget’s `.def.json`. Catches typos like `optionsSourcType` (missing `e`) before MxBuild does. Suggests the nearest known key. |
+| **MDL-WIDGET02** | `mxcli check --post-migration` | Legacy native widget found on a project that has a pluggable replacement available. Reports each occurrence with the qualified document name, widget instance name, and the recommended pluggable widget. |
+
+Run `mxcli check --help` for usage. See [Error Messages → MDL-WIDGET01 / MDL-WIDGET02](#mdl-widget01-unknown-pluggable-widget-property) for cause-and-solution detail.
+
 # [Starlark Rules](#starlark-rules)
 
 In addition to the built-in Go rules, mxcli bundles 27 Starlark-based lint rules. Starlark is a Python-like language that allows rules to be extended and customized without recompiling mxcli.
@@ -30663,6 +30676,49 @@ System.ArgumentNullException: Value cannot be null.
 **Cause:** A validation rule’s `Attribute` field uses a binary UUID instead of a qualified name string. The metamodel specifies `BY_NAME_REFERENCE` for this field.
 
 **Solution:** Use a qualified name string (e.g., `"Module.Entity.Attribute"`) for the `Attribute` field in ValidationRule BSON, not a binary UUID.
+
+## [mxcli Check Errors](#mxcli-check-errors)
+
+These rule IDs appear in `mxcli check` output and in LSP diagnostics in VS Code. They fire before MxBuild runs, so most pluggable-widget mistakes are caught at authoring time.
+
+### [MDL-WIDGET01: Unknown pluggable widget property](#mdl-widget01-unknown-pluggable-widget-property)
+
+```
+page MyModule.OrderList: widget `cb1` (combobox) has no property
+`optionsSourcType` — did you mean `optionsSourceType`? [MDL-WIDGET01]
+
+```
+
+**Cause:** The property key written on a pluggable widget is not declared in the widget’s `.def.json` (the extracted schema from its `.mpk`). Usually a typo; sometimes a property that exists in a different widget but not this one.
+
+**Solution:**
+
+1. Compare the key against the widget’s known properties — `mxcli describe widget <Name>` lists them.
+2. Use the suggested replacement if one is offered (Levenshtein-nearest match).
+3. If the property genuinely doesn’t exist on this widget version, check that `.mxcli/widgets/` has the latest schema: `mxcli refresh catalog -p app.mpr` re-extracts any `.mpk` whose mtime changed.
+4. If the property was just added by a `.mpk` upgrade, make sure `mxcli init` or `widget init` was run after the upgrade.
+
+This rule also fires in the LSP — the property key shows as a red squiggle while you type.
+
+### [MDL-WIDGET02: Legacy native widget on upgraded project](#mdl-widget02-legacy-native-widget-on-upgraded-project)
+
+```
+page MyModule.OrderList: widget `OrdersGrid` uses deprecated native
+`Forms$DataGrid` (deprecated from Mendix 11.0.0) — migrate to pluggable
+Datagrid 2.x (`DATAGRID` keyword resolves to this on 11.0+) (project is
+on 11.9.0) [MDL-WIDGET02]
+
+```
+
+**Cause:** Studio Pro does not auto-migrate native-stack widgets (e.g. `Forms$DataGrid`) to their pluggable replacements during a Mendix major-version upgrade. After upgrading from Mendix 10.x to 11.x, your pages can still contain the native widget unless you opened them and migrated by hand.
+
+**Solution:**
+
+1. Run `mxcli check --post-migration -p app.mpr` to get the full list of pages and widgets to migrate.
+2. Open each reported page in Studio Pro and replace the native widget with its pluggable equivalent. For DataGrid, this means using the `DATAGRID` MDL keyword (which resolves to pluggable Datagrid 2.x on Mendix 11.0+) or `pluggablewidget 'com.mendix.widget.web.datagrid.Datagrid'`.
+3. Re-run the scan to confirm the page is clean.
+
+The deprecated-widget catalog is hand-maintained in `mdl/executor/keyword_dispatch.go` (`LegacyWidgets`). Open an issue if you spot a native widget that should be on the list.
 
 ## [mxcli Parser Errors](#mxcli-parser-errors)
 

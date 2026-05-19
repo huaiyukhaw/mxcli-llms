@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.10.0 @ 849fb4e | Generated: 2026-05-17T14:39:20Z
+Version: mxcli v0.10.0 @ cf0ab07 | Generated: 2026-05-19T06:04:06Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -117,7 +117,7 @@ Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms
 - [SQL Queries](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/catalog-sql.md): The catalog supports standard SQL SELECT syntax for querying project metadata. Queries use the CATALOG. prefix to identify…
 - [Use Cases](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/catalog-use-cases.md): After running IMPORT FROM , verify the data was imported correctly:
 - [Linting and Reports](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/linting.md): mxcli includes an extensible linting framework that checks Mendix projects for best practice violations, security issues, naming…
-- [Built-in Rules](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/builtin-rules.md): mxcli ships with 14 built-in lint rules implemented in Go. These rules are fast and always available.
+- [Built-in Rules](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/builtin-rules.md): mxcli ships with built-in rules implemented in Go. These rules are fast and always available.
 - [Starlark Rules](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/starlark-rules.md): In addition to the built-in Go rules, mxcli bundles 27 Starlark-based lint rules. Starlark is a Python-like language that allows…
 - [Writing Custom Rules](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/custom-rules.md): You can extend the linting framework by writing custom rules in Starlark, a Python-like language. Custom rules are placed in the…
 - [mxcli lint](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/mxcli-lint.md): The mxcli lint command runs all lint rules (built-in Go rules and Starlark rules) against a Mendix project and reports findings.
