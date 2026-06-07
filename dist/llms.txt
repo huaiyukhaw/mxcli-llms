@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.10.0 @ cf0ab07 | Generated: 2026-05-19T06:04:06Z
+Version: mxcli v0.12.0 @ b0e092d | Generated: 2026-06-07T06:20:07Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -302,6 +302,7 @@ These map to the Module Settings → Java…
 ## Guides
 - [Capabilities Overview](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/capabilities.md): Everything mxcli can do, organized by use case.
 - [Customizing AI Generation](https://huaiyukhaw.github.io/mxcli-llms/pages/guides/customizing-ai.md): How to make AI assistants (Claude Code, OpenCode, Cursor, etc.) generate Mendix code that follows your team’s conventions.
+- [Marketplace Content](https://huaiyukhaw.github.io/mxcli-llms/pages/guides/marketplace.md): How to discover, download, and install Mendix Marketplace content (modules, widgets) from the command line with mxcli marketplace…
 
 ## Part X: Appendixes
 - [MDL Quick Reference](https://huaiyukhaw.github.io/mxcli-llms/pages/appendixes/quick-reference.md): Complete syntax reference for MDL (Mendix Definition Language). This is the authoritative reference for all MDL statement syntax.
