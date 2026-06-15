@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.12.0 @ 901f3b2 | Generated: 2026-06-09T06:05:46Z
+Version: mxcli v0.12.0 @ bd82d1e | Generated: 2026-06-15T07:14:00Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -146,6 +146,7 @@ Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms
 - [mxcli docker run](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/docker-run.md): The mxcli docker run command runs a Mendix application in a Docker container, providing a local runtime environment for testing…
 - [OQL Queries](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/oql.md): The mxcli oql command executes OQL (Object Query Language) queries against a running Mendix runtime via the M2EE admin API. OQL…
 - [Dev Container Setup](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/devcontainer.md): When using mxcli init , a .devcontainer/ configuration is also created. Opening the project in VS Code and choosing Reopen in…
+- [Live Studio Pro Sync (MCP)](https://www.mxcli.org/tools/mcp-connect.html)
 
 ## Part VI: IDE Integration
 - [VS Code Extension](https://huaiyukhaw.github.io/mxcli-llms/pages/ide/vscode.md): The MDL extension for VS Code provides a rich editing experience for .mdl files, bringing IDE-level support for Mendix Definition…
@@ -298,6 +299,7 @@ These map to the Module Settings → Java…
 - [SQLite Schema](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/catalog-schema.md): The catalog uses an in-memory SQLite database with the following table definitions.
 - [FTS5 Full-Text Search](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/fts5.md): The catalog uses SQLite’s FTS5 extension to provide fast full-text search across all project content.
 - [Reference Tracking](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/reference-tracking.md): The cross-reference tracking system powers the callers, callees, references, and impact analysis queries. It is built during…
+- [MCP Backend: Script-to-Tool-Call Cost](https://www.mxcli.org/internals/mcp-backend-cost.html)
 
 ## Guides
 - [Capabilities Overview](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/capabilities.md): Everything mxcli can do, organized by use case.

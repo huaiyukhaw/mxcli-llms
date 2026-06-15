@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.12.0 @ 901f3b2
-Generated: 2026-06-09T06:05:46Z
+Version:   mxcli v0.12.0 @ bd82d1e
+Generated: 2026-06-15T07:14:00Z
 
 ---
 
@@ -15813,6 +15813,192 @@ When running `mxcli init`, use `--container-runtime podman` to generate this con
 4. Run `mxcli init` to set up AI assistant integration
 5. Use `mxcli` commands as normal (REPL, exec, lint, test, etc.)
 
+# [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp)
+
+> **Experimental.** The MCP backend targets Studio Pro’s embedded MCP server,
+> introduced in **Studio Pro 11.11**. Tooling and transport details may change
+> between Studio Pro versions — verify with `mxcli mcp capabilities` (below).
+
+Normally mxcli edits a project by writing its `.mpr` file directly. With `--mcp`
+it instead routes every **model write** to a *running* Studio Pro over that
+editor’s embedded MCP server (“PED”), so your changes appear in the open model
+**immediately — no save, no reload**. Reads (`SHOW`/`DESCRIBE`) still come from the
+local `.mpr` you pass with `-p` (the same file Studio Pro has open).
+
+This is the live-editing counterpart to the file backend. For the cost trade-offs
+of routing through MCP, see
+[MCP Backend: Script-to-Tool-Call Cost](#mcp-backend-how-a-script-maps-to-tool-calls).
+
+## [What you need](#what-you-need)
+
+1. **Studio Pro 11.11 or later**, running, with the project **open**.
+2. The **same project file** passed to mxcli via `-p` — reads come from there, so
+   it must match what Studio Pro has open.
+3. A reachable MCP endpoint. The server binds **IPv6 loopback only** (`[::1]:7782`
+   observed) and enforces a DNS-rebinding guard: the `/mcp` route only accepts
+   requests whose HTTP `Host` header is exactly `localhost`. mxcli handles the Host
+   header for you; you just have to make the TCP port reachable (see below).
+
+> The listening **port can change between Studio Pro sessions**. Confirm it on the
+> machine running Studio Pro, e.g. `lsof -nP -iTCP -sTCP:LISTEN | grep -i studio`.
+
+## [The flags](#the-flags)
+
+| Flag | Purpose |
+| --- | --- |
+| `--mcp <url>` | Enable the MCP backend. The URL is what the **server** must see; its host drives the `Host` header and must stay `localhost` — e.g. `http://localhost/mcp`. |
+| `--mcp-dial <addr>` | The TCP address mxcli actually connects to, independent of the URL host. From a devcontainer this is typically `host.docker.internal:<port>`. |
+| `--mcp-concord <url>` | Optional second MCP server (“Concord”) for operations PED lacks: **delete**, **save**, **validate**, **run** (default port `7783`). |
+| `--mcp-concord-dial <addr>` | Dial override for Concord. |
+| `--mcp-save` | After the command, save all changes in Studio Pro (requires `--mcp-concord`). |
+| `--mcp-check` | After the command, run Studio Pro’s consistency check and print the report (requires `--mcp-concord`). |
+| `--mcp-run` | After the command, start the app in Studio Pro and print its URL (requires `--mcp-concord`). |
+| `--mcp-verbose` | Print each PED tool call the backend makes (to stderr). |
+| `--mcp-trace` | Print each MDL command with the PED tool calls it makes (implies `--mcp-verbose`). |
+
+If `--mcp-dial` is omitted and the URL host is `localhost`/`127.0.0.1`, mxcli
+defaults the dial target to `host.docker.internal:<port>` — the right behaviour
+from inside a devcontainer.
+
+## [From a devcontainer (the common case)](#from-a-devcontainer-the-common-case)
+
+Studio Pro runs on your host; mxcli runs in the container. Because PED listens on
+**IPv6 loopback** on the host, the cleanest path is a tiny IPv4→IPv6 bridge on the
+**host**, which `host.docker.internal` can then reach.
+
+**Step 1 — bridge the port on the host** (where Studio Pro runs). Forward an IPv4
+port (here `7784`) to PED’s IPv6 loopback (`7782`):
+
+```
+# Run this on the HOST, not in the container.
+socat TCP4-LISTEN:7784,reuseaddr,fork 'TCP6:[::1]:7782'
+
+```
+
+**Step 2 — verify the connection from the container** with the capability report.
+This is the fastest way to confirm the handshake works and to see what the
+connected Studio Pro version can author:
+
+```
+mxcli mcp capabilities -p app.mpr \
+  --mcp http://localhost/mcp \
+  --mcp-dial host.docker.internal:7784
+
+```
+
+A successful run prints the server name/version, the authorable feature list, and
+the live tool set. If you instead see a connection error, jump to
+[Troubleshooting](#troubleshooting).
+
+**Step 3 — apply a script against the live model:**
+
+```
+mxcli exec mdl-examples/doctype-tests/01-mcp-domain-model-examples.mdl \
+  -p app.mpr \
+  --mcp http://localhost/mcp \
+  --mcp-dial host.docker.internal:7784
+
+```
+
+The new entities, enumerations, and associations appear in Studio Pro as the
+script runs — no save or reload required.
+
+The same `--mcp` / `--mcp-dial` flags work for a single statement (`-c "…"`) and in
+the interactive REPL (`mxcli -p app.mpr --mcp …` with no subcommand) — in every
+mode, writes go to Studio Pro while reads come from the local `.mpr`.
+
+## [Seeing the tool calls (`--mcp-verbose` / `--mcp-trace`)](#seeing-the-tool-calls---mcp-verbose----mcp-trace)
+
+Because each MDL statement expands into several PED tool calls, it’s useful to
+see what actually goes over the wire — for debugging, or just to understand the
+[cost](#mcp-backend-how-a-script-maps-to-tool-calls). Two levels, both printed to **stderr**
+(so they don’t pollute a piped stdout):
+
+- **`--mcp-verbose`** — one line per PED tool call, with its target document:
+  
+  ```
+  → ped_create_module
+  → ped_get_schema
+  → ped_update_document McpDm
+  → ped_check_errors McpDm
+  
+  ```
+- **`--mcp-trace`** — groups the calls under the MDL command that triggered them,
+  and adds per-call detail (the update operations, schema types, read paths):
+  
+  ```
+  ▸ create persistent entity McpDm.Customer
+    → ped_read_document McpDm: /entities, /associations
+    → ped_get_schema: DomainModels$Entity, DomainModels$Attribute
+    → ped_update_document McpDm: add /entities
+    → ped_get_schema: DomainModels$ValidationRule
+    → ped_update_document McpDm: add /entities/0/validationRules ×2
+    → ped_check_errors McpDm
+  
+  ```
+  
+  This makes the statement-to-tool-call mapping (and surprises like a read-back
+  reconstructing a dirty module) visible at runtime.
+
+## [Adding Concord (optional)](#adding-concord-optional)
+
+PED cannot delete documents, save, validate, or run the app. A companion server,
+**Concord**, fills those gaps (default port `7783`, usually reachable directly from
+the container — no bridge needed):
+
+```
+mxcli exec changes.mdl -p app.mpr \
+  --mcp http://localhost/mcp --mcp-dial host.docker.internal:7784 \
+  --mcp-concord http://localhost:7783/mcp \
+  --mcp-save --mcp-check
+
+```
+
+Here mxcli applies the script through PED, then asks Concord to **save** the
+project and run a **consistency check**, printing the report. `DROP` of standalone
+documents (enumerations, microflows, pages, …) also requires `--mcp-concord`,
+because the delete tool lives on Concord.
+
+## [Same machine as Studio Pro](#same-machine-as-studio-pro)
+
+If mxcli runs on the host itself, point `--mcp-dial` at the loopback bridge
+directly and keep the `localhost` URL for the Host guard:
+
+```
+socat TCP4-LISTEN:7784,reuseaddr,fork 'TCP6:[::1]:7782'   # if PED is IPv6-only
+mxcli exec changes.mdl -p app.mpr --mcp http://localhost/mcp --mcp-dial 127.0.0.1:7784
+
+```
+## [What works over MCP](#what-works-over-mcp)
+
+The MCP backend authors a subset of MDL — entities (incl. `extends`, `ALTER`, and
+NOT NULL / UNIQUE), associations, enumerations, constants, microflows, pages
+(`CREATE` + `ALTER`), and workflows. Some document types (nanoflows, Java actions,
+business-event services, **view entities**), security, navigation, and `MOVE` are
+**not** authorable over MCP today. Reads of any document type always work (they
+come from the local `.mpr`).
+
+`mxcli mcp capabilities -p app.mpr --mcp … --mcp-dial …` reports exactly what your
+connected version supports. See also
+[Capabilities Overview](#capabilities-overview).
+
+## [Troubleshooting](#troubleshooting)
+
+| Symptom | Likely cause / fix |
+| --- | --- |
+| `connection refused` on dial | The bridge isn’t running, or the port is wrong. Re-run `socat` on the host and confirm PED’s port with `lsof` (it changes per session). |
+| Request rejected / 403-style error | The `Host` header guard. Keep the **URL host `localhost`** (`http://localhost/mcp`) and redirect the connection with `--mcp-dial` — never put the container/host address in the URL itself. |
+| Reads don’t reflect a change you just made | Expected for some edits until the project is saved — reads of an *unchanged* doc come from the local `.mpr`. A module you just wrote is reconstructed live; other doc types may need a save (`--mcp-save`) to appear locally. |
+| `DROP` / save / check / run fails or is rejected | Those need Concord — add `--mcp-concord` (and `--mcp-save` / `--mcp-check` / `--mcp-run`). |
+| Intermittent timeouts | The transport can be flaky across a bridge; a timed-out write may still have applied. Re-run `mxcli mcp capabilities` to re-establish, and prefer idempotent scripts. |
+
+## [See also](#see-also-36)
+
+- [MCP Backend: Script-to-Tool-Call Cost](#mcp-backend-how-a-script-maps-to-tool-calls) — what
+  each statement costs in tool calls, and why running through mxcli is far cheaper
+  for an LLM than driving Studio Pro’s MCP server directly.
+- [Capabilities Overview](#capabilities-overview).
+
 # [VS Code Extension](#vs-code-extension)
 
 The **MDL extension for VS Code** provides a rich editing experience for `.mdl` files, bringing IDE-level support for Mendix Definition Language. The extension communicates with the `mxcli lsp` language server to provide real-time diagnostics, code completion, hover documentation, and navigation.
@@ -18691,7 +18877,7 @@ Instead of using `CONNECT LOCAL` inside the REPL, you can specify the project pa
 -- mxcli -p app.mpr -c "SHOW ENTITIES"
 
 ```
-## [See Also](#see-also-36)
+## [See Also](#see-also-37)
 
 [CLOSE PROJECT](#close-project), [SHOW STATUS](#show-status)
 
@@ -18726,7 +18912,7 @@ DISCONNECT;
 CONNECT LOCAL '/path/to/other-project.mpr';
 
 ```
-## [See Also](#see-also-37)
+## [See Also](#see-also-38)
 
 [OPEN PROJECT](#open-project), [SHOW STATUS](#show-status)
 
@@ -18800,7 +18986,7 @@ SHOW MODULES
 SHOW ENTITIES IN MyFirstModule
 
 ```
-## [See Also](#see-also-38)
+## [See Also](#see-also-39)
 
 [SHOW STRUCTURE](#show-structure-1), [SHOW ENTITIES](#show-entities), [SHOW MICROFLOWS](#show-microflows--show-nanoflows), [SHOW PAGES](#show-pages--show-snippets)
 
@@ -18848,7 +19034,7 @@ Show summary of a single entity:
 SHOW ENTITY Sales.Customer
 
 ```
-## [See Also](#see-also-39)
+## [See Also](#see-also-40)
 
 [DESCRIBE ENTITY](#describe-entity-1), [SHOW ASSOCIATIONS](#show-associations), [SHOW MODULES](#show-modules)
 
@@ -18901,7 +19087,7 @@ List nanoflows in a specific module:
 SHOW NANOFLOWS IN MyFirstModule
 
 ```
-## [See Also](#see-also-40)
+## [See Also](#see-also-41)
 
 [DESCRIBE MICROFLOW](#describe-microflow--describe-nanoflow), [SHOW PAGES](#show-pages--show-snippets), [SHOW MODULES](#show-modules)
 
@@ -18954,7 +19140,7 @@ List snippets in a specific module:
 SHOW SNIPPETS IN Common
 
 ```
-## [See Also](#see-also-41)
+## [See Also](#see-also-42)
 
 [DESCRIBE PAGE](#describe-page--describe-snippet), [SHOW WIDGETS](#show-widgets), [SHOW MODULES](#show-modules)
 
@@ -18991,7 +19177,7 @@ List enumerations in a specific module:
 SHOW ENUMERATIONS IN Sales
 
 ```
-## [See Also](#see-also-42)
+## [See Also](#see-also-43)
 
 [DESCRIBE ENUMERATION](#describe-enumeration-1), [SHOW ENTITIES](#show-entities), [SHOW MODULES](#show-modules)
 
@@ -19039,7 +19225,7 @@ Show a single association:
 SHOW ASSOCIATION Sales.Order_Customer
 
 ```
-## [See Also](#see-also-43)
+## [See Also](#see-also-44)
 
 [DESCRIBE ASSOCIATION](#describe-association-1), [SHOW ENTITIES](#show-entities), [SHOW MODULES](#show-modules)
 
@@ -19094,7 +19280,7 @@ Compare constant values for a specific module:
 SHOW CONSTANT VALUES IN MyModule
 
 ```
-## [See Also](#see-also-44)
+## [See Also](#see-also-45)
 
 [SHOW MODULES](#show-modules), [SHOW STRUCTURE](#show-structure-1), [SHOW / DESCRIBE SETTINGS](#show--describe-settings)
 
@@ -19131,7 +19317,7 @@ List workflows in a specific module:
 SHOW WORKFLOWS IN Approvals
 
 ```
-## [See Also](#see-also-45)
+## [See Also](#see-also-46)
 
 [SHOW MODULES](#show-modules), [SHOW MICROFLOWS](#show-microflows--show-nanoflows), [SHOW STRUCTURE](#show-structure-1)
 
@@ -19168,7 +19354,7 @@ List business event services in a specific module:
 SHOW BUSINESS EVENTS IN OrderModule
 
 ```
-## [See Also](#see-also-46)
+## [See Also](#see-also-47)
 
 [SHOW MODULES](#show-modules), [SHOW STRUCTURE](#show-structure-1)
 
@@ -19209,7 +19395,7 @@ SHOW IMAGE COLLECTION IN MyModule;
 DESCRIBE IMAGE COLLECTION MyModule.AppIcons;
 
 ```
-## [See Also](#see-also-47)
+## [See Also](#see-also-48)
 
 [DESCRIBE IMAGE COLLECTION](#show--describe-image-collection), [CREATE IMAGE COLLECTION](#create-image-collection-1), [SHOW MODULES](#show-modules)
 
@@ -19264,7 +19450,7 @@ Show full detail including all modules:
 SHOW STRUCTURE DEPTH 3 ALL
 
 ```
-## [See Also](#see-also-48)
+## [See Also](#see-also-49)
 
 [SHOW MODULES](#show-modules), [SHOW ENTITIES](#show-entities), [SHOW MICROFLOWS](#show-microflows--show-nanoflows), [SHOW PAGES](#show-pages--show-snippets)
 
@@ -19311,7 +19497,7 @@ Filter widgets by type:
 SHOW WIDGETS WHERE WidgetType = 'DataGrid'
 
 ```
-## [See Also](#see-also-49)
+## [See Also](#see-also-50)
 
 [SHOW PAGES](#show-pages--show-snippets), [DESCRIBE PAGE](#describe-page--describe-snippet), [SHOW STRUCTURE](#show-structure-1)
 
@@ -19366,7 +19552,7 @@ Describe a non-persistent entity:
 DESCRIBE ENTITY Sales.CustomerFilter
 
 ```
-## [See Also](#see-also-50)
+## [See Also](#see-also-51)
 
 [SHOW ENTITIES](#show-entities), [DESCRIBE ASSOCIATION](#describe-association-1), [DESCRIBE ENUMERATION](#describe-enumeration-1)
 
@@ -19423,7 +19609,7 @@ Describe a nanoflow:
 DESCRIBE NANOFLOW MyModule.NAV_ValidateInput
 
 ```
-## [See Also](#see-also-51)
+## [See Also](#see-also-52)
 
 [SHOW MICROFLOWS](#show-microflows--show-nanoflows), [DESCRIBE PAGE](#describe-page--describe-snippet), [DESCRIBE ENTITY](#describe-entity-1)
 
@@ -19484,7 +19670,7 @@ Describe a snippet:
 DESCRIBE SNIPPET Common.NavigationMenu
 
 ```
-## [See Also](#see-also-52)
+## [See Also](#see-also-53)
 
 [SHOW PAGES](#show-pages--show-snippets), [SHOW WIDGETS](#show-widgets), [DESCRIBE MICROFLOW](#describe-microflow--describe-nanoflow)
 
@@ -19529,7 +19715,7 @@ CREATE ENUMERATION Sales.OrderStatus (
 );
 
 ```
-## [See Also](#see-also-53)
+## [See Also](#see-also-54)
 
 [SHOW ENUMERATIONS](#show-enumerations), [DESCRIBE ENTITY](#describe-entity-1), [SHOW MODULES](#show-modules)
 
@@ -19579,7 +19765,7 @@ Describe a many-to-many association:
 DESCRIBE ASSOCIATION Sales.Order_Product
 
 ```
-## [See Also](#see-also-54)
+## [See Also](#see-also-55)
 
 [SHOW ASSOCIATIONS](#show-associations), [DESCRIBE ENTITY](#describe-entity-1), [SHOW MODULES](#show-modules)
 
@@ -19625,7 +19811,7 @@ Search using the CLI:
 -- mxcli search -p app.mpr "Customer" --format json
 
 ```
-## [See Also](#see-also-55)
+## [See Also](#see-also-56)
 
 [SHOW STRUCTURE](#show-structure-1), [SHOW ENTITIES](#show-entities), [SHOW MICROFLOWS](#show-microflows--show-nanoflows)
 
@@ -19915,7 +20101,7 @@ INDEX (OrderDate DESC);
 - The `@Position` annotation is optional and only affects the visual layout in Mendix Studio Pro.
 - Statements can be terminated with `;` or `/` (Oracle-style).
 
-## [See Also](#see-also-56)
+## [See Also](#see-also-57)
 
 [ALTER ENTITY](#alter-entity-1), [DROP ENTITY](#drop-entity-1), [CREATE ASSOCIATION](#create-association-1), [CREATE ENUMERATION](#create-enumeration-1)
 
@@ -20046,7 +20232,7 @@ ALTER ENTITY Sales.Customer
 - `RENAME` does not update references in microflows, pages, or access rules. Update those separately or use `SHOW IMPACT OF` to find affected elements.
 - `DROP` removes the attribute’s validation rules and index entries automatically.
 
-## [See Also](#see-also-57)
+## [See Also](#see-also-58)
 
 [CREATE ENTITY](#create-entity-1), [DROP ENTITY](#drop-entity-1)
 
@@ -20091,7 +20277,7 @@ DROP ASSOCIATION Sales.OldEntity_Customer;
 DROP ENTITY Sales.OldEntity;
 
 ```
-## [See Also](#see-also-58)
+## [See Also](#see-also-59)
 
 [CREATE ENTITY](#create-entity-1), [ALTER ENTITY](#alter-entity-1), [DROP ASSOCIATION](#drop-association-1)
 
@@ -20181,7 +20367,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 - Enumeration values can also be managed incrementally with `ALTER ENUMERATION ... ADD VALUE` and `ALTER ENUMERATION ... REMOVE VALUE`.
 - The `DEFAULT` value on an entity attribute references the enumeration value name as a quoted string (e.g., `DEFAULT 'Draft'`).
 
-## [See Also](#see-also-59)
+## [See Also](#see-also-60)
 
 [DROP ENUMERATION](#drop-enumeration-1), [CREATE ENTITY](#create-entity-1)
 
@@ -20218,7 +20404,7 @@ SHOW IMPACT OF Sales.OldStatus;
 DROP ENUMERATION Sales.OldStatus;
 
 ```
-## [See Also](#see-also-60)
+## [See Also](#see-also-61)
 
 [CREATE ENUMERATION](#create-enumeration-1)
 
@@ -20341,7 +20527,7 @@ CREATE ASSOCIATION HR.Employee_Department
 - Internally, Mendix stores the FROM entity pointer as `ParentPointer` and the TO entity pointer as `ChildPointer`. These BSON field names are inverted relative to what you might expect.
 - Entity access rules for associations (member access) must only be added to the FROM entity. Adding them to the TO entity triggers validation errors.
 
-## [See Also](#see-also-61)
+## [See Also](#see-also-62)
 
 [DROP ASSOCIATION](#drop-association-1), [CREATE ENTITY](#create-entity-1)
 
@@ -20378,7 +20564,7 @@ SHOW IMPACT OF Sales.OldAssociation;
 DROP ASSOCIATION Sales.OldAssociation;
 
 ```
-## [See Also](#see-also-62)
+## [See Also](#see-also-63)
 
 [CREATE ASSOCIATION](#create-association-1), [DROP ENTITY](#drop-entity-1)
 
@@ -20454,7 +20640,7 @@ CREATE CONSTANT MyModule.ApiBaseUrl TYPE String DEFAULT 'https://api.example.com
 ALTER SETTINGS CONSTANT 'MyModule.ApiBaseUrl' VALUE 'https://staging.example.com' IN CONFIGURATION 'Staging';
 
 ```
-## [See Also](#see-also-63)
+## [See Also](#see-also-64)
 
 [CREATE ENTITY](#create-entity-1), [CREATE ENUMERATION](#create-enumeration-1)
 
@@ -20777,7 +20963,7 @@ BEGIN
 END;
 
 ```
-## [See Also](#see-also-64)
+## [See Also](#see-also-65)
 
 [CREATE NANOFLOW](#create-nanoflow), [DROP MICROFLOW](#drop-microflow--nanoflow), [CREATE JAVA ACTION](#create-java-action), [DESCRIBE MICROFLOW](/reference/query/describe-microflow.html), [GRANT EXECUTE ON MICROFLOW](/reference/security/grant.html)
 
@@ -20886,7 +21072,7 @@ BEGIN
 END;
 
 ```
-## [See Also](#see-also-65)
+## [See Also](#see-also-66)
 
 [CREATE MICROFLOW](#create-microflow), [DROP MICROFLOW](#drop-microflow--nanoflow), [GRANT EXECUTE ON NANOFLOW](/reference/security/grant.html)
 
@@ -20936,7 +21122,7 @@ SHOW IMPACT OF Sales.ACT_CreateOrder;
 DROP MICROFLOW Sales.ACT_CreateOrder;
 
 ```
-## [See Also](#see-also-66)
+## [See Also](#see-also-67)
 
 [CREATE MICROFLOW](#create-microflow), [CREATE NANOFLOW](#create-nanoflow), [SHOW IMPACT](/reference/catalog/show-references-impact.html)
 
@@ -21081,7 +21267,7 @@ CREATE JAVA ACTION MyModule.JA_Placeholder (
 AS $$ return false; $$;
 
 ```
-## [See Also](#see-also-67)
+## [See Also](#see-also-68)
 
 [CREATE MICROFLOW](#create-microflow), [SHOW JAVA ACTIONS](/reference/query/show-microflows.html)
 
@@ -21443,7 +21629,7 @@ CREATE PAGE Reports.MonthlySummary
 };
 
 ```
-## [See Also](#see-also-68)
+## [See Also](#see-also-69)
 
 [CREATE SNIPPET](#create-snippet-1), [ALTER PAGE](#alter-page--alter-snippet-1), [DROP PAGE](#drop-page--snippet), [DESCRIBE PAGE](/reference/query/describe-page.html), [GRANT VIEW ON PAGE](/reference/security/grant.html)
 
@@ -21551,7 +21737,7 @@ CREATE PAGE MyModule.Customer_Edit
 };
 
 ```
-## [See Also](#see-also-69)
+## [See Also](#see-also-70)
 
 [CREATE PAGE](#create-page-1), [ALTER PAGE](#alter-page--alter-snippet-1), [DROP PAGE](#drop-page--snippet)
 
@@ -21779,7 +21965,7 @@ ALTER PAGE MyModule.Customer_Edit {
 };
 
 ```
-## [See Also](#see-also-70)
+## [See Also](#see-also-71)
 
 [CREATE PAGE](#create-page-1), [CREATE SNIPPET](#create-snippet-1), [DESCRIBE PAGE](/reference/query/describe-page.html), [DROP PAGE](#drop-page--snippet)
 
@@ -21829,7 +22015,7 @@ SHOW IMPACT OF Sales.Order_Edit;
 DROP PAGE Sales.Order_Edit;
 
 ```
-## [See Also](#see-also-71)
+## [See Also](#see-also-72)
 
 [CREATE PAGE](#create-page-1), [CREATE SNIPPET](#create-snippet-1), [ALTER PAGE](#alter-page--alter-snippet-1), [SHOW IMPACT](/reference/catalog/show-references-impact.html)
 
@@ -21903,7 +22089,7 @@ CREATE PAGE MyModule.ConfirmDelete
 };
 
 ```
-## [See Also](#see-also-72)
+## [See Also](#see-also-73)
 
 [CREATE PAGE](#create-page-1), [SHOW PAGES](/reference/query/show-pages.html)
 
@@ -21986,7 +22172,7 @@ CREATE MODULE ROLE HR.Employee DESCRIPTION 'Self-service access';
 CREATE MODULE ROLE HR.Viewer DESCRIPTION 'Read-only access';
 
 ```
-## [See Also](#see-also-73)
+## [See Also](#see-also-74)
 
 [CREATE USER ROLE](#create-user-role-1), [GRANT](#grant-1), [REVOKE](#revoke-1)
 
@@ -22041,7 +22227,7 @@ CREATE USER ROLE SalesManager (
 );
 
 ```
-## [See Also](#see-also-74)
+## [See Also](#see-also-75)
 
 [CREATE MODULE ROLE](#create-module-role-1), [GRANT](#grant-1), [CREATE DEMO USER](#create-demo-user-1)
 
@@ -22176,7 +22362,7 @@ GRANT Shop.Viewer ON Shop.Customer (READ (Phone));
 -- Result: READ (Name, Email, Phone)
 
 ```
-## [See Also](#see-also-75)
+## [See Also](#see-also-76)
 
 [REVOKE](#revoke-1), [CREATE MODULE ROLE](#create-module-role-1), [CREATE USER ROLE](#create-user-role-1)
 
@@ -22293,7 +22479,7 @@ Remove nanoflow execution:
 REVOKE EXECUTE ON NANOFLOW Shop.NAV_ValidateInput FROM Shop.Viewer;
 
 ```
-## [See Also](#see-also-76)
+## [See Also](#see-also-77)
 
 [GRANT](#grant-1), [CREATE MODULE ROLE](#create-module-role-1)
 
@@ -22350,7 +22536,7 @@ CREATE DEMO USER 'user' PASSWORD '1' ENTITY Administration.Account (AppUser);
 CREATE DEMO USER 'viewer' PASSWORD '1' ENTITY Administration.Account (AppViewer);
 
 ```
-## [See Also](#see-also-77)
+## [See Also](#see-also-78)
 
 [CREATE USER ROLE](#create-user-role-1), [GRANT](#grant-1)
 
@@ -22470,7 +22656,7 @@ CREATE OR REPLACE NAVIGATION NativePhone
     );
 
 ```
-## [See Also](#see-also-78)
+## [See Also](#see-also-79)
 
 [SHOW NAVIGATION](#show-navigation)
 
@@ -22540,7 +22726,7 @@ Export the responsive profile as MDL:
 DESCRIBE NAVIGATION Responsive;
 
 ```
-## [See Also](#see-also-79)
+## [See Also](#see-also-80)
 
 [ALTER NAVIGATION](#alter-navigation)
 
@@ -22742,7 +22928,7 @@ BEGIN
 END WORKFLOW;
 
 ```
-## [See Also](#see-also-80)
+## [See Also](#see-also-81)
 
 [DROP WORKFLOW](#drop-workflow-1)
 
@@ -22770,7 +22956,7 @@ The qualified name of the workflow to drop (`Module.WorkflowName`).
 DROP WORKFLOW HR.ApprovalFlow;
 
 ```
-## [See Also](#see-also-81)
+## [See Also](#see-also-82)
 
 [CREATE WORKFLOW](#create-workflow-1)
 
@@ -22982,7 +23168,7 @@ CREATE OR REPLACE JSON STRUCTURE MyModule.JSON_Pet
     SNIPPET '{"id": 1, "name": "Fido", "status": "available", "tags": []}';
 
 ```
-## [See Also](#see-also-82)
+## [See Also](#see-also-83)
 
 [CREATE IMPORT MAPPING](#create-import-mapping), [CREATE EXPORT MAPPING](#create-export-mapping)
 
@@ -23124,7 +23310,7 @@ CREATE OR MODIFY IMPORT MAPPING MyModule.IMM_Pet
 - Arrays in the JSON sample map directly to child entity objects — there is no intermediate container entity (unlike export mappings).
 - Import and export of the same JSON typically require different entity structures because of the FK direction difference.
 
-## [See Also](#see-also-83)
+## [See Also](#see-also-84)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE EXPORT MAPPING](#create-export-mapping)
 
@@ -23269,7 +23455,7 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
 
-## [See Also](#see-also-84)
+## [See Also](#see-also-85)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
@@ -23365,7 +23551,7 @@ CREATE OR MODIFY DATA TRANSFORMER MyModule.WeatherTransform
 };
 
 ```
-## [See Also](#see-also-85)
+## [See Also](#see-also-86)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
@@ -23514,7 +23700,7 @@ DROP MODEL MyModule.GPT4Model;
 /
 
 ```
-## [See Also](#see-also-86)
+## [See Also](#see-also-87)
 
 [CREATE AGENT](#create-agent), [CREATE KNOWLEDGE BASE](#create-knowledge-base)
 
@@ -23577,7 +23763,7 @@ CREATE OR MODIFY KNOWLEDGE BASE MyModule."ProductDocs" (
 /
 
 ```
-## [See Also](#see-also-87)
+## [See Also](#see-also-88)
 
 [CREATE AGENT](#create-agent), [CREATE MODEL](#create-model)
 
@@ -23645,7 +23831,7 @@ CREATE OR MODIFY CONSUMED MCP SERVICE MyModule."WebSearch" (
 /
 
 ```
-## [See Also](#see-also-88)
+## [See Also](#see-also-89)
 
 [CREATE AGENT](#create-agent), [CREATE MODEL](#create-model)
 
@@ -23838,7 +24024,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 - The model and knowledge base documents must exist before the agent is created.
 - Dollar-quoted prompts (`$$...$$`) preserve all whitespace including newlines.
 
-## [See Also](#see-also-89)
+## [See Also](#see-also-90)
 
 [CREATE MODEL](#create-model), [CREATE KNOWLEDGE BASE](#create-knowledge-base), [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)
 
@@ -23977,7 +24163,7 @@ CREATE OR REPLACE BUSINESS EVENT SERVICE Shop.OrderEvents
 };
 
 ```
-## [See Also](#see-also-90)
+## [See Also](#see-also-91)
 
 [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
@@ -24005,7 +24191,7 @@ The qualified name of the business event service to drop (`Module.ServiceName`).
 DROP BUSINESS EVENT SERVICE Shop.OrderEvents;
 
 ```
-## [See Also](#see-also-91)
+## [See Also](#see-also-92)
 
 [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
@@ -24084,7 +24270,7 @@ CREATE IMAGE COLLECTION MyModule.BrandAssets
 );
 
 ```
-## [See Also](#see-also-92)
+## [See Also](#see-also-93)
 
 [DROP IMAGE COLLECTION](#drop-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#show--describe-image-collection)
 
@@ -24117,7 +24303,7 @@ SHOW REFERENCES TO MyModule.AppIcons;
 DROP IMAGE COLLECTION MyModule.AppIcons;
 
 ```
-## [See Also](#see-also-93)
+## [See Also](#see-also-94)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#show--describe-image-collection)
 
@@ -24166,7 +24352,7 @@ DESCRIBE IMAGE COLLECTION MyModule.AppIcons;
 
 The output includes the complete `CREATE` statement with all `IMAGE ... FROM FILE` entries, which can be copied and re-executed.
 
-## [See Also](#see-also-94)
+## [See Also](#see-also-95)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
@@ -24237,7 +24423,7 @@ REFRESH CATALOG FULL FORCE;
 -- mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 ```
-## [See Also](#see-also-95)
+## [See Also](#see-also-96)
 
 [SELECT FROM CATALOG](#select-from-catalog), [SHOW CATALOG TABLES](#show-catalog-tables), [SHOW CALLERS / CALLEES](#show-callers--callees-1)
 
@@ -24351,7 +24537,7 @@ WHERE p.Id NOT IN (
 SELECT Name FROM CATALOG.MICROFLOWS LIMIT 10;
 
 ```
-## [See Also](#see-also-96)
+## [See Also](#see-also-97)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SHOW CATALOG TABLES](#show-catalog-tables), [SEARCH](#show-references--impact--context)
 
@@ -24415,7 +24601,7 @@ SHOW CALLEES OF Sales.ACT_ProcessOrder TRANSITIVE;
 -- mxcli callees -p app.mpr Sales.ACT_ProcessOrder
 
 ```
-## [See Also](#see-also-97)
+## [See Also](#see-also-98)
 
 [SHOW REFERENCES / IMPACT / CONTEXT](#show-references--impact--context), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -24490,7 +24676,7 @@ MOVE PAGE Sales.CustomerEdit TO NewModule;
 -- mxcli context -p app.mpr Sales.ACT_CreateOrder --depth 3
 
 ```
-## [See Also](#see-also-98)
+## [See Also](#see-also-99)
 
 [SHOW CALLERS / CALLEES](#show-callers--callees-1), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -24528,7 +24714,7 @@ SHOW CATALOG TABLES;
 SELECT * FROM CATALOG.ENTITIES LIMIT 5;
 
 ```
-## [See Also](#see-also-99)
+## [See Also](#see-also-100)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -24609,7 +24795,7 @@ SQL CONNECT pg 'postgres://user:pass@localhost:5432/mydb' AS src;
 SQL CONNECT mssql 'sqlserver://sa:Pass@host:1433?database=db' AS dst;
 
 ```
-## [See Also](#see-also-100)
+## [See Also](#see-also-101)
 
 [SQL DISCONNECT](#sql-disconnect), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -24648,7 +24834,7 @@ SQL source SELECT COUNT(*) FROM users;
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-101)
+## [See Also](#see-also-102)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query)
 
@@ -24738,7 +24924,7 @@ SQL source SELECT department, COUNT(*) AS headcount
 -- mxcli sql --driver postgres --dsn 'postgres://...' "SELECT * FROM users"
 
 ```
-## [See Also](#see-also-102)
+## [See Also](#see-also-103)
 
 [SQL CONNECT](#sql-connect-1), [SQL DISCONNECT](#sql-disconnect), [SQL GENERATE CONNECTOR](#sql-generate-connector), [IMPORT FROM](#import-from-1)
 
@@ -24808,7 +24994,7 @@ SQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-103)
+## [See Also](#see-also-104)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [IMPORT FROM](#import-from-1)
 
@@ -24902,7 +25088,7 @@ IMPORT FROM source QUERY 'SELECT name, email FROM employees WHERE active = true'
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-104)
+## [See Also](#see-also-105)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -24977,7 +25163,7 @@ DESCRIBE SETTINGS CONFIGURATION;
 DESCRIBE SETTINGS WORKFLOWS;
 
 ```
-## [See Also](#see-also-105)
+## [See Also](#see-also-106)
 
 [ALTER SETTINGS](#alter-settings-1), [SHOW CONSTANT VALUES](#show-constants)
 
@@ -25092,7 +25278,7 @@ CREATE CONFIGURATION 'Staging'
 DROP CONFIGURATION 'Staging';
 
 ```
-## [See Also](#see-also-106)
+## [See Also](#see-also-107)
 
 [SHOW / DESCRIBE SETTINGS](#show--describe-settings)
 
@@ -25140,7 +25326,7 @@ CREATE MODULE Inventory;
 CREATE MODULE Reporting;
 
 ```
-## [See Also](#see-also-107)
+## [See Also](#see-also-108)
 
 [CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
 
@@ -25202,7 +25388,7 @@ CREATE PAGE MyModule.Order_Edit
 }
 
 ```
-## [See Also](#see-also-108)
+## [See Also](#see-also-109)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -25259,7 +25445,7 @@ DROP FOLDER 'Processing' IN MyModule;
 | `folder not found: 'path' in Module` | No folder exists at the given path in the module |
 | `module not found: Module` | The specified module does not exist |
 
-## [See Also](#see-also-109)
+## [See Also](#see-also-110)
 
 [CREATE FOLDER](#create-folder), [CREATE MODULE](#create-module), [MOVE](#move), [MOVE FOLDER](#move-folder)
 
@@ -25328,7 +25514,7 @@ SHOW IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
-## [See Also](#see-also-110)
+## [See Also](#see-also-111)
 
 [CREATE MODULE](#create-module), [CREATE FOLDER](#create-folder)
 
@@ -25384,7 +25570,7 @@ MOVE FOLDER MyModule.SharedWidgets TO CommonModule;
 MOVE FOLDER MyModule.Templates TO FOLDER 'Shared/Templates' IN CommonModule;
 
 ```
-## [See Also](#see-also-111)
+## [See Also](#see-also-112)
 
 [CREATE FOLDER](#create-folder), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -25523,7 +25709,7 @@ Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
 when the project is opened in Studio Pro or built with `mxcli docker build`.
 
-## [See Also](#see-also-112)
+## [See Also](#see-also-113)
 
 [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
@@ -25598,7 +25784,7 @@ alter module MyModule
 
 The output is suitable for copying into a script and re-executing.
 
-## [See Also](#see-also-113)
+## [See Also](#see-also-114)
 
 [ALTER MODULE JAR DEPENDENCY](#alter-module--jar-dependency)
 
@@ -25657,7 +25843,7 @@ SET verbose = TRUE;
 SET AUTOCOMMIT = TRUE;
 
 ```
-## [See Also](#see-also-114)
+## [See Also](#see-also-115)
 
 [SHOW STATUS](#show-status), [OPEN PROJECT](#open-project)
 
@@ -25703,7 +25889,7 @@ STATUS;
 SHOW MODULES;
 
 ```
-## [See Also](#see-also-115)
+## [See Also](#see-also-116)
 
 [OPEN PROJECT](#open-project), [CLOSE PROJECT](#close-project), [SET](#set-1)
 
@@ -29051,6 +29237,153 @@ The reference tracker is implemented in the catalog package (`mdl/catalog/catalo
 4. Inserts into the `REFS` table with source/target/kind
 
 Transitive queries use recursive SQL CTEs (Common Table Expressions) to follow reference chains.
+
+# [MCP Backend: How a Script Maps to Tool Calls](#mcp-backend-how-a-script-maps-to-tool-calls)
+
+mxcli can apply an MDL script in two ways:
+
+- **File (MPR) backend** — the default. mxcli opens the `.mpr` directly, mutates the
+  BSON in process, and writes it back to disk. No network, no running Studio Pro.
+- **MCP backend** (`--mcp`) — mxcli connects to a *running* Studio Pro’s embedded
+  MCP server (“PED”) and applies each change through its tools, so edits land in the
+  live, open model with no save/reload cycle.
+
+The two backends produce the same model, but they have **very different cost
+profiles**. The file backend turns one statement into one in-process mutation —
+effectively free. The MCP backend turns one statement into *one or more* JSON-RPC
+tool calls to Studio Pro. This page explains that mapping for domain-model scripts
+and what it means for latency, token usage, and an LLM’s context window.
+
+> The numbers below trace the worked example
+> [`mdl-examples/doctype-tests/01-mcp-domain-model-examples.mdl`](https://github.com/mendixlabs/mxcli/blob/main/mdl-examples/doctype-tests/01-mcp-domain-model-examples.mdl)
+> — a ~20-statement domain-model script that stays entirely inside the MCP
+> authoring surface. To see the surface for your connected version, run
+> `mxcli mcp capabilities -p app.mpr --mcp`.
+
+## [The mapping](#the-mapping)
+
+Each MDL statement expands into a small, fixed *choreography* of PED tool calls.
+The choreography — not the statement count — drives the cost.
+
+| MDL statement | PED tool calls | Calls |
+| --- | --- | --- |
+| `create module` | `ped_create_module` | 1 |
+| `create enumeration` | `ped_create_document` + `ped_check_errors` | 2 |
+| `create entity` (incl. `extends`) | `ped_update_document` (add) + `ped_check_errors` | 2 |
+| … plus each `NOT NULL` / `UNIQUE` rule | `ped_read_document` (locate entity) + `ped_update_document` (add rules) | +2 |
+| `create association` | 2× `ped_read_document` (resolve parent/child entity refs) + `ped_update_document` (add) + `ped_check_errors` | 4 |
+| `alter entity` (add / rename / set documentation) | 2× `ped_read_document` (locate + read live attrs) + `ped_update_document` + `ped_check_errors` | 4 |
+| `show` / `describe` of a **just-modified** module | `ped_read_document` (entities + associations) + an enrichment read for attribute types | 2 |
+| `show enumerations` (and other reads of unchanged docs) | served from the local `.mpr` | 0 |
+| one-time `ped_get_schema` per element type (entity, attribute, association, validation rule) | fetched once per session, then cached | ~4 total |
+| `initialize` handshake | once per connection | 1 |
+
+For a ~20-statement domain-model script like the example, that’s **on the order of
+60 tool calls** — overwhelmingly per-write validation and read-backs, not the
+statement count. (Run it with `--mcp-trace` to see the exact tally for your
+script; the precise number shifts as the example evolves.)
+
+> **See it yourself.** Run any script with `--mcp-trace` (or `--mcp-verbose`) to
+> print the actual PED calls each MDL command makes — the runtime view of this
+> table. See [Connecting to a Running Studio Pro](#seeing-the-tool-calls---mcp-verbose----mcp-trace).
+
+### [Three things inflate the count](#three-things-inflate-the-count)
+
+1. **Validation runs after every write.** `ped_check_errors` fires once per write
+   statement, so **a large share of the calls are validation alone**. This keeps the live
+   model provably consistent at each step, but it is not free.
+2. **`ALTER` is read-modify-write.** Because PED cannot change an attribute’s type
+   in place, mxcli first *reads* the live entity (to tell a rename from a drop+add,
+   and to leave untouched attributes alone), then writes. Every `ALTER ENTITY` is
+   ~4 calls even when it changes one thing.
+3. **Reading a module you just wrote costs 2 calls, not 0.** After any write, that
+   module’s on-disk `.mpr` is stale, so `SHOW`/`DESCRIBE` of it is reconstructed
+   live from Studio Pro (a structure read plus an enrichment read for attribute
+   types) instead of being served locally.
+
+## [What this means for performance](#what-this-means-for-performance)
+
+Every tool call is a synchronous JSON-RPC round trip to Studio Pro, executed
+**sequentially**. Wall-clock time is therefore roughly:
+
+```
+total ≈ (number of tool calls) × (round-trip latency)
+
+```
+
+So latency scales with the *choreography-expanded* call count, not the number of
+statements. The practical levers:
+
+- **Batch writes into one script run**, not many small invocations — the
+  `initialize` handshake and schema fetches are paid once per connection.
+- **Drop trailing `SHOW`/`DESCRIBE` verification** from production scripts. Each
+  read-back of a just-written module costs ~2 calls, so the verification block is an
+  easy chunk to cut when you don’t need it.
+- **The file backend has zero round trips.** If Studio Pro doesn’t need to be open
+  — e.g. CI, bulk generation, or scripted migrations — the file backend applies the
+  same script far faster. Reserve `--mcp` for when live, validated, no-reload edits
+  in an open model are the point.
+
+## [What this means for token cost and LLM context](#what-this-means-for-token-cost-and-llm-context)
+
+This is the part that matters most when an **AI agent** is driving mxcli, and it
+hinges on a single question: *who makes the tool calls?*
+
+### [Agent → mxcli (efficient)](#agent--mxcli-efficient)
+
+When an agent runs `mxcli exec script.mdl -p app.mpr --mcp` (via the shell, the
+REPL, or an editor command), the agent emits **one** action — the MDL script — and
+receives **one** summarized result. The ~60 PED tool calls, and their often
+verbose, schema-laden JSON responses, happen *inside the mxcli process*. They never
+enter the model’s context window, and they don’t each cost a model turn.
+
+What lands in context:
+
+- the MDL script — compact and declarative (the example is ~150 readable lines), and
+- mxcli’s textual summary of the run.
+
+That is a few thousand tokens, regardless of how many PED round trips it took.
+
+### [Agent → Studio Pro MCP directly (expensive)](#agent--studio-pro-mcp-directly-expensive)
+
+An agent connected straight to Studio Pro’s MCP server has no such amortization. To
+build the same domain model it must issue each of the ~60 calls **as its own tool
+call**:
+
+- every request *and* every response (schemas, validation output, read-backs) is
+  written into the context window, and
+- each call is a separate model turn — so the model “thinks” ~60 times instead of
+  once, multiplying both latency and per-turn token cost.
+
+The same work that is one declarative script for the mxcli path becomes dozens of
+imperative, stateful tool calls whose intermediate results accumulate in context.
+
+### [The takeaway](#the-takeaway)
+
+```
+                     calls in LLM context   model turns   tokens in context
+Agent → mxcli (--mcp)          0                  1              low (script + summary)
+Agent → Studio Pro MCP        ~60               ~60             high (every request + result)
+
+```
+
+mxcli’s MCP backend is, in effect, a **compression layer over the PED tool surface**:
+the LLM works in compact, reviewable MDL while mxcli absorbs the chatty,
+validation-heavy, read-modify-write round trips on the model’s behalf. For bulk
+authoring this is the difference between one cheap turn and dozens of expensive
+ones — and it is why, even though a script “costs” ~60 tool calls, running it
+*through mxcli* keeps that cost out of the model’s context.
+
+## [See also](#see-also-117)
+
+- [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp) — how to set up
+  the connection and run scripts against a live model.
+- [`mxcli mcp capabilities`](#capabilities-overview) — what the MCP backend can
+  author against your connected Studio Pro version.
+- [System Architecture](#system-architecture) — the backend abstraction that lets the
+  same MDL target either the file or the MCP backend.
+- [Storage Names vs Qualified Names](#storage-names-vs-qualified-names-1) — why the BSON the file
+  backend writes differs from the names in the SDK docs.
 
 # [Capabilities Overview](#capabilities-overview)
 
