@@ -1,3 +1,7 @@
+## 2026-06-19 -- mxcli v0.12.0 @ 8a53800
+- +171 / -11 lines
+- Sections changed: [Graph Analysis](#graph-analysis), [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Enforce your own architecture (Starlark)](#enforce-your-own-architecture-starlark), [Graph-Analysis Tables](#graph-analysis-tables), [Notes](#notes), [Notes](#notes-1), [Notes](#notes-10), [Notes](#notes-11) (+10 more)
+
 ## 2026-06-15 -- mxcli v0.12.0 @ bd82d1e
 - +413 / -80 lines
 - Sections changed: Run this on the HOST, not in the container., [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp), [MCP Backend: How a Script Maps to Tool Calls](#mcp-backend-how-a-script-maps-to-tool-calls), [Adding Concord (optional)](#adding-concord-optional), [From a devcontainer (the common case)](#from-a-devcontainer-the-common-case), [Same machine as Studio Pro](#same-machine-as-studio-pro), [See Also](#see-also-100), [See Also](#see-also-101) (+89 more)
