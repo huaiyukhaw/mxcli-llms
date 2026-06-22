@@ -1,3 +1,7 @@
+## 2026-06-22 -- mxcli v0.13.0 @ 52542fb
+- +402 / -266 lines
+- Sections changed: [CREATE JAVASCRIPT ACTION](#create-javascript-action), [Description](#description-32), [Description](#description-33), [Description](#description-34), [Description](#description-35), [Description](#description-36), [Description](#description-37), [Description](#description-38) (+240 more)
+
 ## 2026-06-19 -- mxcli v0.12.0 @ 8a53800
 - +171 / -11 lines
 - Sections changed: [Graph Analysis](#graph-analysis), [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Enforce your own architecture (Starlark)](#enforce-your-own-architecture-starlark), [Graph-Analysis Tables](#graph-analysis-tables), [Notes](#notes), [Notes](#notes-1), [Notes](#notes-10), [Notes](#notes-11) (+10 more)

@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.12.0 @ 8a53800 | Generated: 2026-06-19T07:02:24Z
+Version: mxcli v0.13.0 @ 52542fb | Generated: 2026-06-22T07:19:52Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -217,6 +217,7 @@ microflows, pages, …) are nodes and their references (…
 - [CREATE NANOFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-nanoflow.md)
 - [DROP MICROFLOW / NANOFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/drop-microflow.md)
 - [CREATE JAVA ACTION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-java-action.md)
+- [CREATE JAVASCRIPT ACTION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-javascript-action.md)
 - [Page Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/page/index.md): Statements for creating, modifying, and dropping pages, snippets, and layouts.
 - [CREATE PAGE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/page/create-page.md): The basic syntax for creating a page:
 - [CREATE SNIPPET](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/page/create-snippet.md): A snippet without parameters:
