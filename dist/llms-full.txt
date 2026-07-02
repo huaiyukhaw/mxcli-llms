@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.13.0 @ 52542fb
-Generated: 2026-06-22T07:19:52Z
+Version:   mxcli v0.13.0 @ f761d1e
+Generated: 2026-07-02T05:55:05Z
 
 ---
 
@@ -8704,6 +8704,7 @@ CREATE [OR REPLACE] PAGE <Module>.<Name>
   Title: '<title>',
   Layout: <Module.LayoutName>
   [, Folder: '<path>']
+  [, Class: '<css-class>', Style: '<css: rule>']
 )
 {
   <widget-tree>
@@ -8757,6 +8758,8 @@ CREATE PAGE MyModule.Customer_Edit
 | `Layout` | Layout to use for the page | `Layout: Atlas_Core.PopupLayout` |
 | `Folder` | Organizational folder within the module | `Folder: 'Pages/Customers'` |
 | `Variables` | Page-level variables for conditional logic | `Variables: { $show: Boolean = 'true' }` |
+| `Class` | CSS class applied to the page (Forms$Appearance) | `Class: 'container-fluid bg-light'` |
+| `Style` | Inline CSS style applied to the page | `Style: 'min-height: 100vh'` |
 
 ## [Widget Properties](#widget-properties)
 
@@ -9801,11 +9804,14 @@ ALTER PAGE Module.EditPage {
 
 ### [SET – Page-Level Properties](#set--page-level-properties)
 
-Omit the `ON` clause to set page-level properties:
+Omit the `ON` clause to set page-level properties. These names are case-sensitive:
+`Title`, `Class`, `Style`, `PopupWidth`, `PopupHeight`, `PopupResizable`.
 
 ```
 ALTER PAGE Module.EditPage {
-  SET Title = 'Customer Details'
+  SET Title = 'Customer Details';
+  SET Class = 'container-fluid bg-light';  -- page CSS class (Forms$Appearance)
+  SET Style = 'min-height: 100vh'          -- page inline style
 };
 
 ```
@@ -30610,7 +30616,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 | Add variable | `ADD Variables $name: Type = 'expr'` | Add a page variable |
 | Drop variable | `DROP Variables $name` | Remove a page variable |
 
-**Supported SET properties:** Caption, Label, ButtonStyle, Class, Style, Editable, Visible, Name, Title (page-level), and quoted pluggable widget properties.
+**Supported SET properties:** Caption, Label, ButtonStyle, Class, Style, Editable, Visible, Name, and quoted pluggable widget properties. Page-level (no `ON` clause, case-sensitive): Title, Class, Style, PopupWidth, PopupHeight, PopupResizable.
 
 **Example:**
 
