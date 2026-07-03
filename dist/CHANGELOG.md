@@ -1,3 +1,7 @@
+## 2026-07-03 -- mxcli v0.13.0 @ 2252534
+- +95 / -97 lines
+- Sections changed: [ALTER ENTITY](#alter-entity), [ADD Attributes](#add-attributes), [ADD INDEX](#add-index), [ADD/DROP System Attributes](#adddrop-system-attributes), [ALTER ENTITY](#alter-entity-2), [ALTER ENUMERATION](#alter-enumeration), [Adding and Removing Indexes](#adding-and-removing-indexes), [DESCRIBE ASSOCIATION](#describe-association) (+14 more)
+
 ## 2026-06-22 -- mxcli v0.13.0 @ 52542fb
 - +402 / -266 lines
 - Sections changed: [CREATE JAVASCRIPT ACTION](#create-javascript-action), [Description](#description-32), [Description](#description-33), [Description](#description-34), [Description](#description-35), [Description](#description-36), [Description](#description-37), [Description](#description-38) (+240 more)

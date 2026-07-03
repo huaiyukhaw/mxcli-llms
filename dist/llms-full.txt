@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.13.0 @ f761d1e
-Generated: 2026-07-02T05:55:05Z
+Version:   mxcli v0.13.0 @ 2252534
+Generated: 2026-07-03T05:49:30Z
 
 ---
 
@@ -1317,7 +1317,7 @@ CREATE ASSOCIATION MyFirstModule.Order_Customer
   FROM MyFirstModule.Order TO MyFirstModule.Customer
   TYPE Reference
   OWNER Default
-  DELETE_BEHAVIOR DeleteRefSetOnly;
+  DELETE_BEHAVIOR DELETE_BUT_KEEP_REFERENCES;
 
 ```
 ## [DESCRIBE MICROFLOW](#describe-microflow)
@@ -1411,7 +1411,7 @@ CREATE ASSOCIATION MyFirstModule.Order_Customer
   FROM MyFirstModule.Order TO MyFirstModule.Customer
   TYPE Reference
   OWNER Default
-  DELETE_BEHAVIOR DeleteRefSetOnly;
+  DELETE_BEHAVIOR DELETE_BUT_KEEP_REFERENCES;
 
 ```
 ## [DESCRIBE MODULE](#describe-module)
@@ -5298,6 +5298,17 @@ WIDGETS, WITH, WORKFLOWS, WRITE
 
 Most keywords work **unquoted** as identifiers (entity names, attribute names). Only structural keywords like `CREATE`, `DELETE`, `BEGIN`, `END`, `RETURN`, `ENTITY`, and `MODULE` require quoting when used as identifiers.
 
+> **Quoting escapes *parser* keywords only — not *platform*-reserved member names.**
+> Quoting an identifier tells the MDL parser to treat it as a name rather than a token,
+> so `"create"`, `"status"`, and `"type"` parse fine as attribute names. But some names
+> are reserved by the Mendix *platform*, and Studio Pro rejects them **even when quoted**
+> (the quotes are stripped, and the bare name is still invalid): `Type` (CE7247), the
+> audit attributes `CreatedDate` / `ChangedDate` / `Owner` / `ChangedBy`, plus `ID`,
+> `GUID`, `CurrentUser`, and the Java keyword list. `mxcli check --references` flags these
+> as `MDL021` (CE7247) / `MDL020`. Rename them (e.g. `Type` → `ResourceType`); use the
+> `AutoCreatedDate` / `AutoChangedDate` / `AutoOwner` / `AutoChangedBy` pseudo-types for
+> the audit fields.
+
 ## [Literals](#literals)
 
 ### [String Literals](#string-literals)
@@ -6064,13 +6075,13 @@ Status: Enumeration(Sales.OrderStatus) DEFAULT 'Draft'
 Add or remove values from an existing enumeration:
 
 ```
--- Add a new value
+-- Add a new value (the CAPTION keyword is required for ALTER, unlike CREATE)
 ALTER ENUMERATION Sales.OrderStatus
-  ADD VALUE OnHold 'On Hold';
+  ADD VALUE OnHold CAPTION 'On Hold';
 
 -- Remove a value
 ALTER ENUMERATION Sales.OrderStatus
-  REMOVE VALUE Draft;
+  DROP VALUE Draft;
 
 ```
 ## [DROP ENUMERATION](#drop-enumeration)
@@ -6776,13 +6787,13 @@ INDEX (Name, CreatedAt DESC)    -- mixed: Name ascending, CreatedAt descending
 Use `ALTER ENTITY` to add or remove indexes on existing entities:
 
 ```
--- Add an index
+-- Add a named index
 ALTER ENTITY Sales.Customer
-  ADD INDEX (Email);
+  ADD INDEX idx_customer_email (Email);
 
--- Remove an index
+-- Remove an index by name
 ALTER ENTITY Sales.Customer
-  DROP INDEX (Email);
+  DROP INDEX idx_customer_email;
 
 ```
 ## [Guidelines](#guidelines)
@@ -6801,85 +6812,78 @@ ALTER ENTITY Sales.Customer
 
 `ALTER ENTITY` modifies an existing entity’s attributes, indexes, or documentation without recreating it. This is useful for incremental changes to entities that already contain data.
 
+Each `ALTER ENTITY` statement performs **one** action — add, drop, modify, or rename a single attribute; add or drop one index; etc. Apply several changes with several statements.
+
 ## [ADD Attributes](#add-attributes)
 
-Add one or more new attributes:
+Add a new attribute with `ADD ATTRIBUTE`:
 
 ```
-ALTER ENTITY Sales.Customer
-  ADD (Phone: String(50), Notes: String(unlimited));
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
 
 ```
 
-New attributes support the same [constraints](#constraints) as in `CREATE ENTITY`:
+New attributes support the same [constraints](#constraints) as in `CREATE ENTITY`. Add several with one statement each:
 
 ```
-ALTER ENTITY Sales.Customer
-  ADD (
-    LoyaltyPoints: Integer DEFAULT 0,
-    MemberSince: DateTime NOT NULL
-  );
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE LoyaltyPoints: Integer DEFAULT 0;
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE MemberSince: DateTime NOT NULL;
 
 ```
 ## [DROP Attributes](#drop-attributes)
 
-Remove one or more attributes:
+Remove an attribute with `DROP ATTRIBUTE`:
 
 ```
-ALTER ENTITY Sales.Customer
-  DROP (Notes);
+ALTER ENTITY Sales.Customer DROP ATTRIBUTE Notes;
 
 ```
 
-Multiple attributes can be dropped at once:
+Drop several with one statement each:
 
 ```
-ALTER ENTITY Sales.Customer
-  DROP (Notes, TempField, OldStatus);
+ALTER ENTITY Sales.Customer DROP ATTRIBUTE Notes;
+ALTER ENTITY Sales.Customer DROP ATTRIBUTE TempField;
+ALTER ENTITY Sales.Customer DROP ATTRIBUTE OldStatus;
 
 ```
 ## [MODIFY Attributes](#modify-attributes)
 
-Change the type or constraints of existing attributes:
+Change the type or constraints of an existing attribute with `MODIFY ATTRIBUTE`:
 
 ```
-ALTER ENTITY Sales.Customer
-  MODIFY (Name: String(400) NOT NULL);
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Name: String(400) NOT NULL;
 
 ```
 ## [RENAME Attributes](#rename-attributes)
 
-Rename an attribute:
+Rename an attribute with `RENAME ATTRIBUTE`:
 
 ```
-ALTER ENTITY Sales.Customer
-  RENAME Phone TO PhoneNumber;
+ALTER ENTITY Sales.Customer RENAME ATTRIBUTE Phone TO PhoneNumber;
 
 ```
 ## [ADD INDEX](#add-index)
 
-Add an index to the entity:
+Add an index to the entity (the index name is optional):
 
 ```
-ALTER ENTITY Sales.Customer
-  ADD INDEX (Email);
+ALTER ENTITY Sales.Customer ADD INDEX (Email);
 
 ```
 
-Composite indexes:
+Composite indexes, with optional sort direction:
 
 ```
-ALTER ENTITY Sales.Customer
-  ADD INDEX (Name, CreatedAt DESC);
+ALTER ENTITY Sales.Customer ADD INDEX (Name, CreatedAt DESC);
 
 ```
 ## [DROP INDEX](#drop-index)
 
-Remove an index:
+Remove an index by name:
 
 ```
-ALTER ENTITY Sales.Customer
-  DROP INDEX (Email);
+ALTER ENTITY Sales.Customer DROP INDEX idx_customer_email;
 
 ```
 ## [SET DOCUMENTATION](#set-documentation)
@@ -6893,7 +6897,7 @@ ALTER ENTITY Sales.Customer
 ```
 ## [ADD/DROP System Attributes](#adddrop-system-attributes)
 
-System attributes use the same ADD/DROP syntax as regular attributes:
+System attributes use the same `ADD ATTRIBUTE` / `DROP ATTRIBUTE` syntax as regular attributes:
 
 ```
 -- Add system attributes
@@ -6942,29 +6946,21 @@ Parameter: `($currentObject)` passes the entity to the microflow, `()` does not.
 ## [Syntax Summary](#syntax-summary)
 
 ```
-ALTER ENTITY <Module>.<Entity>
-  ADD (<attribute-definition> [, ...])
+ALTER ENTITY <Module>.<Entity> ADD ATTRIBUTE <name>: <type> [constraints];
 
-ALTER ENTITY <Module>.<Entity>
-  DROP (<attribute-name> [, ...])
+ALTER ENTITY <Module>.<Entity> DROP ATTRIBUTE <name>;
 
-ALTER ENTITY <Module>.<Entity>
-  MODIFY (<attribute-definition> [, ...])
+ALTER ENTITY <Module>.<Entity> MODIFY ATTRIBUTE <name>: <type> [constraints];
 
-ALTER ENTITY <Module>.<Entity>
-  RENAME <old-name> TO <new-name>
+ALTER ENTITY <Module>.<Entity> RENAME ATTRIBUTE <old-name> TO <new-name>;
 
-ALTER ENTITY <Module>.<Entity>
-  ADD INDEX (<column-list>)
+ALTER ENTITY <Module>.<Entity> ADD INDEX [<name>] (<column> [ASC|DESC] [, ...]);
 
-ALTER ENTITY <Module>.<Entity>
-  DROP INDEX (<column-list>)
+ALTER ENTITY <Module>.<Entity> DROP INDEX <index-name>;
 
-ALTER ENTITY <Module>.<Entity>
-  SET DOCUMENTATION '<text>'
+ALTER ENTITY <Module>.<Entity> SET DOCUMENTATION '<text>';
 
-ALTER ENTITY <Module>.<Entity>
-  SET POSITION (<x>, <y>)
+ALTER ENTITY <Module>.<Entity> SET POSITION (<x>, <y>);
 
 ```
 ## [See Also](#see-also-10)
@@ -14039,12 +14035,11 @@ The textarea supports standard text editing. Type or paste any MDL statements:
 ```
 SHOW MODULES;
 
-CREATE ENTITY MyModule.Customer
-  NAME "Customer"
-  PERSISTENT
-  ATTRIBUTE Name STRING(100)
-  ATTRIBUTE Email STRING(200)
-  ATTRIBUTE Age INTEGER;
+CREATE PERSISTENT ENTITY MyModule.Customer (
+  Name: String(100),
+  Email: String(200),
+  Age: Integer
+);
 
 ```
 
@@ -20276,17 +20271,17 @@ INDEX (OrderDate DESC);
 ## [Synopsis](#synopsis-21)
 
 ```
-ALTER ENTITY module.name ADD ( attribute_definition [, ...] )
+ALTER ENTITY module.name ADD ATTRIBUTE attribute_definition
 
-ALTER ENTITY module.name DROP ( attribute_name [, ...] )
+ALTER ENTITY module.name DROP ATTRIBUTE attribute_name
 
-ALTER ENTITY module.name MODIFY ( attribute_definition [, ...] )
+ALTER ENTITY module.name MODIFY ATTRIBUTE attribute_definition
 
-ALTER ENTITY module.name RENAME old_name TO new_name
+ALTER ENTITY module.name RENAME ATTRIBUTE old_name TO new_name
 
-ALTER ENTITY module.name ADD INDEX ( column [ ASC | DESC ] [, ...] )
+ALTER ENTITY module.name ADD INDEX [ index_name ] ( column [ ASC | DESC ] [, ...] )
 
-ALTER ENTITY module.name DROP INDEX ( column [, ...] )
+ALTER ENTITY module.name DROP INDEX index_name
 
 ALTER ENTITY module.name SET DOCUMENTATION 'text'
 
@@ -20297,15 +20292,15 @@ ALTER ENTITY module.name SET DOCUMENTATION 'text'
 
 Each `ALTER ENTITY` statement performs exactly one operation. To make multiple changes, issue multiple statements.
 
-The `ADD` operation appends one or more new attributes to the entity. Attribute definitions follow the same syntax as in `CREATE ENTITY`: a name, a data type, and optional constraints (`NOT NULL`, `UNIQUE`, `DEFAULT`).
+The `ADD ATTRIBUTE` operation appends a new attribute to the entity. Attribute definitions follow the same syntax as in `CREATE ENTITY`: a name, a data type, and optional constraints (`NOT NULL`, `UNIQUE`, `DEFAULT`).
 
-The `DROP` operation removes one or more attributes by name. Dropping an attribute also removes any validation rules and index entries that reference it.
+The `DROP ATTRIBUTE` operation removes an attribute by name. Dropping an attribute also removes any validation rules and index entries that reference it.
 
-The `MODIFY` operation changes the type or constraints of existing attributes. The attribute name must already exist in the entity. The full attribute definition (type and constraints) replaces the current one.
+The `MODIFY ATTRIBUTE` operation changes the type or constraints of an existing attribute. The attribute name must already exist in the entity. The full attribute definition (type and constraints) replaces the current one.
 
-The `RENAME` operation changes an attribute’s name. This updates references within the entity but does not automatically update microflows, pages, or access rules that reference the old name.
+The `RENAME ATTRIBUTE` operation changes an attribute’s name. This updates references within the entity but does not automatically update microflows, pages, or access rules that reference the old name.
 
-The `ADD INDEX` and `DROP INDEX` operations manage database indexes. Index columns may include an optional `ASC` or `DESC` sort direction.
+The `ADD INDEX` and `DROP INDEX` operations manage database indexes. `ADD INDEX` takes an optional index name followed by one or more columns, each with an optional `ASC` or `DESC` sort direction; `DROP INDEX` takes the index name.
 
 The `SET DOCUMENTATION` operation replaces the entity’s documentation string.
 
@@ -20323,6 +20318,8 @@ The current name of the attribute to rename.
 The new name for the attribute.
 [**column**](#column-1)
 An attribute name for the index, optionally followed by `ASC` or `DESC`.
+[**index\_name**](#index_name)
+The name of an index. Optional when adding an index; required when dropping one.
 [**text**](#text)
 A single-quoted string to use as the entity’s documentation.
 ## [Examples](#examples-32)
@@ -20330,29 +20327,26 @@ A single-quoted string to use as the entity’s documentation.
 ### [Add new attributes](#add-new-attributes)
 
 ```
-ALTER ENTITY Sales.Customer
-    ADD (Phone: String(50), Notes: String(unlimited));
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE Notes: String(unlimited);
 
 ```
 ### [Drop an attribute](#drop-an-attribute)
 
 ```
-ALTER ENTITY Sales.Customer
-    DROP (Notes);
+ALTER ENTITY Sales.Customer DROP ATTRIBUTE Notes;
 
 ```
 ### [Modify an attribute’s type](#modify-an-attributes-type)
 
 ```
-ALTER ENTITY Sales.Customer
-    MODIFY (Phone: String(100) NOT NULL);
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Phone: String(100) NOT NULL;
 
 ```
 ### [Rename an attribute](#rename-an-attribute)
 
 ```
-ALTER ENTITY Sales.Customer
-    RENAME Phone TO PhoneNumber;
+ALTER ENTITY Sales.Customer RENAME ATTRIBUTE Phone TO PhoneNumber;
 
 ```
 ### [Add an index](#add-an-index)
@@ -20372,8 +20366,7 @@ ALTER ENTITY Sales.Order
 ### [Drop an index](#drop-an-index)
 
 ```
-ALTER ENTITY Sales.Customer
-    DROP INDEX (Email);
+ALTER ENTITY Sales.Customer DROP INDEX idx_customer_email;
 
 ```
 ### [Set documentation](#set-documentation-1)
@@ -20790,10 +20783,13 @@ CREATE CONSTANT MyModule.EnableLogging TYPE Boolean DEFAULT true;
 CREATE OR MODIFY CONSTANT MyModule.ApiBaseUrl TYPE String DEFAULT 'https://api.example.com/v2';
 
 ```
-### [Constant without a default](#constant-without-a-default)
+### [Constant with an empty default](#constant-with-an-empty-default)
+
+A `DEFAULT` is always required. For secrets, use an empty default and set the
+real value per configuration (see below):
 
 ```
-CREATE CONSTANT MyModule.DatabasePassword TYPE String;
+CREATE CONSTANT MyModule.DatabasePassword TYPE String DEFAULT '';
 
 ```
 ### [Override constant per configuration](#override-constant-per-configuration)
@@ -25523,6 +25519,10 @@ The name of the runtime configuration where the constant override applies, enclo
 ALTER SETTINGS MODEL AfterStartupMicroflow = 'MyModule.ACT_Startup';
 
 ```
+> **The after-startup microflow must return `Boolean`.** Mendix build fails with **CE0142**
+> if it has no return type. A common trip-up is wiring a void seed/demo-data microflow to
+> after-startup — end it with `return true` so it returns a Boolean.
+
 ### [Configure database type](#configure-database-type)
 
 ```
@@ -30216,26 +30216,24 @@ Modifies an existing entity without full replacement.
 
 | Operation | Syntax | Notes |
 | --- | --- | --- |
-| Add attributes | `ALTER ENTITY Module.Name ADD (Attr: Type [constraints]);` | One or more attributes |
-| Drop attributes | `ALTER ENTITY Module.Name DROP (AttrName, ...);` |  |
-| Modify attributes | `ALTER ENTITY Module.Name MODIFY (Attr: NewType [constraints]);` | Change type/constraints |
-| Rename attribute | `ALTER ENTITY Module.Name RENAME OldName TO NewName;` |  |
-| Add index | `ALTER ENTITY Module.Name ADD INDEX (Col1 [ASC|DESC], ...);` |  |
-| Drop index | `ALTER ENTITY Module.Name DROP INDEX (Col1, ...);` |  |
+| Add attribute | `ALTER ENTITY Module.Name ADD ATTRIBUTE Attr: Type [constraints];` | One action per statement |
+| Drop attribute | `ALTER ENTITY Module.Name DROP ATTRIBUTE AttrName;` |  |
+| Modify attribute | `ALTER ENTITY Module.Name MODIFY ATTRIBUTE Attr: NewType [constraints];` | Change type/constraints |
+| Rename attribute | `ALTER ENTITY Module.Name RENAME ATTRIBUTE OldName TO NewName;` |  |
+| Add index | `ALTER ENTITY Module.Name ADD INDEX [IdxName] (Col1 [ASC|DESC], ...);` | Name optional |
+| Drop index | `ALTER ENTITY Module.Name DROP INDEX IdxName;` | By index name |
 | Set documentation | `ALTER ENTITY Module.Name SET DOCUMENTATION 'text';` |  |
 | Set position | `ALTER ENTITY Module.Name SET POSITION (100, 200);` | Canvas position |
 
 **Example:**
 
 ```
-ALTER ENTITY Sales.Customer
-  ADD (Phone: String(50), Notes: String(unlimited));
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
+ALTER ENTITY Sales.Customer ADD ATTRIBUTE Notes: String(unlimited);
 
-ALTER ENTITY Sales.Customer
-  RENAME Phone TO PhoneNumber;
+ALTER ENTITY Sales.Customer RENAME ATTRIBUTE Phone TO PhoneNumber;
 
-ALTER ENTITY Sales.Customer
-  ADD INDEX (Email);
+ALTER ENTITY Sales.Customer ADD INDEX (Email);
 
 ```
 ## [Constants](#constants-1)
