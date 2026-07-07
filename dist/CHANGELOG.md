@@ -1,3 +1,7 @@
+## 2026-07-07 -- mxcli v0.14.0 @ d2b29dd
+- +66 / -34 lines
+- Sections changed: --- Create a customer ---, --- Customer Overview page (throw to fail the script under set -e) ---, --- Customer Overview page ---, --- Login (page context -> eval) ---, --- Login ---, Check text content, Check widget presence, Click a widget (+6 more)
+
 ## 2026-07-03 -- mxcli v0.13.0 @ 2252534
 - +95 / -97 lines
 - Sections changed: [ALTER ENTITY](#alter-entity), [ADD Attributes](#add-attributes), [ADD INDEX](#add-index), [ADD/DROP System Attributes](#adddrop-system-attributes), [ALTER ENTITY](#alter-entity-2), [ALTER ENUMERATION](#alter-enumeration), [Adding and Removing Indexes](#adding-and-removing-indexes), [DESCRIBE ASSOCIATION](#describe-association) (+14 more)
