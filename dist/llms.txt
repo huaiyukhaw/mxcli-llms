@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.14.0 @ d2b29dd | Generated: 2026-07-07T06:03:36Z
+Version: mxcli v0.14.0 @ 85b71d5 | Generated: 2026-07-08T05:17:11Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -10,6 +10,8 @@ Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms
 - [Vision](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/vision.md): mxcli and MDL exist to make Mendix development accessible to coding agents, automation pipelines, and developers who prefer…
 - [What is mxcli?](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/what-is-mxcli.md): mxcli is a command-line tool that enables developers and AI coding assistants to read, understand, and modify Mendix application…
 - [What is MDL?](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/what-is-mdl.md): MDL (Mendix Definition Language) is a text-based, SQL-like language for describing and manipulating Mendix application models. It…
+- [Design Principles](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/design-principles.md): mxcli is not a thin wrapper over the .mpr format. It is a deliberate bet on a
+particular way of letting coding agents build…
 - [Mendix Concepts for Newcomers](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/mendix-concepts.md): This page explains the core Mendix concepts you’ll encounter when using mxcli. If you’re familiar with web frameworks, relational…
 - [Document Conventions](https://huaiyukhaw.github.io/mxcli-llms/pages/preface/conventions.md): This page describes the formatting and notation conventions used throughout this documentation.
 

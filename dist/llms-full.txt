@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.14.0 @ d2b29dd
-Generated: 2026-07-07T06:03:36Z
+Version:   mxcli v0.14.0 @ 85b71d5
+Generated: 2026-07-08T05:17:11Z
 
 ---
 
@@ -138,6 +138,8 @@ MDL addresses these problems by providing a syntax that is both human-readable a
 
 ## [Characteristics of MDL](#characteristics-of-mdl)
 
+MDL draws on three well-understood languages: **SQL** for its `CREATE`/`ALTER`/`DROP`/`SHOW` verbs and set-oriented queries, and **Ada** and **PL/SQL** for its readable, block-structured statement bodies. The result is a syntax that is immediately recognisable to anyone who has written database or procedural code.
+
 - **SQL-like syntax** – uses familiar keywords like `CREATE`, `ALTER`, `DROP`, `SHOW`, `DESCRIBE`, `GRANT`.
 - **Declarative** – you describe what the model should look like, not how to construct it step by step.
 - **Complete** – covers domain models, microflows, pages, security, navigation, workflows, and business events.
@@ -205,6 +207,113 @@ MDL provides statements for the following areas of a Mendix project:
 | Catalog | `REFRESH CATALOG`, `SELECT FROM CATALOG` |
 
 See Part II (The MDL Language) for a complete guide, or Part VI (MDL Statement Reference) for detailed syntax of each statement.
+
+# [Design Principles](#design-principles)
+
+mxcli is not a thin wrapper over the `.mpr` format. It is a deliberate bet on a
+particular way of letting coding agents build Mendix applications: the agent
+writes a **compact, human-readable DSL**, and mxcli’s **deterministic layer**
+turns that DSL into the many low-level mutations, validations, and tool calls a
+real model change requires. The principles below explain the design choices that
+follow from that bet, and why they differentiate mxcli from driving Studio Pro’s
+tools directly.
+
+## [Token efficiency](#token-efficiency-1)
+
+An agent authoring against mxcli emits **one larger MDL script**, not a long
+back-and-forth of small, chatty tool calls. MDL itself is dense – a module that
+takes 15,000–25,000 tokens as raw model JSON is 2,000–4,000 tokens as MDL, a
+5–10x reduction (see [What is MDL?](#token-efficiency)). But the
+larger win is *orchestration* overhead: one script is one agent action and one
+summarized result, so there are fewer model turns, lower API cost, and faster
+execution than emitting each individual document edit as its own turn. The
+[MCP Backend cost analysis](#mcp-backend-how-a-script-maps-to-tool-calls) traces this in
+detail – a ~20-statement script that expands to ~60 low-level tool calls still
+costs the agent *one* turn when it runs through mxcli.
+
+## [Complexity belongs in the deterministic layer](#complexity-belongs-in-the-deterministic-layer)
+
+A single MDL statement maps **deterministically** to whatever it takes to realise
+it: multiple BSON documents on the file backend, or a fixed choreography of MCP
+tool calls against a running Studio Pro. `create association`, for example,
+expands to reference resolution, the write itself, and a validation pass. The LLM
+never has to orchestrate that – it states intent in MDL, and mxcli’s
+deterministic code carries the fan-out, ordering, and read-modify-write bookkeeping.
+The agent handles the *simple* task (say what you want); mxcli handles the
+*complex* one (make it valid). This keeps the hard, error-prone mechanics in code
+that is tested and reproducible rather than in a probabilistic model.
+
+## [Human-readable DSL](#human-readable-dsl)
+
+MDL is a domain-specific language inspired by **SQL, Ada, and PL/SQL** – SQL for
+its `CREATE`/`ALTER`/`DROP`/`SHOW` verbs and set-oriented queries, Ada and PL/SQL
+for its readable block structure. That familiar, structured syntax means
+LLM-generated scripts are easy for a human to **review, audit, and author** –
+both in documentation and in skills. A diff of an MDL script reads like a diff of
+DDL, not an opaque binary or a wall of JSON. Readable code is reviewable code, and
+reviewable changes are the ones a team can safely let an agent make.
+
+## [Headless agentic loop](#headless-agentic-loop)
+
+Everything an agent needs to build and test a Mendix application is available
+without ever opening Studio Pro. mxcli is a single static binary; it reads and
+writes `.mpr` files directly, validates with `mxcli check` and the real Mendix
+build tools, runs microflow tests in a container, and analyses the model – all
+from the command line. Studio Pro becomes an optional **visual review** surface,
+not a required step in the loop. See the [Vision](#vision) for the full roadmap
+toward Studio-Pro-free development.
+
+## [Understanding large applications](#understanding-large-applications)
+
+mxcli builds a queryable **catalog** of project metadata and a **dependency
+graph** on top of it, both exposed as ordinary SQL tables. An agent explores an
+unfamiliar app the same way it would explore a database – `SELECT` over
+`CATALOG.ENTITIES`, `CATALOG.REFS`, or the `CATALOG.graph_*` views to find god
+nodes, module coupling, dependency cycles, and dead code. No bespoke traversal
+API to learn; complex applications become explorable through straightforward
+queries. See [Graph Analysis](#graph-analysis) and
+[Catalog Use Cases](#use-cases-3).
+
+## [Precise skills](#precise-skills)
+
+Because MDL is a concrete syntax, skill files can embed **specific, executable
+examples** of exactly the MDL an agent should produce – not vague prose about how
+Mendix concepts fit together. “Generate this shape of `create page` for a
+master-detail view” is a copyable example; the agent adapts one worked case rather
+than inferring structure from description. Concrete examples in skills yield more
+reliable, accurate output and fewer retry loops.
+
+## [Power with safety](#power-with-safety)
+
+Coding agents driving mxcli are powerful – they can generate scripts in bulk,
+run automated tests, and rewrite large parts of a model. That power requires
+appropriately scoped privileges. `mxcli init` provisions a **Dev Container** that
+bounds exactly what the agent can see, do, and modify: it runs against the project
+files and nothing else, with the toolchain pre-installed and the host environment
+out of reach. Sandboxing is the default recommended way to run an agent, not an
+afterthought. See [Dev Container Setup](#dev-container-setup).
+
+## [Deterministic verification](#deterministic-verification)
+
+`mxcli check` and `mxcli lint` let the agent verify its own output against
+**deterministic rules** – syntax, references, anti-patterns, security and
+architecture policies – with **no LLM judgement involved**. This is an explicit
+design choice: correctness checks stay in the deterministic layer so the feedback
+loop is fast, reproducible, and trustworthy. An agent can write MDL, get an
+objective pass/fail, fix, and re-check in the same session without a human – and
+without asking a model to grade a model. Deeper gates (`mxcli docker check`,
+`mxcli test`) extend the same principle to the real Mendix build and runtime.
+
+## [Longer-term: smaller local models](#longer-term-smaller-local-models)
+
+Generating code in a constrained DSL is inherently **simpler for an LLM** than
+orchestrating a stateful sequence of tool calls – there is one grammar to satisfy,
+not an evolving protocol to reason about. That simplicity opens a path to smaller,
+cheaper, and eventually **local** models for Mendix authoring. A DSL grammar can be
+integrated into an LLM via **grammar-constrained decoding**, so the model can only
+emit tokens that form valid MDL. The deterministic layer already absorbs the
+complexity (see above); the DSL boundary is what makes constraining the model’s
+output tractable in the first place.
 
 # [Mendix Concepts for Newcomers](#mendix-concepts-for-newcomers)
 
@@ -335,15 +444,17 @@ Widgets are nested in a tree. Common widget types:
 
 ```
 CREATE PAGE Sales.CustomerOverview
-    LAYOUT Atlas_Core.Atlas_Default
-    TITLE 'Customers'
 (
-    DATAGRID SOURCE DATABASE Sales.Customer (
-        COLUMN Name,
-        COLUMN Email,
-        COLUMN IsActive
-    )
-);
+    Title: 'Customers',
+    Layout: Atlas_Core.Atlas_Default
+)
+{
+    DATAGRID dgCustomers (DataSource: DATABASE Sales.Customer) {
+        COLUMN colName (Attribute: Name, Caption: 'Name')
+        COLUMN colEmail (Attribute: Email, Caption: 'Email')
+        COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+    }
+}
 
 ```
 ### [Snippets](#snippets)
@@ -2194,15 +2305,17 @@ An overview page typically shows a data grid that lists all objects of an entity
 
 ```
 CREATE PAGE MyModule.ProductOverview
-    LAYOUT Atlas_Core.Atlas_Default
-    TITLE 'Products'
 (
-    DATAGRID SOURCE DATABASE MyModule.Product (
-        COLUMN Name,
-        COLUMN Price,
-        COLUMN IsActive
-    )
-);
+    Title: 'Products',
+    Layout: Atlas_Core.Atlas_Default
+)
+{
+    DATAGRID dgProducts (DataSource: DATABASE MyModule.Product) {
+        COLUMN colName (Attribute: Name, Caption: 'Name')
+        COLUMN colPrice (Attribute: Price, Caption: 'Price')
+        COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+    }
+}
 
 ```
 
@@ -2219,7 +2332,7 @@ Let’s break this down:
 Execute it:
 
 ```
-mxcli -p app.mpr -c "CREATE PAGE MyModule.ProductOverview LAYOUT Atlas_Core.Atlas_Default TITLE 'Products' (DATAGRID SOURCE DATABASE MyModule.Product (COLUMN Name, COLUMN Price, COLUMN IsActive));"
+mxcli -p app.mpr -c "CREATE PAGE MyModule.ProductOverview (Title: 'Products', Layout: Atlas_Core.Atlas_Default) { DATAGRID dgProducts (DataSource: DATABASE MyModule.Product) { COLUMN colName (Attribute: Name, Caption: 'Name') COLUMN colPrice (Attribute: Price, Caption: 'Price') COLUMN colActive (Attribute: IsActive, Caption: 'Active') } }"
 
 ```
 
@@ -3691,17 +3804,16 @@ CREATE PAGE CRM.Customer_Overview (
   Title: 'Customers',
   Layout: Atlas_Core.Atlas_Default
 ) {
-  DATAGRID2 ON CRM.Customer (
-    COLUMN Name { Caption: 'Name' }
-    COLUMN Email { Caption: 'Email' }
-    COLUMN Phone { Caption: 'Phone' }
-    COLUMN Status { Caption: 'Status' }
-    COLUMN IsActive { Caption: 'Active' }
-    SEARCH ON Name, Email
-    BUTTON 'New' CALL CRM.Customer_NewEdit
-    BUTTON 'Edit' CALL CRM.Customer_NewEdit
-    BUTTON 'Delete' CALL CONFIRM DELETE
-  )
+  DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
+    COLUMN colName (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
+    COLUMN colEmail (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
+    COLUMN colPhone (Attribute: Phone, Caption: 'Phone')
+    COLUMN colStatus (Attribute: Status, Caption: 'Status')
+    COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+    CONTROLBAR cb1 {
+      ACTIONBUTTON btnNew (Caption: 'New', Action: SHOW_PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
+    }
+  }
 };
 /
 
@@ -3722,7 +3834,7 @@ CREATE PAGE CRM.Customer_NewEdit (
           FOOTER footer1 {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
-              Action: CALL CRM.ACT_Customer_Save,
+              Action: MICROFLOW CRM.ACT_Customer_Save,
               ButtonStyle: Success
             )
             ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL_CHANGES)
@@ -4524,7 +4636,7 @@ CREATE PAGE Sales.Order_Edit (
           FOOTER footer1 {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
-              Action: CALL Sales.ACT_Order_Save,
+              Action: MICROFLOW Sales.ACT_Order_Save,
               ButtonStyle: Success
             )
             ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL_CHANGES)
@@ -4716,11 +4828,11 @@ CREATE PAGE Reports.SalesByCategory_Overview (
   Title: 'Sales by Category',
   Layout: Atlas_Core.Atlas_Default
 ) {
-  DATAGRID2 ON Reports.SalesTotalByCategory (
-    COLUMN CategoryName { Caption: 'Category' }
-    COLUMN TotalAmount { Caption: 'Total Sales' }
-    COLUMN TransactionCount { Caption: 'Transactions' }
-  )
+  DATAGRID dgSales (DataSource: DATABASE Reports.SalesTotalByCategory) {
+    COLUMN colCategory (Attribute: CategoryName, Caption: 'Category')
+    COLUMN colTotal (Attribute: TotalAmount, Caption: 'Total Sales')
+    COLUMN colCount (Attribute: TransactionCount, Caption: 'Transactions')
+  }
 };
 /
 
@@ -4743,12 +4855,12 @@ Traditional migrations require deep Mendix expertise and manual work in Studio P
 ## [The Five Phases](#the-five-phases)
 
 ```
-  Phase 1          Phase 2           Phase 3           Phase 4         Phase 5
- ┌──────────┐   ┌───────────┐   ┌──────────────┐   ┌──────────┐   ┌──────────┐
- │  Assess  │──▶│  Propose  │──▶│   Generate   │──▶│   Test   │──▶│  Finish  │
- │  Source   │   │ Transform │   │  Mendix App  │   │  & Lint  │   │ in Studio│
- └──────────┘   └───────────┘   └──────────────┘   └──────────┘   │   Pro    │
-                                                                    └──────────┘
+  Phase 1           Phase 2           Phase 3           Phase 4         Phase 5
+ ┌──────────┐    ┌───────────┐   ┌──────────────┐   ┌──────────┐   ┌──────────┐
+ │  Assess  │--> │  Propose  │-->│   Generate   │-->│   Test   │-->│  Finish  │
+ │  Source  │    │ Transform │   │  Mendix App  │   │  & Lint  │   │ in Studio│
+ └──────────┘    └───────────┘   └──────────────┘   └──────────┘   │   Pro    │
+                                                                   └──────────┘
 
 ```
 
@@ -4964,16 +5076,15 @@ CREATE PAGE CRM.Customer_Overview (
   Title: 'Customers',
   Layout: Atlas_Core.Atlas_Default
 ) {
-  DATAGRID2 ON CRM.Customer (
-    COLUMN Name { Caption: 'Name' }
-    COLUMN Email { Caption: 'Email' }
-    COLUMN Phone { Caption: 'Phone' }
-    COLUMN IsActive { Caption: 'Active' }
-    SEARCH ON Name, Email
-    BUTTON 'New' CALL CRM.Customer_NewEdit
-    BUTTON 'Edit' CALL CRM.Customer_NewEdit
-    BUTTON 'Delete' CALL CONFIRM DELETE
-  )
+  DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
+    COLUMN colName (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
+    COLUMN colEmail (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
+    COLUMN colPhone (Attribute: Phone, Caption: 'Phone')
+    COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+    CONTROLBAR cb1 {
+      ACTIONBUTTON btnNew (Caption: 'New', Action: SHOW_PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
+    }
+  }
 };
 /
 
@@ -9687,7 +9798,7 @@ CREATE SNIPPET MyModule.CustomerCard
       DYNAMICTEXT txtEmail (Content: '{1}', Attribute: Email)
       ACTIONBUTTON btnEdit (
         Caption: 'Edit',
-        Action: PAGE MyModule.Customer_Edit,
+        Action: SHOW_PAGE MyModule.Customer_Edit,
         ButtonStyle: Primary
       )
     }
@@ -10032,7 +10143,7 @@ CREATE PAGE MyModule.Customer_Overview
         Action: MICROFLOW MyModule.ACT_Customer_New,
         ButtonStyle: Primary
       )
-      ACTIONBUTTON btnEdit (Caption: 'Edit', Action: PAGE MyModule.Customer_Edit)
+      ACTIONBUTTON btnEdit (Caption: 'Edit', Action: SHOW_PAGE MyModule.Customer_Edit)
       ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
     }
   }
@@ -10115,7 +10226,7 @@ CREATE PAGE MyModule.Customer_Detail
     FOOTER footer1 {
       ACTIONBUTTON btnEdit (
         Caption: 'Edit',
-        Action: PAGE MyModule.Customer_Edit,
+        Action: SHOW_PAGE MyModule.Customer_Edit,
         ButtonStyle: Primary
       )
       ACTIONBUTTON btnBack (Caption: 'Back', Action: CLOSE_PAGE)
@@ -10207,7 +10318,7 @@ CREATE PAGE MyModule.Order_MasterDetail
           FOOTER footer1 {
             ACTIONBUTTON btnEdit (
               Caption: 'Edit Order',
-              Action: PAGE MyModule.Order_Edit,
+              Action: SHOW_PAGE MyModule.Order_Edit,
               ButtonStyle: Primary
             )
           }
@@ -10247,7 +10358,7 @@ CREATE PAGE HR.Employee_Overview
         Action: MICROFLOW HR.ACT_Employee_New,
         ButtonStyle: Primary
       )
-      ACTIONBUTTON btnEdit (Caption: 'Edit', Action: PAGE HR.Employee_Edit)
+      ACTIONBUTTON btnEdit (Caption: 'Edit', Action: SHOW_PAGE HR.Employee_Edit)
       ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
     }
   }
@@ -14720,6 +14831,7 @@ mxcli playwright verify tests/ --skip-health-check
 | `--timeout`, `-t` | `2m` | Timeout per script execution |
 | `--base-url` | `http://localhost:8080` | Mendix app base URL |
 | `--skip-health-check` | `false` | Skip app reachability check before running |
+| `--keep-open` | `false` | Leave the browser session open after the run so the next verify reuses it |
 | `-p` |  | Path to the `.mpr` project file |
 
 ### [How It Works](#how-it-works-2)
@@ -14729,13 +14841,65 @@ The verify runner performs these steps:
 1. **Discovers** all `.test.sh` files in the provided paths
 2. **Checks** that `playwright-cli` is available in PATH
 3. **Health-checks** the app at the base URL (unless `--skip-health-check`)
-4. **Opens** a playwright-cli browser session (Chromium by default)
+4. **Reuses** a live browser session if one is already open on the same origin (left by a prior `--keep-open` run), re-navigating to the base URL so a rebuilt app loads fresh; otherwise **opens** a new one (Chromium by default)
 5. **Runs** each `.test.sh` script sequentially via `bash`
 6. **Captures** a screenshot on failure for debugging
-7. **Closes** the browser session
+7. **Closes** the browser session – unless `--keep-open` was passed, in which case it is left warm
 8. **Reports** pass/fail per script with timing
 9. **Writes** JUnit XML if `--junit` is specified
 10. **Exits** with non-zero status if any script failed
+
+### [Reusing the session across runs (the iterate loop)](#reusing-the-session-across-runs-the-iterate-loop)
+
+The generate → build → verify → fix loop re-runs `verify` after each change.
+Passing `--keep-open` leaves the browser warm and logged in, and the next run
+detects that live session and **skips the ~1–2s Chromium cold start**:
+
+```
+# First run opens the browser (log in once inside a script or via state-save)
+mxcli playwright verify tests/ -p app.mpr --keep-open
+
+# ... edit MDL, mxcli exec, mxcli docker run ...
+
+# Subsequent runs reuse the warm, still-authenticated session
+mxcli playwright verify tests/ -p app.mpr --keep-open
+
+```
+
+Reuse only happens when a session is alive **and** on the target origin; if not,
+verify opens fresh, so there is no downside to leaving `--keep-open` on. On reuse
+the runner re-navigates to the base URL, so a rebuilt app is always loaded fresh
+(no risk of verifying a stale, pre-rebuild page). For CI regression runs, omit
+`--keep-open` so the browser is torn down at the end.
+
+> **Note:** if a script ends with its own `playwright-cli close`, it tears down
+> the shared session regardless of `--keep-open` — drop the trailing `close`
+> from scripts you want to reuse across runs.
+
+## [Session lifecycle commands](#session-lifecycle-commands)
+
+For interactive or agent-driven use, manage the browser session explicitly
+instead of only through `verify`:
+
+```
+# Open (or attach to) the session; URL from the arg, else --base-url,
+# else APP_PORT in .docker/.env, else :8080
+mxcli playwright open -p app.mpr
+mxcli playwright open http://localhost:9090
+
+# Is a session live, and what page is it on?
+mxcli playwright status
+
+# Tear it down
+mxcli playwright close
+mxcli playwright close --all   # close every session
+
+```
+
+`open` uses the same open-or-reuse behavior as `verify` (attach to a live
+same-origin session and re-navigate, or open fresh). A typical agent loop is:
+`open` once, log in, then iterate `verify --keep-open` — and `status` to check
+whether the browser is still up before deciding to reopen.
 
 ## [`eval` vs `run-code` – read this first](#eval-vs-run-code--read-this-first)
 
@@ -21832,7 +21996,7 @@ CREATE PAGE Sales.Order_Overview
         COLUMN colStatus (Attribute: Status, Caption: 'Status')
         COLUMN colAmount (Attribute: TotalAmount, Caption: 'Amount', Alignment: right)
         CONTROLBAR cb1 {
-            ACTIONBUTTON btnNew (Caption: 'New Order', Action: PAGE Sales.Order_Edit, ButtonStyle: Primary)
+            ACTIONBUTTON btnNew (Caption: 'New Order', Action: SHOW_PAGE Sales.Order_Edit, ButtonStyle: Primary)
         }
     }
 };
@@ -25718,7 +25882,7 @@ CREATE PAGE MyModule.Order_Edit
   Folder: 'Orders'
 )
 {
-  CONTAINER main () {}
+  CONTAINER main {}
 }
 
 ```

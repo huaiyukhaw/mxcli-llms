@@ -1,3 +1,7 @@
+## 2026-07-08 -- mxcli v0.14.0 @ 85b71d5
+- +224 / -60 lines
+- Sections changed: ... edit MDL, mxcli exec, mxcli docker run ..., First run opens the browser (log in once inside a script or via state-save), Is a session live, and what page is it on?, Open (or attach to) the session; URL from the arg, else --base-url,, Skip the app health check, Subsequent runs reuse the warm, still-authenticated session, Tear it down, [Design Principles](#design-principles) (+27 more)
+
 ## 2026-07-07 -- mxcli v0.14.0 @ d2b29dd
 - +66 / -34 lines
 - Sections changed: --- Create a customer ---, --- Customer Overview page (throw to fail the script under set -e) ---, --- Customer Overview page ---, --- Login (page context -> eval) ---, --- Login ---, Check text content, Check widget presence, Click a widget (+6 more)
