@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.14.0 @ be0fcaa
-Generated: 2026-07-10T05:59:30Z
+Version:   mxcli v0.15.0 @ 53ab2d2
+Generated: 2026-07-11T05:09:40Z
 
 ---
 
@@ -9228,6 +9228,7 @@ CONTAINER cCard (Class: 'card mx-spacing-top-large') {
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card p-3'` |
 | `Style` | Inline CSS styles | `Style: 'padding: 16px;'` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
 | `DesignProperties` | Design property values | `DesignProperties: ['Spacing top': 'Large']` |
 
 ### [CUSTOMCONTAINER](#customcontainer)
@@ -9573,6 +9574,7 @@ These properties are shared across many widget types:
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card p-3'` |
 | `Style` | Inline CSS styles | `Style: 'margin-top: 8px;'` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ['Spacing top': 'Large', 'Full width': ON]` |
 | `Visible` | Visibility expression | `Visible: '$showSection'` |
 | `Editable` | Editability mode | `Editable: ReadOnly` |
@@ -9905,6 +9907,7 @@ ALTER PAGE Module.EditPage {
 | `ButtonStyle` | Button visual style | `SET ButtonStyle = Danger ON btnDelete` |
 | `Class` | CSS class names | `SET Class = 'card p-3' ON cMain` |
 | `Style` | Inline CSS | `SET Style = 'margin: 8px;' ON cBox` |
+| `DynamicClasses` | Runtime-computed CSS classes | `SET DynamicClasses = 'if $currentObject/IsActive then ''is-active'' else ''''' ON cMain` |
 | `Editable` | Editability mode | `SET Editable = ReadOnly ON txtEmail` |
 | `Visible` | Visibility expression | `SET Visible = '$showField' ON txtPhone` |
 | `Name` | Widget name | `SET Name = 'txtFullName' ON txtName` |
@@ -21936,6 +21939,7 @@ These properties are available on most widget types:
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card mx-spacing-top-large'` |
 | `Style` | Inline CSS | `Style: 'padding: 16px;'` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
 | `Editable` | Edit control | `Editable: NEVER` or `Editable: ALWAYS` |
 | `Visible` | Visibility expression | `Visible: '$showField'` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ['Spacing top': 'Large']` |
@@ -30735,6 +30739,7 @@ MDL uses explicit property declarations for pages:
 | Selection binding | `DataSource: SELECTION widget` | `DATAVIEW dv (DataSource: SELECTION galleryList)` |
 | CSS class | `Class: 'classes'` | `CONTAINER c (Class: 'card mx-spacing-top-large')` |
 | Inline style | `Style: 'css'` | `CONTAINER c (Style: 'padding: 16px;')` |
+| Dynamic classes | `DynamicClasses: 'expr'` | `CONTAINER c (DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else ''''')` — runtime-computed; stacks on `Class` |
 | Design properties | `DesignProperties: [...]` | `CONTAINER c (DesignProperties: ['Spacing top': 'Large', 'Full width': ON])` |
 | Width (pixels) | `Width: integer` | `IMAGE img (Width: 200)` |
 | Height (pixels) | `Height: integer` | `IMAGE img (Height: 150)` |
