@@ -1,3 +1,7 @@
+## 2026-07-12 -- mxcli v0.15.0 @ cb6d638
+- +37 / -3 lines
+- Sections changed: [Action Widgets](#action-widgets), [Description](#description-33), [Icon collections (read-only)](#icon-collections-read-only)
+
 ## 2026-07-08 -- mxcli v0.14.0 @ 85b71d5
 - +224 / -60 lines
 - Sections changed: ... edit MDL, mxcli exec, mxcli docker run ..., First run opens the browser (log in once inside a script or via state-save), Is a session live, and what page is it on?, Open (or attach to) the session; URL from the arg, else --base-url,, Skip the app health check, Subsequent runs reuse the warm, still-authenticated session, Tear it down, [Design Principles](#design-principles) (+27 more)

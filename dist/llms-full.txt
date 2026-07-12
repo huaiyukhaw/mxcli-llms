@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.15.0 @ 53ab2d2
-Generated: 2026-07-11T05:09:40Z
+Version:   mxcli v0.15.0 @ cb6d638
+Generated: 2026-07-12T05:23:21Z
 
 ---
 
@@ -9499,12 +9499,24 @@ ACTIONBUTTON btnProcess (
 )
 
 ```
+
+**Icon** — `Icon: 'Module.IconCollection.IconName'` gives the button an icon from
+an icon collection (the modern Atlas icon set). The name must exist in the
+collection, or MxBuild rejects it (CE1613):
+
+```
+ACTIONBUTTON btnEdit (Caption: 'Edit', Action: PAGE App.Edit,
+  Icon: 'Atlas_Core.Atlas_Filled.pencil')
+
+```
 ### [LINKBUTTON](#linkbutton)
 
-Renders as a hyperlink instead of a button. Same action types as `ACTIONBUTTON`:
+Renders as a hyperlink instead of a button. Same action types, styles, and
+`Icon:` as `ACTIONBUTTON`:
 
 ```
 LINKBUTTON lnkDetails (Caption: 'View Details', Action: PAGE MyModule.Customer_Detail)
+LINKBUTTON lnkEdit (Caption: 'Edit', Action: PAGE App.Edit, Icon: 'Atlas_Core.Atlas_Filled.pencil')
 
 ```
 ## [Structure Widgets](#structure-widgets)
@@ -12232,6 +12244,28 @@ Remove a collection and all its embedded images:
 
 ```
 DROP IMAGE COLLECTION MyModule.StatusIcons;
+
+```
+## [Icon collections (read-only)](#icon-collections-read-only)
+
+Distinct from image collections, **icon collections**
+(`CustomIcons$CustomIconCollection`, e.g. `Atlas_Core.Atlas_Filled`) ship with the
+theme/Atlas. Their icons are referenced from a widget as
+`Module.Collection.IconName` — most commonly a button’s `Icon:` property. They’re
+read-only in mxcli; use `SHOW` / `DESCRIBE` to discover valid icon names (icons
+have non-obvious names — it’s `add`, not `plus`):
+
+```
+SHOW ICON COLLECTIONS;                              -- name, prefix, export level, icon count
+DESCRIBE ICON COLLECTION Atlas_Core.Atlas_Filled;   -- every icon + its reference form
+
+```
+
+Then use one on a button:
+
+```
+ACTIONBUTTON btnEdit (Caption: 'Edit', Action: PAGE App.Edit,
+  Icon: 'Atlas_Core.Atlas_Filled.pencil')
 
 ```
 ## [See Also](#see-also-35)
@@ -21870,8 +21904,8 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 
 | Widget | Description | Key Properties |
 | --- | --- | --- |
-| `ACTIONBUTTON` | Button that triggers an action | `Caption`, `Action`, `ButtonStyle` |
-| `LINKBUTTON` | Hyperlink-styled action | `Caption`, `Action` |
+| `ACTIONBUTTON` | Button that triggers an action | `Caption`, `Action`, `ButtonStyle`, `Icon` |
+| `LINKBUTTON` | Hyperlink-styled action | `Caption`, `Action`, `Icon` |
 
 **Structure Widgets**
 
