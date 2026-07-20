@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ 3907fa3
-Generated: 2026-07-13T05:32:51Z
+Version:   mxcli v0.16.0 @ 88077af
+Generated: 2026-07-20T05:37:17Z
 
 ---
 
@@ -608,19 +608,21 @@ Open the [mxcli Playground](https://github.com/mendixlabs/mxcli-playground) in a
 
 **Option B: Binary download**
 
-Download from the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases) and extract:
+Release assets are raw binaries named `mxcli-<os>-<arch>` (nothing to extract). Use the rolling `nightly` build while mxcli is alpha:
 
 ```
 # macOS / Linux
-tar xzf mxcli_<platform>.tar.gz
-sudo mv mxcli /usr/local/bin/
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
 
 ```
 
-**Option C: Build from source**
+**Option C: Build from source** (Go + Make)
 
 ```
-go install github.com/mendixlabs/mxcli/cmd/mxcli@latest
+git clone https://github.com/mendixlabs/mxcli.git && cd mxcli && make build
+# binary at ./bin/mxcli  (go install @latest doesn't work — see Installation)
 
 ```
 
@@ -740,7 +742,7 @@ mxcli setup mxbuild -p your-app.mpr
 
 ```
 
-**“CGO not available”** – mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you’re using the official binary or `go install`.
+**“CGO not available”** – mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you’re using the official pre-built binary or a `make build` from source.
 
 **Project won’t open in Studio Pro after changes** – Close Studio Pro before running mxcli write commands, then reopen. See [F4 sync support](#mendix-version-compatibility) for details.
 
@@ -797,20 +799,26 @@ When you’re ready to work on your own Mendix project, use one of the installat
 
 ## [Binary download](#binary-download)
 
-Pre-built binaries are available for Linux, macOS, and Windows on both amd64 and arm64 architectures.
+Pre-built binaries are published for Linux, macOS, and Windows on both amd64 and arm64. Release assets are **raw binaries** named `mxcli-<os>-<arch>` (Windows: `.exe`) — there is nothing to extract.
 
-1. Go to the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases).
-2. Download the archive for your platform (e.g., `mxcli_linux_amd64.tar.gz` or `mxcli_darwin_arm64.tar.gz`).
-3. Extract the binary and move it somewhere on your `PATH`:
+While mxcli is fast-moving alpha, use the rolling **`nightly`** build (new features land there before a tagged release); pin a `vX.Y.Z` release for reproducibility.
 
 ```
-# Example for Linux/macOS
-tar xzf mxcli_linux_amd64.tar.gz
-sudo mv mxcli /usr/local/bin/
+# Linux/macOS — nightly (recommended for now)
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+# ...or pin a specific release
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.16.0/mxcli-darwin-arm64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
 
 ```
 
-On Windows, extract the `.zip` and add the folder containing `mxcli.exe` to your system PATH.
+Assets: `mxcli-linux-amd64`, `mxcli-linux-arm64`, `mxcli-darwin-amd64`, `mxcli-darwin-arm64`, `mxcli-windows-amd64.exe`, `mxcli-windows-arm64.exe`. On Windows, download the `.exe` and add its folder to your PATH. You can browse them on the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases).
+
+> `go install github.com/mendixlabs/mxcli/cmd/mxcli@latest` does **not** work: the ANTLR parser is generated at build time and isn’t committed, so a `go install` from the module source fails. Use a pre-built binary, or **Build from source** below (which runs `make grammar`).
 
 ## [Build from source](#build-from-source)
 
@@ -15768,6 +15776,259 @@ SQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC
 SQL DISCONNECT source;
 
 ```
+# [mxcli run –local](#mxcli-run-local)
+
+`mxcli run --local` runs a Mendix app in a **warm, Docker-free dev loop**. It keeps
+a `mxbuild --serve` process and a standalone Mendix runtime hot, so after the first
+(cold) build a model change rebuilds incrementally and is hot-applied — without a
+full rebuild-image-and-restart cycle.
+
+```
+mxcli run --local -p app.mpr
+mxcli run --local -p app.mpr --watch
+
+```
+## [Why](#why)
+
+The Docker path (`mxcli docker run`) rebuilds a full deployment package and restarts
+the container on every change (~30–60 s). `run --local` instead:
+
+- keeps the model loaded in `mxbuild --serve` — a warm rebuild is ~1 s;
+- keeps the runtime process up and applies each change over the M2EE admin API;
+- chooses the cheapest apply automatically from the build’s `restartRequired` flag:
+
+| Change | Apply | Cost |
+| --- | --- | --- |
+| page / microflow / nanoflow / text | hot `reload_model` (no restart) | ~1 s |
+| entity / view entity / association | runtime restart + DDL | ~9 s |
+
+The metamodel catalog (entities/associations) is reconciled only at runtime startup,
+so structural changes need a restart; behavioural changes do not.
+
+## [What it does](#what-it-does)
+
+1. Detects the project’s Mendix version.
+2. Ensures MxBuild and the runtime are cached (downloads once, reused after).
+3. Checks the database is reachable (it does **not** provision it — see below).
+4. Starts `mxbuild --serve` and does the first (cold) build into `deployment/`.
+5. Bundles the browser client (`web/dist/`) with mxbuild’s rollup tooling — the
+   serve Deploy target writes client *source* but not the bundle, so this step is
+   what makes pages render.
+6. Boots a standalone runtime against that deployment and serves it.
+7. With `--watch`, rebuilds, re-bundles the client, and hot-applies on every
+   project change until `Ctrl-C`.
+
+## [Requirements](#requirements)
+
+- **Mendix 11.x** project. The runtime is launched under **JDK 21**; version-aware
+  JDK selection for Mendix 9/10 is a follow-up.
+- A **PostgreSQL** database. Defaults: `127.0.0.1:5432`, user `mendix`, database
+  derived from the project file name (`App1112.mpr` → `app1112`). Two ways to have it:
+  - **`--ensure-db`** (recommended for a fresh session) provisions it: starts the
+    local Postgres service if the port is down, and creates the app role + database
+    if missing (via a local `sudo -u postgres` superuser). For a non-local `--db-host`
+    it only verifies reachability — mxcli won’t provision a remote database.
+  - Otherwise create it once yourself; without `--ensure-db`, `run --local` stops with
+    an actionable message if the DB is unreachable:
+    
+    ```
+    createdb -h 127.0.0.1 -U mendix app1112
+    
+    ```
+
+## [Flags](#flags-1)
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--local` | — | Required; run without Docker |
+| `--watch` | off | Rebuild + hot-apply on every project change |
+| `--ensure-db` | off | Provision local Postgres + the app database if missing (fresh-session bootstrap) |
+| `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
+| `--app-port` | 8080 | App HTTP port |
+| `--admin-port` | 8090 | M2EE admin API port |
+| `--serve-port` | 6543 | `mxbuild --serve` port |
+| `--db-host` | 127.0.0.1:5432 | Database `host:port` |
+| `--db-name` | derived from project | Database name |
+| `--db-user` / `--db-password` | mendix / mendix | Database credentials |
+| `--screenshot` | off | Capture a Playwright PNG after boot and each applied change |
+| `--screenshot-path` | `<projectDir>/.mxcli/run-local.png` | Screenshot output PNG |
+| `--screenshot-url` | app root | Page to shoot: full URL, or a path relative to the app root (e.g. `/p/customers`). Repeat for a multi-page set. |
+| `--screenshot-user` / `--screenshot-password` | — | Log in once (Mendix form auth) and reuse the session, so pages behind login render authenticated |
+
+## [The change signal](#the-change-signal)
+
+`--watch` watches the model **source** — the `.mpr` file and the `mprcontents/`
+document tree (v2) — not the whole project dir. This is deliberate: the serve/mxbuild
+build rewrites `deployment/`, `theme-cache/`, and `.mendix-cache/` on every run, and
+screenshots land in `.mxcli/`; watching only the source keeps that build-output churn
+from re-triggering the loop. The intended cycle: an agent (or you) edits the model
+with `mxcli exec`/MDL, and the running `run --local` picks it up and hot-applies it.
+
+## [Pages render in the browser](#pages-render-in-the-browser)
+
+`run --local` bundles the browser client (`web/dist/`) so the app renders in a real
+browser — verified by driving the pre-installed Chromium with Playwright (the Mendix
+homepage renders fully). This makes it usable for **visual page-design iteration**,
+not just headless checks.
+
+- **Non-`--watch`**: a one-shot rollup bundle after the deploy build (~7 s cold).
+- **`--watch`**: a long-lived incremental bundler stays hot (the client-side mirror
+  of `mxbuild --serve`), so a page/widget edit re-bundles in ~3–4 s. It runs with
+  `CHOKIDAR_USEPOLLING` because inotify does not fire on container overlay
+  filesystems — without it, change detection takes tens of seconds. The loop
+  re-bundles **only when the edit touched client source**: a microflow/entity edit
+  skips the bundle and just hot-reloads.
+
+## [Pixel-perfect page loop](#pixel-perfect-page-loop)
+
+Pass `--screenshot` and each applied change is captured to a PNG (default
+`<projectDir>/.mxcli/run-local.png`) using Playwright’s built-in `screenshot`
+command (Chromium from `PLAYWRIGHT_BROWSERS_PATH` — no `playwright-cli` needed):
+
+```
+mxcli run --local -p app.mpr --watch --screenshot
+# edit a page with mxcli exec/MDL -> auto rebuild -> re-bundle -> reload -> new PNG
+
+```
+
+**Deep links.** `--screenshot-url /p/customers` shoots a specific page instead of the
+app root (a bare path is resolved against the app URL; a full `http(s)://…` is used
+as-is).
+
+**Multi-page sets.** Repeat `--screenshot-url` to shoot several pages after every
+change — a visual-regression sheet. Each page gets its own PNG, named from the page
+(`run-local-p-customers.png`, `run-local-home.png`):
+
+```
+mxcli run --local -p app.mpr --watch --screenshot \
+  --screenshot-url / --screenshot-url /p/customers --screenshot-url /p/orders
+
+```
+
+**Pages behind login.** `--screenshot-user`/`--screenshot-password` log in once via
+the Mendix login form (Playwright drives `#usernameInput`/`#passwordInput`/
+`#loginButton`), save the session as a Playwright storage state, and reuse it for
+every screenshot — so authenticated pages render. Login is best-effort: if no login
+form appears (anonymous app) it proceeds unauthenticated.
+
+```
+mxcli run --local -p app.mpr --watch --screenshot \
+  --screenshot-user demo_admin --screenshot-password '<pw>' \
+  --screenshot-url /p/customer_overview
+
+```
+## [Fresh sessions (Claude Code Web)](#fresh-sessions-claude-code-web)
+
+Background processes (Postgres, the JVM) are reaped on idle, so a resumed web session
+needs to bring prerequisites back up. `mxcli init` emits a **SessionStart hook** into
+`.claude/settings.json` that runs `./mxcli run --local --setup --ensure-db -p <app.mpr>`
+on every session start — the non-blocking `--setup` mode caches MxBuild+runtime and
+provisions the database, then exits, leaving the session ready to `run --local`.
+
+To start from an **empty repo** on the web or an iPad, use the
+[bootstrap prompt](#bootstrap-prompt-empty-repo--running-mendix-app) instead of a GitHub template.
+
+See also: [PROPOSAL\_mxcli\_dev\_warm\_loop](../../docs/11-proposals/PROPOSAL_mxcli_dev_warm_loop.html),
+[mxcli docker run](#mxcli-docker-run), [Playwright Testing](#playwright-testing).
+
+# [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app)
+
+The **primary** way to start a Mendix + mxcli project from the web or an iPad — no
+local CLI, no GitHub template to pick from a (short) mobile list. Open an **empty
+repo** in Claude Code Web and paste the prompt below; the agent provisions
+everything and commits the result so future sessions self-bootstrap.
+
+Why a prompt instead of a GitHub template repo: the mobile “New repository” template
+dropdown shows only a small subset of templates, and a template repo needs per-Mendix-
+version upkeep. A prompt starts from a *truly empty* repo, runs *current* mxcli, and
+can seed the model from a design prototype in the same session — nothing to maintain.
+
+## [The prompt](#the-prompt)
+
+```
+This is an empty repo. Provision it as a Mendix app developed with mxcli:
+
+1. Ensure `mxcli` is available. It should be pre-installed by the environment; if
+   not, download a prebuilt binary for your OS/arch and put it at `./mxcli`, e.g.:
+
+   ```bash
+   curl -fsSL -o ./mxcli \
+     https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+   chmod +x ./mxcli
+
+```
+
+Use the **`nightly`** build: this is fast-moving alpha software and the warm-loop
+commands used below (`run --local`, `--setup`, `--ensure-db`) land in `nightly`
+before they appear in a tagged release. For a reproducible setup, pin a specific
+release instead (`.../releases/download/vX.Y.Z/mxcli-<os>-<arch>`). Note: `go install …@latest` does **not** work — the generated ANTLR parser isn’t committed,
+so use the prebuilt binary (a from-source build needs `make grammar`).
+2. Create the app at the repo root: `mxcli new App --version 11.6.3`
+(or `mxcli init` if an .mpr already exists).
+3. Ensure the Claude tooling is set up: `mxcli init --tool claude`. This adds a
+SessionStart hook to `.claude/settings.json` that self-bootstraps future sessions.
+4. Bring prerequisites up: `./mxcli run --local --setup --ensure-db -p App.mpr`
+(caches MxBuild + runtime, starts Postgres, creates the app database).
+5. COMMIT everything now — `App.mpr`, `.devcontainer/`, and `.claude/` (including the
+SessionStart hook) — so that after idle reaping the next session bootstraps from
+files, not from re-running this prompt.
+6. Boot and verify: `./mxcli run --local -p App.mpr` in the background, then confirm
+the app answers HTTP 200 at http://localhost:8080/ and report.
+
+(Optional) Seed the domain model, pages, and microflows from this prototype: .
+
+```
+
+## Which mxcli version gets installed
+
+Prebuilt binaries are the working install path. CI publishes them on every `vX.Y.Z`
+tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets named
+`mxcli-<os>-<arch>`.
+
+- **`nightly` — recommended while mxcli is fast-moving alpha.** New features (the whole
+  warm-loop surface: `run --local`, `--watch`, `--ensure-db`, `--setup`, screenshots)
+  land in `nightly` before they reach a tagged release, so the bootstrap flow above
+  needs it. Download `.../releases/download/nightly/mxcli-<os>-<arch>`, or once mxcli is
+  present, `mxcli setup mxcli --tag nightly`.
+- **`vX.Y.Z` — pin for reproducibility / stability.** The CI marks nightly a
+  pre-release ("use tagged releases for production"). Download
+  `.../releases/download/vX.Y.Z/mxcli-<os>-<arch>` or `mxcli setup mxcli --tag vX.Y.Z`.
+  With no `--tag`, `mxcli setup mxcli` matches the mxcli already running it (nightly →
+  `nightly`, `vX.Y.Z` → that release) — mainly useful for replicating a version onto
+  another OS/arch (e.g. the Linux binary in a Dev Container), not the first install.
+- **Environment pre-install** (the robust path) installs whatever the Claude Code Web
+  image bakes in — the way to pin a known-good version fleet-wide.
+- **`go install …@latest` does not work yet.** The module *is* public (tags v0.1.0–
+  v0.16.0), but the generated ANTLR parser (`mdl/grammar/parser/`) is gitignored and
+  not committed, so a `go install` from the tagged source fails on the missing package.
+  Building from source works only via `make build`/`make release` (which run
+  `make grammar` first). Enabling `go install` would require committing the generated
+  parser (or generating it during module build) — a maintainer decision.
+
+## Two rules that make this robust
+
+- **Committing the config (step 5) is mandatory.** The prompt is a *one-time seed*.
+  Its output — `.mpr` + `.devcontainer/` + `.claude/` with the SessionStart hook — must
+  be committed so the steady state is file-driven and deterministic. After that, every
+  new session runs the hook (`run --local --setup --ensure-db`) automatically; you
+  never re-paste the prompt.
+- **mxcli delivery is an environment concern, not the prompt's.** Step 1 is the fragile
+  part in a gated web session (a GitHub release `curl` may be blocked). The robust fix
+  is for the Claude Code Web **environment image / setup script to pre-install mxcli**
+  (and pre-cache MxBuild + runtime); `go install` via `proxy.golang.org` is the fallback
+  and needs mxcli published as a public Go module.
+
+## After bootstrap — the inner loop
+
+```bash
+./mxcli run --local -p App.mpr --watch --screenshot   # warm dev loop + screenshots
+./mxcli exec change.mdl -p App.mpr                     # edit the model; the loop hot-applies
+
+```
+
+See [mxcli run –local](#mxcli-run-local) for the warm loop, `--watch`, `--ensure-db`, and
+the screenshot flags.
+
 # [Docker Integration](#docker-integration)
 
 mxcli provides Docker integration for building, running, and validating Mendix applications without a local Mendix installation. Docker is also required for the testing framework.
@@ -15842,7 +16103,7 @@ The `mxcli docker build` command builds a Mendix application using mxbuild in Do
 mxcli docker build -p app.mpr
 
 ```
-## [What It Does](#what-it-does)
+## [What It Does](#what-it-does-1)
 
 1. **Downloads mxbuild** – Automatically downloads the correct mxbuild version for your project if not already available
 2. **Runs mxbuild** – Executes the Mendix build toolchain in a Docker container
@@ -15917,7 +16178,7 @@ The `mxcli docker check` command validates a Mendix project without building it.
 mxcli docker check -p app.mpr
 
 ```
-## [What It Does](#what-it-does-1)
+## [What It Does](#what-it-does-2)
 
 1. **Resolves the `mx` binary** – Looks for `mx` in the mxbuild directory, PATH, or cached installations at `~/.mxcli/mxbuild/*/modeler/mx`
 2. **Runs `mx check`** – Executes the Mendix project checker against the `.mpr` file
@@ -16001,7 +16262,7 @@ The `mxcli docker run` command runs a Mendix application in a Docker container, 
 mxcli docker run -p app.mpr
 
 ```
-## [What It Does](#what-it-does-2)
+## [What It Does](#what-it-does-3)
 
 1. **Builds the application** if no build artifact exists
 2. **Starts a Docker container** with the Mendix runtime
@@ -16437,7 +16698,7 @@ The extension spawns `mxcli lsp --stdio` as a background process and communicate
 └──────────────┘                └──────────────────┘     └────────────┘
 
 ```
-## [Requirements](#requirements)
+## [Requirements](#requirements-1)
 
 - **VS Code** 1.80 or later (or any VS Code fork such as Cursor)
 - **mxcli** binary on `PATH` or configured via the `mdl.mxcliPath` setting
@@ -17692,7 +17953,7 @@ Install the library with `go get`:
 go get github.com/mendixlabs/mxcli
 
 ```
-## [Requirements](#requirements-1)
+## [Requirements](#requirements-2)
 
 - **Go 1.21+**
 - **No CGO required** – the project uses `modernc.org/sqlite` (pure Go SQLite) and does not require a C compiler

@@ -1,3 +1,7 @@
+## 2026-07-20 -- mxcli v0.16.0 @ 88077af
+- +281 / -20 lines
+- Sections changed: ...or pin a specific release, Example for Linux/macOS, Linux/macOS — nightly (recommended for now), [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [mxcli run –local](#mxcli-run-local), binary at ./bin/mxcli  (go install @latest doesn't work — see Installation), edit a page with mxcli exec/MDL -> auto rebuild -> re-bundle -> reload -> new PNG, macOS / Linux (+21 more)
+
 ## 2026-07-12 -- mxcli v0.15.0 @ cb6d638
 - +37 / -3 lines
 - Sections changed: [Action Widgets](#action-widgets), [Description](#description-33), [Icon collections (read-only)](#icon-collections-read-only)
