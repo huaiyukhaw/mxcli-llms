@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ 88077af
-Generated: 2026-07-20T05:37:17Z
+Version:   mxcli v0.16.0 @ 4af2fea
+Generated: 2026-07-22T05:15:54Z
 
 ---
 
@@ -4448,6 +4448,18 @@ ALTER PAGE CRM.Customer_Edit {
 ALTER PAGE CRM.Customer_Edit {
   INSERT AFTER txtEmail {
     TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
+  }
+};
+
+```
+## [Add a Widget Into a Container](#add-a-widget-into-a-container)
+
+Use `INSERT INTO` to append a widget as a container’s last child — the only way to fill an empty container.
+
+```
+ALTER PAGE CRM.Customer_Overview {
+  INSERT INTO ctnToolbar {
+    ACTIONBUTTON btnNew (Caption: 'New Customer', Action: NOTHING, ButtonStyle: Primary)
   }
 };
 
@@ -9884,6 +9896,9 @@ ALTER SNIPPET MyModule.CustomerCard {
   SET Caption = 'View Details' ON btnEdit;
   INSERT AFTER txtEmail {
     DYNAMICTEXT txtPhone (Content: '{1}', Attribute: Phone)
+  };
+  INSERT INTO ctnActions {   -- append as the container's last child
+    ACTIONBUTTON btnMore (Caption: 'More', Action: NOTHING)
   }
 };
 
@@ -10010,7 +10025,16 @@ ALTER PAGE Module.EditPage {
   }
 };
 
+-- Insert INTO a container — append as its last child (works on an empty container)
+ALTER PAGE Module.EditPage {
+  INSERT INTO ctnToolbar {
+    ACTIONBUTTON btnNew (Caption: 'New', Action: NOTHING, ButtonStyle: Primary)
+  }
+};
+
 ```
+
+`INSERT INTO <container>` appends widgets as the container’s last children — the only way to fill an **empty** container, and handy for adding to a container or data view without a sibling to anchor to. Widgets inserted into a data view take that data view’s entity. Supported on simple containers; for a layout grid or tab container, insert relative to a widget inside the target column/tab instead.
 
 The inserted widgets use the same syntax as in `CREATE PAGE`. Multiple widgets can be inserted in a single block.
 
@@ -15955,31 +15979,30 @@ This is an empty repo. Provision it as a Mendix app developed with mxcli:
    curl -fsSL -o ./mxcli \
      https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
    chmod +x ./mxcli
+   ```
 
-```
-
-Use the **`nightly`** build: this is fast-moving alpha software and the warm-loop
-commands used below (`run --local`, `--setup`, `--ensure-db`) land in `nightly`
-before they appear in a tagged release. For a reproducible setup, pin a specific
-release instead (`.../releases/download/vX.Y.Z/mxcli-<os>-<arch>`). Note: `go install …@latest` does **not** work — the generated ANTLR parser isn’t committed,
-so use the prebuilt binary (a from-source build needs `make grammar`).
+   Use the **`nightly`** build: this is fast-moving alpha software and the warm-loop
+   commands used below (`run --local`, `--setup`, `--ensure-db`) land in `nightly`
+   before they appear in a tagged release. For a reproducible setup, pin a specific
+   release instead (`.../releases/download/vX.Y.Z/mxcli-<os>-<arch>`). Note: `go
+   install …@latest` does **not** work — the generated ANTLR parser isn't committed,
+   so use the prebuilt binary (a from-source build needs `make grammar`).
 2. Create the app at the repo root: `mxcli new App --version 11.6.3`
-(or `mxcli init` if an .mpr already exists).
+   (or `mxcli init` if an .mpr already exists).
 3. Ensure the Claude tooling is set up: `mxcli init --tool claude`. This adds a
-SessionStart hook to `.claude/settings.json` that self-bootstraps future sessions.
+   SessionStart hook to `.claude/settings.json` that self-bootstraps future sessions.
 4. Bring prerequisites up: `./mxcli run --local --setup --ensure-db -p App.mpr`
-(caches MxBuild + runtime, starts Postgres, creates the app database).
+   (caches MxBuild + runtime, starts Postgres, creates the app database).
 5. COMMIT everything now — `App.mpr`, `.devcontainer/`, and `.claude/` (including the
-SessionStart hook) — so that after idle reaping the next session bootstraps from
-files, not from re-running this prompt.
+   SessionStart hook) — so that after idle reaping the next session bootstraps from
+   files, not from re-running this prompt.
 6. Boot and verify: `./mxcli run --local -p App.mpr` in the background, then confirm
-the app answers HTTP 200 at http://localhost:8080/ and report.
+   the app answers HTTP 200 at http://localhost:8080/ and report.
 
-(Optional) Seed the domain model, pages, and microflows from this prototype: .
+(Optional) Seed the domain model, pages, and microflows from this prototype: <paste or link a design here>.
 
 ```
-
-## Which mxcli version gets installed
+## [Which mxcli version gets installed](#which-mxcli-version-gets-installed)
 
 Prebuilt binaries are the working install path. CI publishes them on every `vX.Y.Z`
 tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets named
@@ -15991,7 +16014,7 @@ tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets 
   needs it. Download `.../releases/download/nightly/mxcli-<os>-<arch>`, or once mxcli is
   present, `mxcli setup mxcli --tag nightly`.
 - **`vX.Y.Z` — pin for reproducibility / stability.** The CI marks nightly a
-  pre-release ("use tagged releases for production"). Download
+  pre-release (“use tagged releases for production”). Download
   `.../releases/download/vX.Y.Z/mxcli-<os>-<arch>` or `mxcli setup mxcli --tag vX.Y.Z`.
   With no `--tag`, `mxcli setup mxcli` matches the mxcli already running it (nightly →
   `nightly`, `vX.Y.Z` → that release) — mainly useful for replicating a version onto
@@ -16005,22 +16028,22 @@ tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets 
   `make grammar` first). Enabling `go install` would require committing the generated
   parser (or generating it during module build) — a maintainer decision.
 
-## Two rules that make this robust
+## [Two rules that make this robust](#two-rules-that-make-this-robust)
 
 - **Committing the config (step 5) is mandatory.** The prompt is a *one-time seed*.
   Its output — `.mpr` + `.devcontainer/` + `.claude/` with the SessionStart hook — must
   be committed so the steady state is file-driven and deterministic. After that, every
   new session runs the hook (`run --local --setup --ensure-db`) automatically; you
   never re-paste the prompt.
-- **mxcli delivery is an environment concern, not the prompt's.** Step 1 is the fragile
+- **mxcli delivery is an environment concern, not the prompt’s.** Step 1 is the fragile
   part in a gated web session (a GitHub release `curl` may be blocked). The robust fix
   is for the Claude Code Web **environment image / setup script to pre-install mxcli**
   (and pre-cache MxBuild + runtime); `go install` via `proxy.golang.org` is the fallback
   and needs mxcli published as a public Go module.
 
-## After bootstrap — the inner loop
+## [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop)
 
-```bash
+```
 ./mxcli run --local -p App.mpr --watch --screenshot   # warm dev loop + screenshots
 ./mxcli exec change.mdl -p App.mpr                     # edit the model; the loop hot-applies
 
@@ -22580,6 +22603,9 @@ SET 'propertyName' = value ON widgetName;
 INSERT BEFORE widgetName { widget_definitions };
 INSERT AFTER widgetName { widget_definitions };
 
+-- Insert widgets as the last children of a container
+INSERT INTO containerName { widget_definitions };
+
 -- Remove widgets
 DROP WIDGET widgetName1, widgetName2;
 
@@ -22618,6 +22644,12 @@ For pluggable widget properties, use quoted property names (e.g., `'showLabel'`)
 ### [INSERT BEFORE / INSERT AFTER](#insert-before--insert-after)
 
 Inserts new widgets immediately before or after a named widget within its parent container. The new widgets use the same syntax as in `CREATE PAGE`.
+
+### [INSERT INTO](#insert-into)
+
+Appends new widgets as the **last children** of a named container. This is the only way to fill an **empty** container, and the natural way to add a widget to a container or data view without needing a sibling to anchor to. Widgets inserted into a data view take that data view’s entity as their context.
+
+Supported on simple containers (container/DivContainer, data view, group box, scroll-container region). A layout grid (rows/columns) and tab container have no single child list — insert relative to a widget inside the target column or tab instead.
 
 ### [DROP WIDGET](#drop-widget)
 
@@ -28044,6 +28076,8 @@ When unsure about the correct BSON structure for a new feature, create a working
 
 Pluggable widgets (DataGrid2, ComboBox, Gallery, etc.) require embedded template definitions for correct BSON serialization. This page explains how the template system works, from extraction through runtime loading and property mapping.
 
+> For the user-facing view — how mxcli keeps widget definitions version-correct across Mendix releases, and the `mxcli widget describe` command for inspecting a widget’s discovered properties and dynamic rules — see [Pluggable Widgets Across Versions](#pluggable-widgets-across-mendix-versions).
+
 ## [Why Templates Are Needed](#why-templates-are-needed)
 
 Pluggable widgets in Mendix are defined by two BSON components stored inside each widget instance:
@@ -28628,9 +28662,20 @@ CREATE PAGE MyModule.ReviewPage (...) {
 }
 
 ```
+## [Object-Lists and DataGrid2 Columns](#object-lists-and-datagrid2-columns)
+
+A widget property can be an **object-list**: a repeated, structured child object rather than a single value or a flat widget slot. DataGrid 2 columns are the canonical example — each column is its own object with a header, an attribute (or custom content), a filter, sortable/width settings, and so on. The engine models this with `ObjectListMapping` (`mdl/executor/widget_engine.go`):
+
+- **`ItemProperties`** — scalar sub-properties of each item (attribute, caption/header, `showContentAs`, sortable, width, …), each with its own operation and MDL aliases.
+- **`ItemSlots`** — *nested widget* slots inside each item, with `AcceptedChildTypes`. This is how a per-column **filter** widget (`textfilter`/`numberfilter`/`datefilter`/`dropdownfilter`) or a custom-content widget lands in the right slot of its column.
+
+**DataGrid 2 is built entirely through this generic path when building a page.** `datagrid` has no dedicated `case` in `buildWidgetV3`; it resolves through the widget registry (a `datagrid.def.json` generated on demand from the project’s installed `.mpk`, with columns emitted as an `ObjectListMapping`) and builds via `buildPluggable`. Columns are serialized by `Builder.SetObjectList` → `buildObjectListItemBSON`, walking the template’s PropertyType order (the CE0463-safe ordering) and applying the same empty-`ClientTemplate`/null conventions per column kind. There is no DataGrid-specific full-page builder — Gallery, by contrast, needs only child slots (its items are a single repeated template), while DataGrid needs the object-list machinery because each column is a distinct heterogeneous object carrying a nested filter.
+
 ## [What Stays Hardcoded](#what-stays-hardcoded)
 
 **Native Mendix widgets** (TextBox, DataView, ListView, LayoutGrid, Container, etc.) use `Forms$TextBox`, `Forms$DataView`, etc. – NOT `CustomWidgets$CustomWidget`. These stay as hardcoded builders because they have fundamentally different BSON structures and don’t use the template system.
+
+**ALTER PAGE DataGrid 2 column insert/replace.** The one part of DataGrid 2 that is *not* on the generic engine is the in-place column mutation used by `alter page … insert/replace column` — `Mutator.InsertColumns`/`ReplaceColumn` build a single column’s BSON via the hand-coded `BuildDataGrid2Column` (`mdl/backend/widgetobj/datagrid_column.go`) and a bespoke `BuildFilterWidget`, because they splice into an already-serialized grid object rather than building a fresh widget. This duplicates the column conventions the object-list engine already applies; re-expressing it on `SetObjectList` semantics is a tracked follow-up (see `datagrid_column.go`). The full-page build path does **not** use this code.
 
 ## [Key Source Files](#key-source-files-1)
 
@@ -30592,6 +30637,167 @@ mxcli lint -p your-app.mpr
 5. **Update skills when conventions change** – outdated skills cause inconsistency
 6. **Use `mxcli check` after generation** – always validate AI output before committing
 
+# [Pluggable Widgets Across Mendix Versions](#pluggable-widgets-across-mendix-versions)
+
+Modern Mendix UI is built from **pluggable widgets** — DataGrid 2, Combo box, Gallery,
+the data-grid filters, and any widget you install from the Marketplace. mxcli can create
+and configure these widgets in a page, and it does so in a way that stays correct as the
+installed widget versions change from project to project. This guide explains how that
+works and how to inspect what mxcli has discovered about a widget.
+
+## [The problem: “the definition of this widget has changed” (CE0463)](#the-problem-the-definition-of-this-widget-has-changed-ce0463)
+
+Every pluggable-widget instance stored in an `.mpr` embeds a copy of the widget’s
+**definition** — the full list of properties, their types, default values, captions,
+categories, and declared order. When you open the app, Studio Pro (and `mx check`)
+compares that embedded definition against the widget package (`.mpk`) actually installed
+in the project. If they differ in any way, you get:
+
+> **CE0463** — “The definition of this widget has changed. Update this widget by
+> right-clicking it and selecting ‘Update widget’…”
+
+Different Mendix versions — and different Marketplace releases of the same widget — ship
+slightly different definitions: a property is added, an enumeration option is renamed, a
+category moves, the property order changes. A tool that emitted one fixed definition would
+trip CE0463 the moment the project’s widget version didn’t match.
+
+## [How mxcli stays version-correct](#how-mxcli-stays-version-correct)
+
+mxcli never hard-codes one widget shape. It reconciles a known-good template against the
+widget package **installed in your project**, so the definition it writes matches the
+version you actually have — no `mx update-widgets` step required.
+
+1. **Embedded template.** mxcli ships a known-good template for each built-in widget
+   (extracted from Studio Pro). This provides the correct nested BSON structure that is
+   hard to build from scratch.
+2. **Reconcile against the project `.mpk`.** When you pass a project (`-p`), mxcli finds
+   the widget’s `.mpk` in the project’s `widgets/` folder, parses its definition, and
+   updates the template to match: it adds and removes properties, rewrites enumeration
+   option sets, fixes categories/captions/defaults, fills in per-property metadata, and —
+   importantly — **re-orders the properties to the package’s declared order**, including
+   the system properties (Label / Visibility / Editability) at their real position. This
+   is exactly what Studio Pro’s own “Update widget” does, derived generically from the
+   package with no widget-specific code.
+3. **Apply the widget’s own dynamic rules.** Which properties a widget shows depends on
+   its *configuration* — a Combo box in enumeration mode hides the association properties;
+   a DataGrid 2 with selection off hides the selection labels. That logic lives in each
+   widget’s compiled `editorConfig.js`. mxcli statically extracts those **dynamic property
+   rules** and applies them, so a freshly-created widget carries exactly the defaults
+   Studio Pro would give it.
+
+The result: widgets created by mxcli open cleanly across Mendix 10.x and 11.x with the
+bundled widget packages, and against Marketplace-updated packages, without manual
+“Update widgets” fix-ups.
+
+> For the internal mechanics (template extraction, BSON cross-references, the augment
+> pipeline), see [Widget Template System](#widget-template-system) and
+> [Pluggable Widget Engine](#pluggable-widget-engine).
+
+## [Inspecting the discovered widget format](#inspecting-the-discovered-widget-format)
+
+Two commands let you see exactly what mxcli knows about the widgets available to a project.
+
+### [List available widgets](#list-available-widgets)
+
+```
+mxcli widget list                 # built-in widget definitions
+mxcli widget list -p app.mpr      # also loads project-specific definitions
+
+```
+### [Describe one widget](#describe-one-widget)
+
+`mxcli widget describe` shows a widget’s **expected properties** and its **dynamic property
+rules**. Name the widget by its MDL keyword (`COMBOBOX`, `DATAGRID2`, `GALLERY`, …) or its
+full widget id.
+
+```
+# mxcli's built-in view of the widget:
+mxcli widget describe COMBOBOX
+
+# the version-accurate view from the package installed in the project:
+mxcli widget describe COMBOBOX -p app.mpr
+
+# machine-readable:
+mxcli widget describe DATAGRID2 -p app.mpr --format json
+
+```
+
+With `-p`, the properties and rules come from the widget package actually installed in the
+project (`widgets/*.mpk`) — the version-accurate “discovered” format, and the only way to
+inspect a Marketplace widget mxcli has no built-in knowledge of. Without `-p`, they come
+from mxcli’s embedded template.
+
+Example (abridged):
+
+```
+Widget: Combo box (combobox)
+  ID:      com.mendix.widget.web.combobox.Combobox
+  Version: 2.5.0
+  Kind:    pluggable
+  Source:  project .mpk
+
+Properties (58):
+  source                 enumeration required default=context {context|database|static}  (General::Data source)
+  optionsSourceType      enumeration required default=association {association|enumeration|boolean}  (General::Data source)
+  attributeEnumeration   attribute required  (General::Data source)
+  …
+  selectAllButtonCaption textTemplate required  (General::Multiple-selection (reference set))
+  Label                  system  [system]
+  Visibility             system  [system]
+  Editability            system  [system]
+  customEditability      enumeration required default=default {default|never|conditionally}  (General::Editability)
+  …
+
+Dynamic property rules (10):
+  itemSelectionMethod       hidden when itemSelection = "None"
+  keepSelection             hidden when itemSelection ≠ "Multi"
+  loadMoreButtonCaption     hidden when pagination ≠ "loadMore"
+  …
+  — 7 of 23 editor hide-rules recognized
+
+```
+
+The property list is in the widget’s **declared order** (system properties appear where the
+package declares them, not appended at the end), each with its type, whether it’s required,
+its default, enumeration options, and category. Object-list widgets (e.g. DataGrid 2
+columns) show their nested item properties indented. The dynamic rules read as
+“property *X* is hidden when *Y*”, and the trailing coverage line reports how many of the
+widget’s editor hide-rules mxcli recognized.
+
+### [`--format json`](#--format-json)
+
+Both the properties and the rules are available as JSON for scripting:
+
+```
+{
+  "widgetId": "com.mendix.widget.web.combobox.Combobox",
+  "version": "2.5.0",
+  "source": "project .mpk",
+  "properties": [
+    { "key": "source", "type": "enumeration", "required": true, "default": "context",
+      "enum": ["context", "database", "static"], "category": "General::Data source" }
+  ],
+  "dynamicRules": [
+    { "property": "loadMoreButtonCaption", "hiddenWhen": "pagination ≠ \"loadMore\"" }
+  ]
+}
+
+```
+## [Marketplace and custom widgets](#marketplace-and-custom-widgets)
+
+`mxcli widget describe -p app.mpr <widget-id>` works for **any** widget installed in the
+project, including Marketplace and custom widgets mxcli has no embedded template for — it
+reads the definition and editor rules straight from the installed `.mpk`. To teach the
+page builder to author a custom widget from MDL, extract a definition for it first:
+
+```
+mxcli widget extract --mpk widgets/MyWidget.mpk    # writes a .def.json
+mxcli widget init -p app.mpr                        # extract defs for all project widgets
+
+```
+
+See [Marketplace Content](#marketplace-content) for downloading and installing packages.
+
 # [Marketplace Content](#marketplace-content)
 
 How to discover, download, and install Mendix Marketplace content (modules, widgets) from the command line with `mxcli marketplace`.
@@ -31118,6 +31324,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 | Page-level set | `SET Title = 'New Title'` | No ON clause for page properties |
 | Insert after | `INSERT AFTER widgetName { widgets }` | Add widgets after target |
 | Insert before | `INSERT BEFORE widgetName { widgets }` | Add widgets before target |
+| Insert into | `INSERT INTO containerName { widgets }` | Append as the container’s last child (fills an empty container) |
 | Drop widgets | `DROP WIDGET name1, name2` | Remove widgets by name |
 | Replace widget | `REPLACE widgetName WITH { widgets }` | Replace widget subtree |
 | Pluggable prop | `SET 'showLabel' = false ON cbStatus` | Quoted name for pluggable widgets |

@@ -1,3 +1,7 @@
+## 2026-07-22 -- mxcli v0.16.0 @ 4af2fea
+- +228 / -21 lines
+- Sections changed: [Pluggable Widgets Across Mendix Versions](#pluggable-widgets-across-mendix-versions), [Widget Template System](#widget-template-system), machine-readable:, mxcli's built-in view of the widget:, the version-accurate view from the package installed in the project:, After bootstrap — the inner loop, Two rules that make this robust, Which mxcli version gets installed (+16 more)
+
 ## 2026-07-20 -- mxcli v0.16.0 @ 88077af
 - +281 / -20 lines
 - Sections changed: ...or pin a specific release, Example for Linux/macOS, Linux/macOS — nightly (recommended for now), [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [mxcli run –local](#mxcli-run-local), binary at ./bin/mxcli  (go install @latest doesn't work — see Installation), edit a page with mxcli exec/MDL -> auto rebuild -> re-bundle -> reload -> new PNG, macOS / Linux (+21 more)
