@@ -1,3 +1,7 @@
+## 2026-07-23 -- mxcli v0.16.0 @ 05b4d29
+- +59 / -4 lines
+- Sections changed: [Editing themes (SCSS): rebuild, don’t clear caches](#editing-themes-scss-rebuild-dont-clear-caches), [The change signal](#the-change-signal), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
+
 ## 2026-07-22 -- mxcli v0.16.0 @ 4af2fea
 - +228 / -21 lines
 - Sections changed: [Pluggable Widgets Across Mendix Versions](#pluggable-widgets-across-mendix-versions), [Widget Template System](#widget-template-system), machine-readable:, mxcli's built-in view of the widget:, the version-accurate view from the package installed in the project:, After bootstrap — the inner loop, Two rules that make this robust, Which mxcli version gets installed (+16 more)
