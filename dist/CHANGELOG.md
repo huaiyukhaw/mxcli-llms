@@ -1,3 +1,7 @@
+## 2026-07-24 -- mxcli v0.16.0 @ 09b5090
+- +46 / -1 lines
+- Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", on your VPS: *.example.com + hub.example.com -> this host, inbound 80+443 open, where the app runs:, [External browser preview (`--hub`)](#external-browser-preview---hub), [Flags](#flags-1)
+
 ## 2026-07-23 -- mxcli v0.16.0 @ 05b4d29
 - +59 / -4 lines
 - Sections changed: [Editing themes (SCSS): rebuild, don’t clear caches](#editing-themes-scss-rebuild-dont-clear-caches), [The change signal](#the-change-signal), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
