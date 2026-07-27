@@ -1,3 +1,7 @@
+## 2026-07-27 -- mxcli v0.16.0 @ faa4d10
+- +181 / -8 lines
+- Sections changed: ...trigger the microflow in the browser (the request pauses)..., [Debug Microflows — `mxcli debug`](#debug-microflows--mxcli-debug), [Quick Start](#quick-start-6), [Quick Start](#quick-start-7), terminal 1 — app with the debugger enabled and a session ready, terminal 2 — break by name, then inspect/step/continue (same -p), [Commands](#commands-2), [Connection flags](#connection-flags) (+14 more)
+
 ## 2026-07-24 -- mxcli v0.16.0 @ 09b5090
 - +46 / -1 lines
 - Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", on your VPS: *.example.com + hub.example.com -> this host, inbound 80+443 open, where the app runs:, [External browser preview (`--hub`)](#external-browser-preview---hub), [Flags](#flags-1)

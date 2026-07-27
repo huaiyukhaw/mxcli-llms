@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ 09b5090
-Generated: 2026-07-24T05:16:55Z
+Version:   mxcli v0.16.0 @ faa4d10
+Generated: 2026-07-27T05:44:38Z
 
 ---
 
@@ -5405,7 +5405,7 @@ BOOLEAN, BOTH, BUSINESS, BY, CALL, CANCEL, CAPTION, CASCADE,
 CATALOG, CHANGE, CHILD, CLOSE, COLUMN, COMBOBOX, COMMIT, CONNECT,
 CONFIGURATION, CONNECTOR, CONSTANT, CONSTRAINT, CONTAINER, CREATE,
 CRUD, DATAGRID, DATAVIEW, DATE, DATETIME, DECLARE, DEFAULT, DELETE,
-DELETE_BEHAVIOR, DELETE_BUT_KEEP_REFERENCES, DELETE_CASCADE, DEMO,
+DELETE_BEHAVIOR, DELETE_BUT_KEEP_REFERENCES, DELETE_AND_REFERENCES, DEMO,
 DEPTH, DESC, DESCENDING, DESCRIBE, DIFF, DISCONNECT, DROP, ELSE,
 EMPTY, END, ENTITY, ENUMERATION, ERROR, EVENT, EVENTS, EXECUTE,
 EXEC, EXIT, EXPORT, EXTENDS, EXTERNAL, FALSE, FOLDER, FOOTER,
@@ -6767,7 +6767,7 @@ Controls what happens when an associated object is deleted.
 | Behavior | MDL Keyword | Description |
 | --- | --- | --- |
 | Keep references | `DELETE_BUT_KEEP_REFERENCES` | Delete the object, set references to null |
-| Cascade | `DELETE_CASCADE` | Delete associated objects as well |
+| Cascade | `DELETE_AND_REFERENCES` | Delete associated objects as well |
 
 ```
 /** Invoice must be deleted with Order */
@@ -6775,7 +6775,7 @@ CREATE ASSOCIATION Sales.Order_Invoice
   FROM Sales.Order
   TO Sales.Invoice
   TYPE Reference
-  DELETE_BEHAVIOR DELETE_CASCADE;
+  DELETE_BEHAVIOR DELETE_AND_REFERENCES;
 
 ```
 ## [Naming Convention](#naming-convention)
@@ -15880,6 +15880,66 @@ so structural changes need a restart; behavioural changes do not.
 | `--screenshot-path` | `<projectDir>/.mxcli/run-local.png` | Screenshot output PNG |
 | `--screenshot-url` | app root | Page to shoot: full URL, or a path relative to the app root (e.g. `/p/customers`). Repeat for a multi-page set. |
 | `--screenshot-user` / `--screenshot-password` | — | Log in once (Mendix form auth) and reuse the session, so pages behind login render authenticated |
+| `--runtime-log` | `<projectDir>/.mxcli/runtime.log` | Runtime log file — JVM stdout/stderr **and** the application log (server stack traces + microflow `LOG` output); `-` disables |
+| `--debug` | off | Enable the microflow debugger at boot; then use [`mxcli debug`](#debug-microflows--mxcli-debug) from another terminal. Behaviour-neutral until a breakpoint is set |
+| `--debug-pass` | `mxdebug` | Debugger password when `--debug` is set |
+| `--metrics` | off | Register a Prometheus meter registry; metrics served at `http://127.0.0.1:<admin-port>/prometheus` |
+| `--trace` | off | Enable OpenTelemetry tracing (bundled agent → runtime log) with default span filters |
+| `--trace-service` | `.mpr` name | `OTEL_SERVICE_NAME` under `--trace` |
+| `--runtime-setting Key=Value` | — | Merge an extra runtime setting into the boot config (Value parsed as JSON when possible); repeatable |
+
+## [Metrics and OpenTelemetry](#metrics-and-opentelemetry)
+
+`--metrics` registers a **Prometheus** meter registry at boot, so
+`http://127.0.0.1:8090/prometheus` (the admin port) serves the runtime’s Micrometer
+metrics (`connectionbus_*`, `handler_requests_total`, `sessions_*`, `taskqueue_*`, …).
+For another registry, use `--runtime-setting`:
+
+```
+mxcli run --local -p app.mpr --metrics
+mxcli run --local -p app.mpr --runtime-setting 'Metrics.Registries=[{"type":"otlp"}]'
+
+```
+
+These are flags rather than a post-boot call because the admin `update_configuration`
+action **replaces** the whole config (no read-back), so a separate call would wipe the
+DB/BasePath settings — `--metrics`/`--runtime-setting` merge into mxcli’s single boot
+`update_configuration`.
+
+**Traces (`--trace`):** attaches the bundled OpenTelemetry Java agent to the runtime
+JVM (console exporter → `runtime.log`) and applies default span filters — unfiltered
+per-activity tracing is ~10× slower, so `--trace` ships
+`OpenTelemetry._RuntimeSpanFilters=["CreateOrChangeVariable","Loop","Gateway","RetrieveFromCache"]`
+(override via `--runtime-setting`).
+
+```
+mxcli run --local -p app.mpr --trace
+tail -f .mxcli/runtime.log     # microflow spans: mx.microflow.name / mx.microflow.depth
+
+```
+
+To export to a collector instead of the console, set the OTEL env yourself before
+running (`--trace` won’t override an exporter you’ve set):
+
+```
+export OTEL_TRACES_EXPORTER=otlp OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+mxcli run --local -p app.mpr --trace
+
+```
+## [Debugging a server-side error](#debugging-a-server-side-error)
+
+When a page action throws, the browser shows the generic Mendix error dialog with no
+detail. The runtime log is written to `<projectDir>/.mxcli/runtime.log` (the path is
+printed at boot) — `tail -f .mxcli/runtime.log` while you reproduce the action to see the
+server stack trace and your microflow `LOG` output.
+
+A standalone runtime attaches **no** log subscriber by default (a Studio Pro / m2ee run
+does), so mxcli wires two sources into that file: it tees the runtime JVM’s stdout/stderr,
+and after start it attaches a Mendix **file log subscriber** so the application log
+(microflow `LOG` output and server-side stack traces) lands there too — otherwise the file
+would be nearly empty. The file is appended across restarts, each marked with
+`=== runtime start … ===`; the subscriber is re-attached on each restart and never rotates
+the file. Use `--runtime-log <path>` to relocate it or `--runtime-log -` to turn it off.
 
 ## [External browser preview (`--hub`)](#external-browser-preview---hub)
 
@@ -16152,6 +16212,119 @@ tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets 
 See [mxcli run –local](#mxcli-run-local) for the warm loop, `--watch`, `--ensure-db`, and
 the screenshot flags.
 
+# [Debug Microflows — `mxcli debug`](#debug-microflows--mxcli-debug)
+
+`mxcli debug` drives the Mendix runtime’s **microflow debugger** from the command
+line: set breakpoints **by name**, inspect a paused microflow’s variables, and
+step/continue — against an app started by [`mxcli run --local`](#mxcli-run-local). It
+is the headless counterpart to Studio Pro’s debugger.
+
+Because mxcli owns both halves — the admin password + app URL (from `run --local`)
+and the activity model GUIDs (from the `.mpr`) — it can offer breakpoints **by
+name**, so you never handle raw GUIDs.
+
+## [Quick start](#quick-start-5)
+
+```
+# terminal 1 — app with the debugger enabled and a session ready
+mxcli run --local -p app.mpr --debug
+
+# terminal 2 — break by name, then inspect/step/continue (same -p)
+mxcli debug activities Sudoku.ACT_Hint -p app.mpr
+mxcli debug break Sudoku.ACT_Hint --activity 'Retrieve' -p app.mpr
+#   ...trigger the microflow in the browser (the request pauses)...
+mxcli debug paused   -p app.mpr
+mxcli debug inspect Game -p app.mpr
+mxcli debug step over    -p app.mpr
+mxcli debug continue     -p app.mpr
+mxcli debug disable      -p app.mpr        # always finish here
+
+```
+
+`--debug` on `run --local` enables the debugger and starts a session (cached under
+`<projectDir>/.mxcli/`), so you skip a separate `mxcli debug enable`. With **no
+breakpoints set, nothing pauses** — `--debug` alone is behaviour-neutral.
+
+## [Two APIs, one command](#two-apis-one-command)
+
+Under the hood the debugger spans two runtime APIs, which `mxcli debug` hides:
+
+- the **M2EE admin** API toggles the debugger (`enable`/`disable`/`status`);
+- the app’s **`/debugger/`** endpoint runs the session (breakpoints, paused state,
+  stepping).
+
+## [Commands](#commands-2)
+
+| Command | What it does |
+| --- | --- |
+| `mxcli debug status` | Debugger on? How many microflows paused? |
+| `mxcli debug enable` / `disable` | Turn on/off (prefer `run --local --debug` for the warm loop) |
+| `mxcli debug activities <Module.Flow>` | List activities + the object IDs you can break on |
+| `mxcli debug break <Module.Flow> --activity <#n|caption> [--if <expr>]` | Set a breakpoint by name; `--if` is a conditional (Mendix expression) |
+| `mxcli debug unbreak <Module.Flow> --activity <#n|caption>` | Clear a breakpoint |
+| `mxcli debug breaks` | List the breakpoints set this session (name → object ID) |
+| `mxcli debug paused` | Paused microflows + full state (variables) |
+| `mxcli debug inspect <var> [--list] [--flow <debug_id>]` | Inspect one variable of a paused flow; `--list` inspects a list variable (`get_list`) |
+| `mxcli debug step [over|into|out] [--flow <debug_id>]` | Advance one step (default `over`) |
+| `mxcli debug continue [--all]` | Resume the paused flow (or all with `--all`) |
+
+**Selecting an activity:** `--activity '#2'` (the index from `activities`) or a
+caption substring like `--activity 'Retrieve'` (case-insensitive; must match one).
+
+**Selecting a paused flow:** `--flow <debug_id>` (from `paused`); a single paused
+flow is auto-selected.
+
+## [Connection flags](#connection-flags)
+
+Defaults target a `run --local` runtime; override to debug a differently-configured
+or remote runtime.
+
+| Flag | Env | Default |
+| --- | --- | --- |
+| `--app-url` | `MXCLI_APP_URL` | `http://127.0.0.1:8080` |
+| `--admin-port` | — | `8090` |
+| `--admin-pass` | `MXCLI_ADMIN_PASS` | `mxcli-local-dev` |
+| `--debug-pass` | `MXCLI_DEBUG_PASS` | `mxdebug` |
+| `-p, --project` | — | (for the `.mxcli/` session + breakpoint files) |
+
+## [Nanoflows (client-side)](#nanoflows-client-side)
+
+`mxcli debug` works for **nanoflows** as well as microflows. `break` / `activities` /
+`unbreak` auto-detect the document type and set the breakpoint correctly — a nanoflow
+uses the runtime’s `nanoflow_name` parameter (the wrong key NPEs the runtime; mxcli
+handles it). Break by name the same way:
+
+```
+mxcli debug break Sudoku.NF_ToggleNotes --activity 'Change' -p app.mpr
+
+```
+
+A paused **nanoflow** does not appear in `get_paused_microflows`; it surfaces only in
+the runtime’s `poll_events`. `mxcli debug paused` (and `step`/`inspect`/`continue`)
+merge both sources, so a paused nanoflow appears with its `debug_id`; its variables
+are shown under the *Client events (poll\_events)* section of `paused`.
+
+A nanoflow’s `debug_id` is **single-use** — it changes after every step (a microflow’s
+is stable). Let `step`/`inspect`/`continue` **auto-resolve** the flow (omit `--flow`);
+each command re-reads the current state and picks up the fresh id. A `--flow` value
+copied from an earlier `paused` goes stale after the first nanoflow step.
+
+**Nanoflow logging:** a nanoflow logs to the browser console and to the server
+runtime log, but the runtime **rewrites the log node to `Client_Nanoflow`** — so in
+`.mxcli/runtime.log` a nanoflow’s `LOG NODE 'Sudoku' …` appears as `Client_Nanoflow:`,
+not `Sudoku:`. Grep for `Client_Nanoflow` (or the message text); a node-name filter
+built for microflows drops nanoflow lines. Note `LOG DEBUG` from a nanoflow is dropped
+server-side (browser console only) — only `INFO`/`WARNING`/`ERROR` reach `runtime.log`.
+
+## [Important behaviour](#important-behaviour)
+
+- **A breakpoint pauses whoever hits it — the browser included.** The triggering
+  request hangs until `continue` or `disable`. Don’t leave a paused session idle.
+- **Always `mxcli debug disable` when done.** `run --local --debug` does this on
+  shutdown; a manual `enable` is your responsibility.
+- **Use the same `-p` for every command.** The session token and breakpoint record
+  live under `<projectDir>/.mxcli/`.
+
 # [Docker Integration](#docker-integration)
 
 mxcli provides Docker integration for building, running, and validating Mendix applications without a local Mendix installation. Docker is also required for the testing framework.
@@ -16199,7 +16372,7 @@ The mx binary location depends on the environment:
 | Dev container | `~/.mxcli/mxbuild/{version}/modeler/mx` |
 | Repository | `reference/mxbuild/modeler/mx` |
 
-## [Quick Start](#quick-start-5)
+## [Quick Start](#quick-start-6)
 
 ```
 # Validate a project
@@ -17960,7 +18133,7 @@ mxcli version
 3. **Re-run `mxcli init`** after upgrading mxcli to pick up new skills and bug fixes
 4. **Review the diff** after syncing to see what changed in the skill files
 
-# [Quick Start](#quick-start-6)
+# [Quick Start](#quick-start-7)
 
 The `modelsdk-go` library provides programmatic access to Mendix projects from Go code. It is the underlying library that powers the `mxcli` CLI tool.
 
@@ -21208,7 +21381,7 @@ CREATE [ OR MODIFY ] ASSOCIATION module.name
     TO to_module.to_entity
     TYPE { Reference | ReferenceSet }
     [ OWNER { Default | Both | Parent | Child } ]
-    [ DELETE_BEHAVIOR { DELETE_BUT_KEEP_REFERENCES | DELETE_CASCADE } ]
+    [ DELETE_BEHAVIOR { DELETE_BUT_KEEP_REFERENCES | DELETE_AND_REFERENCES } ]
 
 ```
 ## [Description](#description-25)
@@ -21236,7 +21409,7 @@ The `DELETE_BEHAVIOR` clause controls what happens when an object on the FROM si
 | Behavior | Description |
 | --- | --- |
 | `DELETE_BUT_KEEP_REFERENCES` | Delete the object and set references to null |
-| `DELETE_CASCADE` | Delete the object and all associated objects on the TO side |
+| `DELETE_AND_REFERENCES` | Delete the object and all associated objects on the TO side |
 
 If `OR MODIFY` is specified, the statement is idempotent: if the association already exists, it is updated to match the new definition.
 
@@ -21289,7 +21462,7 @@ CREATE ASSOCIATION Sales.Order_Invoice
     FROM Sales.Order
     TO Sales.Invoice
     TYPE Reference
-    DELETE_BEHAVIOR DELETE_CASCADE;
+    DELETE_BEHAVIOR DELETE_AND_REFERENCES;
 
 ```
 ### [Idempotent with OR MODIFY](#idempotent-with-or-modify-1)
