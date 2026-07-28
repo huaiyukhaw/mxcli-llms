@@ -1,3 +1,7 @@
+## 2026-07-28 -- mxcli v0.16.0 @ 2c0f683
+- +52 / -2 lines
+- Sections changed: from a dev container, after: mxcli -p app.mpr -c "refresh catalog full", [Flags](#flags-1), [Metrics and OpenTelemetry](#metrics-and-opentelemetry), [Query the catalog directly (and join it to other sources)](#query-the-catalog-directly-and-join-it-to-other-sources), [When to Refresh](#when-to-refresh)
+
 ## 2026-07-27 -- mxcli v0.16.0 @ faa4d10
 - +181 / -8 lines
 - Sections changed: ...trigger the microflow in the browser (the request pauses)..., [Debug Microflows — `mxcli debug`](#debug-microflows--mxcli-debug), [Quick Start](#quick-start-6), [Quick Start](#quick-start-7), terminal 1 — app with the debugger enabled and a session ready, terminal 2 — break by name, then inspect/step/continue (same -p), [Commands](#commands-2), [Connection flags](#connection-flags) (+14 more)

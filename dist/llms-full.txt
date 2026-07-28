@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ faa4d10
-Generated: 2026-07-27T05:44:38Z
+Version:   mxcli v0.16.0 @ 2c0f683
+Generated: 2026-07-28T05:10:34Z
 
 ---
 
@@ -13057,6 +13057,12 @@ The catalog is cached in `.mxcli/catalog.db` next to the MPR file. On subsequent
 - **After making changes** – Refresh to update the catalog with new elements
 - **If results seem stale** – Use `REFRESH CATALOG FULL FORCE` to force a rebuild
 
+> **FULL mode populates the analytic tables.** Plain `REFRESH CATALOG` (fast mode)
+> leaves `CATALOG.ACTIVITIES`, `CATALOG.REFS`, `CATALOG.XPATH_EXPRESSIONS`, and
+> `CATALOG.WIDGETS` **empty** — a fast-mode query against them warns *“requires
+> refresh catalog full”*. Run `REFRESH CATALOG FULL` to fill them (activity rows
+> carry the model GUIDs, cross-reference edges, and XPath expressions).
+
 # [Available Tables](#available-tables)
 
 The catalog provides several tables that can be queried using standard SQL syntax. Use `SHOW CATALOG TABLES` to list all available tables in your catalog.
@@ -13549,6 +13555,38 @@ WHERE Name != UPPER(SUBSTR(Name, 1, 1)) || SUBSTR(Name, 2)
    OR Name LIKE '% %';
 
 ```
+## [Query the catalog directly (and join it to other sources)](#query-the-catalog-directly-and-join-it-to-other-sources)
+
+The catalog **is** a SQLite database — `<projectDir>/.mxcli/catalog.db`, written
+next to the `.mpr` and refreshed by `refresh catalog`. You do not need to export
+it to JSON (that drags in human-readable formatting, exposes only a subset of the
+tables, and goes stale immediately). Attach the file directly with any SQLite- or
+DuckDB-compatible tool for ad-hoc analysis beyond what `SELECT … FROM CATALOG.*`
+exposes in one query.
+
+> **Run `refresh catalog full` first for the analytic tables.** Plain
+> `refresh catalog` (fast mode) leaves `activities` / `refs` / `xpath_expressions`
+> (and `widgets`) **empty** — a fast-mode query against them warns
+> *“requires refresh catalog full”*. Full mode populates them (activities carry
+> the model GUIDs the debugger uses, one row per activity with its sequence).
+
+```
+# from a dev container, after: mxcli -p app.mpr -c "refresh catalog full"
+duckdb -c "ATTACH '.mxcli/catalog.db' AS cat (TYPE sqlite, READ_ONLY);
+           SELECT MicroflowQualifiedName, COUNT(*) AS activities
+           FROM cat.activities_data GROUP BY 1 ORDER BY 2 DESC LIMIT 10;"
+
+```
+### [Cross-source “app warehouse”](#cross-source-app-warehouse)
+
+Because the catalog is a plain database, one engine (e.g. DuckDB — mxcli does not
+embed it) can `ATTACH` it alongside the app’s dev Postgres **read-only** and a trace
+dump, joining model shape + live data + telemetry with no ETL to answer questions no
+single source can (runtime cost × model shape, query time × entity × live rows). The
+full logging/metrics/tracing/catalog analysis procedure — including this join — is the
+**`analyze-runtime`** skill (`mxcli init` installs it into your project’s
+`.claude/skills/mendix/`).
+
 # [Linting and Reports](#linting-and-reports)
 
 mxcli includes an extensible linting framework that checks Mendix projects for best practice violations, security issues, naming conventions, and architectural anti-patterns. The framework combines built-in Go rules with extensible Starlark rules.
@@ -15886,6 +15924,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--metrics` | off | Register a Prometheus meter registry; metrics served at `http://127.0.0.1:<admin-port>/prometheus` |
 | `--trace` | off | Enable OpenTelemetry tracing (bundled agent → runtime log) with default span filters |
 | `--trace-service` | `.mpr` name | `OTEL_SERVICE_NAME` under `--trace` |
+| `--trace-otlp` | off (console) | Export traces to this OTLP collector endpoint (e.g. `http://127.0.0.1:4318`) instead of the console; implies `--trace` (needed for flame charts) |
 | `--runtime-setting Key=Value` | — | Merge an extra runtime setting into the boot config (Value parsed as JSON when possible); repeatable |
 
 ## [Metrics and OpenTelemetry](#metrics-and-opentelemetry)
@@ -15918,8 +15957,19 @@ tail -f .mxcli/runtime.log     # microflow spans: mx.microflow.name / mx.microfl
 
 ```
 
-To export to a collector instead of the console, set the OTEL env yourself before
-running (`--trace` won’t override an exporter you’ve set):
+The console exporter omits start/end timestamps and parent span IDs, so call trees
+and durations can’t be reconstructed from it — for flame charts, export to an OTLP
+collector with `--trace-otlp <endpoint>` (implies `--trace`; sets
+`OTEL_TRACES_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, and the
+endpoint for you):
+
+```
+mxcli run --local -p app.mpr --trace-otlp http://127.0.0.1:4318
+
+```
+
+You can still set the OTEL env yourself for full control (`--trace` / `--trace-otlp`
+won’t override an exporter you’ve set):
 
 ```
 export OTEL_TRACES_EXPORTER=otlp OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
