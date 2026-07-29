@@ -1,3 +1,7 @@
+## 2026-07-29 -- mxcli v0.16.0 @ ead8926
+- +35 / -3 lines
+- Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", create a GitHub OAuth App (callback https://hub.example.com/auth/github/callback), then:, [Flags](#flags-1)
+
 ## 2026-07-28 -- mxcli v0.16.0 @ 2c0f683
 - +52 / -2 lines
 - Sections changed: from a dev container, after: mxcli -p app.mpr -c "refresh catalog full", [Flags](#flags-1), [Metrics and OpenTelemetry](#metrics-and-opentelemetry), [Query the catalog directly (and join it to other sources)](#query-the-catalog-directly-and-join-it-to-other-sources), [When to Refresh](#when-to-refresh)
