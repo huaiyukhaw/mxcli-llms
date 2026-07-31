@@ -1,13 +1,13 @@
 {
   "mxcli_release": "v0.16.0",
-  "mxcli_commit": "ead8926",
-  "generated_at": "2026-07-29T05:17:44Z",
+  "mxcli_commit": "b344f99",
+  "generated_at": "2026-07-31T05:31:45Z",
   "source": {
     "toc": "https://www.mxcli.org/toc.html",
     "print": "https://www.mxcli.org/print.html"
   },
   "outputs": {
     "llms_txt_chars": 53753,
-    "llms_full_chars": 1086168
+    "llms_full_chars": 1086672
   }
 }
