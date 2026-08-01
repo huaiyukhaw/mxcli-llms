@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ b344f99
-Generated: 2026-07-31T05:31:45Z
+Version:   mxcli v0.16.0 @ 504aec6
+Generated: 2026-08-01T05:22:59Z
 
 ---
 
@@ -1147,6 +1147,181 @@ The TUI gives you a split-pane layout with a project tree, an MDL editor, and ou
 ## [What’s next](#whats-next-2)
 
 Now that you know how to install mxcli, open a project, and use the REPL, you’re ready to start exploring. The next chapter walks through the commands you’ll use most often: `SHOW`, `DESCRIBE`, and `SEARCH`.
+
+# [Developing on the Web (Claude Code)](#developing-on-the-web-claude-code)
+
+You can build a Mendix app with mxcli **entirely in the browser** — no local CLI,
+no Studio Pro, no machine setup. [Claude Code on the web](https://claude.ai/code)
+runs the agent in a cloud container against a GitHub repository; mxcli provisions
+the whole toolchain inside that container on first run and commits the result so
+future sessions come back up on their own. It works from a laptop, and from an
+iPad or phone.
+
+This page walks the **entire workflow**:
+
+1. [Create a GitHub repository](#1-create-a-github-repository)
+2. [Get a hub key for browser preview](#2-get-a-hub-key-for-browser-preview) (optional)
+3. [Create a Claude Code environment](#3-create-a-claude-code-environment)
+4. [Start the session with the bootstrap prompt](#4-start-the-session-with-the-bootstrap-prompt)
+5. [Iterate — the warm loop, preview, and screenshots](#5-iterate)
+
+> **New to how Claude Code on the web works** (sessions, environments, network
+> policies)? See Anthropic’s guide:
+> <https://code.claude.com/docs/en/claude-code-on-the-web>.
+
+## [1. Create a GitHub repository](#1-create-a-github-repository)
+
+Create a **new, empty** repository on GitHub (private is fine). This is where the
+app will live and where every Claude Code session runs. You don’t need a template
+or any starter files — the bootstrap prompt starts from a truly empty repo and
+runs the *current* mxcli, so there is nothing to keep up to date.
+
+If you already have a Mendix project in a repo, you can skip the bootstrap prompt
+and use `mxcli init` instead (step 4 notes how).
+
+## [2. Get a hub key for browser preview](#2-get-a-hub-key-for-browser-preview)
+
+*Optional, but recommended — it’s what lets you actually see the running app in a
+browser tab from a web session.*
+
+A cloud session has no localhost you can open, so mxcli can reverse-tunnel the
+running app out to the **mxcli hub** and give you a public preview URL (see
+[External browser preview](#mxcli-run-local)).
+The hosted hub at `hub.mxcli.org` is GitHub-authenticated, so each preview is
+private to you — which means you need a per-user **hub key**:
+
+1. Open <https://hub.mxcli.org/cli> in any browser and **sign in with GitHub**.
+2. Click **Create a hub key** and copy it.
+3. Keep it for step 3 — you’ll set it as `MXCLI_HUB_KEY`.
+
+The key is durable (no expiry, survives hub restarts); you set it once and it
+stays valid until you revoke it from the same page. If you’d rather run your own
+hub, see [`mxcli tunnel-hub`](#mxcli-run-local).
+
+You can skip this step and add the key later — without it, the app still builds
+and runs in the container; you just won’t have a browser preview URL.
+
+## [3. Create a Claude Code environment](#3-create-a-claude-code-environment)
+
+In Claude Code on the web, create an **environment** pointed at the repository
+from step 1. The environment is the reusable container definition for your
+sessions; configure two things on it:
+
+**Environment variables**
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `MXCLI_HUB_KEY` | the hub key from step 2 | mxcli reads it automatically so `run --hub` registers previews as you. Survives container reaping. |
+
+**Network policy**
+
+The bootstrap prompt downloads a few things on first run, so the environment’s
+network policy must allow outbound HTTPS to:
+
+- **`github.com` / `objects.githubusercontent.com`** — the prebuilt `mxcli` binary
+  from GitHub Releases.
+- **Mendix’s CDN** — MxBuild and the runtime (`mxcli` fetches the version your app
+  needs).
+- **`hub.mxcli.org`** — the browser-preview tunnel (only if you’re using step 2).
+
+A policy that permits general outbound HTTPS covers all of these. If your
+organization restricts egress, allow-list those hosts. See the
+[network policy docs](https://code.claude.com/docs/en/claude-code-on-the-web) for
+where to configure this.
+
+> **Even faster startup:** if you control the environment image, pre-installing
+> `mxcli` (and pre-caching MxBuild + the runtime) makes step 4 nearly instant and
+> removes the one network-dependent step. This is the most robust setup for a team.
+
+## [4. Start the session with the bootstrap prompt](#4-start-the-session-with-the-bootstrap-prompt)
+
+Open a session on the environment and paste the **bootstrap prompt**. It tells the
+agent to set up the complete toolchain, create the app, wire the AI tooling and
+Dev Container, **start a findings document**, boot the app, and commit everything
+so the next session self-bootstraps.
+
+👉 **[Copy the bootstrap prompt](#bootstrap-prompt-empty-repo--running-mendix-app)** — it’s a single
+paste. In short, the agent will:
+
+- ensure `mxcli` is available (pre-installed, or download the `nightly` binary);
+- `mxcli new App --version <X.Y.Z>` (or `mxcli init` if an `.mpr` already exists);
+- `mxcli init --tool claude` — adds a **SessionStart hook** so future sessions come
+  back up automatically;
+- `mxcli run --local --setup --ensure-db` — cache MxBuild + runtime, start
+  Postgres, create the app database;
+- create a **`FINDINGS.md`** (see below) and start logging to it;
+- **commit** `App.mpr`, `.devcontainer/`, and `.claude/` so the steady state is
+  file-driven;
+- boot `mxcli run --local` and verify the app answers HTTP 200.
+
+You can append your own goal to the end of the prompt — e.g. *“Then seed a domain
+model, pages, and microflows for a time-registration app”*, or link a design
+prototype to seed from.
+
+### [Keep a findings document](#keep-a-findings-document)
+
+The bootstrap prompt asks the agent to create a **`FINDINGS.md`** at the repo root
+and to append to it as it works. Treat it as a lab notebook for the session:
+
+- anything **surprising or broken** — an mxcli command that errored, a workaround
+  you had to apply, a check that passed but a real `mx check` later flagged;
+- the **Mendix / mxcli versions** in play and how each finding was verified;
+- decisions and dead-ends, so a later session (or a teammate) doesn’t repeat them.
+
+This is high-leverage for two reasons. It gives *your next session* durable
+context that survives container reaping, and — because mxcli is fast-moving alpha
+— a clear findings doc is the single most useful thing you can share back to
+improve mxcli. If something misbehaves, capture the exact MDL, the command, and
+the error in `FINDINGS.md`; that’s often enough for a fix.
+
+## [5. Iterate](#5-iterate)
+
+Once the app is up, use the **warm local dev loop** — a Docker-free, ~1-second
+edit→test cycle:
+
+```
+mxcli run --local -p App.mpr --watch --screenshot   # hot-reload + a PNG per change
+
+```
+
+Edit the model with MDL and the running loop hot-applies it:
+
+```
+mxcli exec change.mdl -p App.mpr                     # the loop picks it up and reloads
+
+```
+
+To **see the app in a browser** from the web session, add `--hub` (this is where
+the key from step 2 pays off):
+
+```
+mxcli run --hub https://hub.mxcli.org -p App.mpr     # prints a shareable preview URL
+
+```
+
+`--hub` implies `--local`, so you get the warm loop *and* a public preview URL in
+one command — edit here, hot-apply, refresh the tab.
+
+See [mxcli run –local](#mxcli-run-local) for `--watch`, `--ensure-db`,
+`--setup`, the screenshot flags, and the full `--hub` reference.
+
+## [After idle: sessions self-bootstrap](#after-idle-sessions-self-bootstrap)
+
+Cloud containers are reaped when idle, so a resumed session starts from the
+committed files, not from re-pasting the prompt. Because step 4 ran
+`mxcli init`, `.claude/settings.json` carries a **SessionStart hook** that runs
+`mxcli run --local --setup --ensure-db` on every new session — it re-caches
+MxBuild + runtime and re-provisions the database, leaving the session ready to
+`run --local`. You never re-paste the bootstrap prompt; it’s a one-time seed.
+
+## [Next steps](#next-steps)
+
+- [The bootstrap prompt](#bootstrap-prompt-empty-repo--running-mendix-app) — the exact copy-paste text
+  and the rules that make it robust.
+- [Local Dev Loop](#mxcli-run-local) — the warm loop, browser preview, and
+  screenshots in depth.
+- [Claude Code Integration](#claude-code-integration) — how skills, `CLAUDE.md`, and slash
+  commands shape what the agent does with your project (applies to web and local).
 
 # [Exploring a Project](#exploring-a-project)
 
@@ -2916,7 +3091,7 @@ Claude validates the script, executes it, and reports back. You can then open th
 - **Review in Studio Pro.** After Claude makes changes, open the project in Studio Pro to verify everything looks right visually.
 - **Use `mxcli docker check`** to catch issues that `mxcli check` alone might miss. The Mendix build tools perform deeper validation.
 
-## [Next steps](#next-steps)
+## [Next steps](#next-steps-1)
 
 If you use other AI tools alongside Claude Code, see [Other AI tools](#other-ai-tools) (GitHub Copilot, OpenCode, Cursor, Continue.dev, Windsurf). To understand how skills work in detail, see [Skills and CLAUDE.md](#skills-and-claudemd).
 
@@ -3116,7 +3291,7 @@ This creates `.opencode/`, `opencode.json`, and the lint rules without touching 
 - **Review in Studio Pro.** After changes are applied, open the project in Studio Pro to verify the result visually.
 - **Use `mxcli docker check`** to catch issues that `mxcli check` alone might miss.
 
-## [Next steps](#next-steps-1)
+## [Next steps](#next-steps-2)
 
 To understand what the skill files contain and how they guide AI behavior, see [Skills and CLAUDE.md](#skills-and-claudemd). For other supported tools, see [Other AI tools (Cursor, Continue.dev, Windsurf, OpenCode)](#other-ai-tools).
 
@@ -3323,7 +3498,7 @@ To see all tools mxcli knows about:
 mxcli init --list-tools
 
 ```
-## [Next steps](#next-steps-2)
+## [Next steps](#next-steps-3)
 
 To understand what the skill files contain and how they guide AI behavior, see [Skills and CLAUDE.md](#skills-and-claudemd).
 
@@ -3486,7 +3661,7 @@ The workflow is straightforward:
 
 Skills act as a guardrail. Without them, AI assistants tend to guess at MDL syntax and get details wrong. With skills, the AI has a precise reference to follow, and the output is correct far more often.
 
-## [Next steps](#next-steps-3)
+## [Next steps](#next-steps-4)
 
 Now that you understand how skills guide AI behavior, see [The MDL + AI Workflow](#the-mdl--ai-workflow) for the complete recommended workflow from project initialization to review in Studio Pro.
 
@@ -4772,7 +4947,7 @@ REVOKE EXECUTE ON MICROFLOW Sales.ACT_Order_Delete FROM Sales.User;
 ```
 # [View Entities](#view-entities)
 
-View entities are read-only entities backed by an OQL query. They appear in the domain model but have no database table – their data is computed from other entities via aggregation and joins.
+View entities are backed by an OQL query. They appear in the domain model but have no database table (and no database view either) – their rows are computed from other entities via aggregation and joins, evaluated by the runtime per query. “Read-only” is a common but imprecise shorthand: a view row has no storage and `commit` does not write it back, yet it *is* editable in memory (it behaves like a non-persistent object), so a form can bind to one and write changes back through the source entity. See [View Entity](#view-entity) for the full model and the `CE6770` type-match gotcha.
 
 ## [Sales Summary by Category](#sales-summary-by-category)
 
@@ -6441,7 +6616,7 @@ CREATE NON-PERSISTENT ENTITY Sales.CustomerFilter (
 ```
 ### [View Entity](#view-entity)
 
-Defined by an OQL query. View entities are read-only:
+Defined by an OQL query:
 
 ```
 CREATE VIEW ENTITY Reports.CustomerSummary (
@@ -6458,6 +6633,28 @@ CREATE VIEW ENTITY Reports.CustomerSummary (
   GROUP BY c.Name;
 
 ```
+
+“Read-only” is a common shorthand for view entities, but it conflates three
+separate things — and only two of them are true:
+
+- **No storage.** A view entity has no database table, and it is *not* a
+  database view either — after deploy, Postgres has no view object for it. The
+  runtime translates the OQL and issues it per query.
+- **No write-back on `commit`.** Committing a view-entity object does nothing;
+  to persist a change you write through the source entity (retrieve it, change
+  it, commit it).
+- **Not immutable.** A view row *is* editable in memory — it behaves like a
+  **non-persistent** object, so a form can bind to it and change its
+  attributes. This makes a view entity a legitimate backing for an *editable*
+  screen (populate the form with one pushed-down query, write back through the
+  source in the save flow), not only a read-only report.
+
+**Gotcha:** each declared attribute type must match its source column exactly.
+A `String(60)` attribute over a `String(100)` source column fails the build with
+`CE6770 "View Entity is out of sync with the OQL Query."` — widen the attribute
+to match. (mxbuild genuinely type-checks the OQL, so a clean build is real
+evidence, not just a syntax pass.)
+
 ## [CREATE OR MODIFY](#create-or-modify)
 
 Creates the entity if it does not exist, or updates it if it does. New attributes are added; existing attributes are preserved:
@@ -7243,7 +7440,7 @@ END;
 
 This microflow creates a new Order object with default values, commits it to the database, opens the edit page, and returns the new order.
 
-## [Next Steps](#next-steps-4)
+## [Next Steps](#next-steps-5)
 
 - [Structure](#structure) – parameters, variables, return types, and the full `CREATE MICROFLOW` syntax
 - [Activity Types](#activity-types) – all available activities (RETRIEVE, CREATE, CHANGE, COMMIT, DELETE, CALL, LOG, etc.)
@@ -16237,11 +16434,20 @@ This is an empty repo. Provision it as a Mendix app developed with mxcli:
    SessionStart hook to `.claude/settings.json` that self-bootstraps future sessions.
 4. Bring prerequisites up: `./mxcli run --local --setup --ensure-db -p App.mpr`
    (caches MxBuild + runtime, starts Postgres, creates the app database).
-5. COMMIT everything now — `App.mpr`, `.devcontainer/`, and `.claude/` (including the
-   SessionStart hook) — so that after idle reaping the next session bootstraps from
-   files, not from re-running this prompt.
-6. Boot and verify: `./mxcli run --local -p App.mpr` in the background, then confirm
+5. Create a `FINDINGS.md` at the repo root and keep appending to it as you work.
+   Log anything surprising or broken: an mxcli command that errored, a workaround you
+   applied, a `mxcli check` that passed but a real `mx check` later flagged. Note the
+   Mendix + mxcli versions and how each finding was verified. This is durable context
+   for the next session, and the most useful thing to share back to improve mxcli.
+6. COMMIT everything now — `App.mpr`, `.devcontainer/`, `.claude/` (including the
+   SessionStart hook), and `FINDINGS.md` — so that after idle reaping the next session
+   bootstraps from files, not from re-running this prompt.
+7. Boot and verify: `./mxcli run --local -p App.mpr` in the background, then confirm
    the app answers HTTP 200 at http://localhost:8080/ and report.
+8. (Optional) For a browser preview from this cloud session, run
+   `./mxcli run --hub https://hub.mxcli.org -p App.mpr` and report the preview URL it
+   prints. This needs `MXCLI_HUB_KEY` set on the environment (see the workflow page);
+   without it, continue as a normal local run.
 
 (Optional) Seed the domain model, pages, and microflows from this prototype: <paste or link a design here>.
 
@@ -31271,7 +31477,7 @@ CREATE PERSISTENT ENTITY Module.Photo (
 | --- | --- | --- |
 | Create entity | `CREATE [OR MODIFY] PERSISTENT|NON-PERSISTENT ENTITY Module.Name (attrs);` | Persistent is default |
 | Create with extends | `CREATE PERSISTENT ENTITY Module.Name EXTENDS Parent.Entity (attrs);` | EXTENDS before `(` |
-| Create view entity | `CREATE VIEW ENTITY Module.Name (attrs) AS SELECT ...;` | OQL-backed read-only |
+| Create view entity | `CREATE VIEW ENTITY Module.Name (attrs) AS SELECT ...;` | OQL-backed; no storage, edit-in-memory, write back via source |
 | Create external entity | `CREATE EXTERNAL ENTITY Module.Name FROM ODATA CLIENT Module.Client (...) (attrs);` | From consumed OData |
 | Create external entities | `CREATE [OR MODIFY] EXTERNAL ENTITIES FROM Module.Client [INTO Module] [ENTITIES (...)];` | Bulk from $metadata |
 | Drop entity | `DROP ENTITY Module.Name;` |  |
