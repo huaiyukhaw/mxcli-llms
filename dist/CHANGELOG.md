@@ -1,3 +1,7 @@
+## 2026-08-02 -- mxcli v0.16.0 @ 2fb4e67
+- +57 / -4 lines
+- Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", [3. Create a Claude Code environment](#3-create-a-claude-code-environment), [Description](#description-70), [Examples](#examples-38), [Examples](#examples-82)
+
 ## 2026-08-01 -- mxcli v0.16.0 @ 504aec6
 - +218 / -12 lines
 - Sections changed: [Developing on the Web (Claude Code)](#developing-on-the-web-claude-code), [View Entities](#view-entities), [1. Create a GitHub repository](#1-create-a-github-repository), [2. Get a hub key for browser preview](#2-get-a-hub-key-for-browser-preview), [3. Create a Claude Code environment](#3-create-a-claude-code-environment), [4. Start the session with the bootstrap prompt](#4-start-the-session-with-the-bootstrap-prompt), [5. Iterate](#5-iterate), [After idle: sessions self-bootstrap](#after-idle-sessions-self-bootstrap) (+11 more)

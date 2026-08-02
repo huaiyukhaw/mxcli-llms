@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ 504aec6
-Generated: 2026-08-01T05:22:59Z
+Version:   mxcli v0.16.0 @ 2fb4e67
+Generated: 2026-08-02T05:22:37Z
 
 ---
 
@@ -1212,6 +1212,11 @@ sessions; configure two things on it:
 | Variable | Value | Why |
 | --- | --- | --- |
 | `MXCLI_HUB_KEY` | the hub key from step 2 | mxcli reads it automatically so `run --hub` registers previews as you. Survives container reaping. |
+
+Set the hub key **here, on the environment — never in a committed file.** It’s a
+credential, and a gitignored file wouldn’t survive container recycling anyway;
+environment variables are re-injected into every session, so the environment is
+the only place it belongs.
 
 **Network policy**
 
@@ -16222,8 +16227,14 @@ projects, solutions, branches, and worktrees — with a sortable overview at
   `--hub-project`/`--hub-branch`, and `--hub-worktree` separates worktrees of one branch.
 - **`--hub-prefix`** namespaces the hostname (org/solution/team/env) →
   `<prefix>-<project>-<branch>`; **`--hub-solution`** groups a solution’s apps in the overview.
-- The overview shows availability — a reaped/idle container turns **stale** — and sorts by
-  last-used, registered, or project. Re-registering keeps a **stable URL**.
+- The overview **groups previews by Claude Code session** (agent): each session lists the
+  endpoints it exposed, links back to its `claude.ai/code` conversation, and shows its
+  availability — a reaped/idle container turns **stale**, then **offline**. `run --hub`
+  auto-detects the session from `CLAUDE_CODE_REMOTE_SESSION_ID` (override with
+  `--hub-session` / `MXCLI_HUB_SESSION`). Past sessions are **retained** so you can see
+  older ones: the hub persists a per-session endpoint history to `--sessions-file` (default
+  `~/.mxcli/hub-sessions.json`, survives restarts) and prunes it after `--session-retention`
+  (default 30 days). Re-registering keeps a **stable URL**.
 - `--hub` **implies `--local`**, boots the runtime with `ApplicationRootUrl` set to the
   assigned URL (so the SPA and `originURI` cookie work), and the tunnel reconnects forever.
   Combine with `--watch` for the full remote loop: edit here → hot-apply → refresh the tab.
@@ -21896,6 +21907,28 @@ CREATE CONSTANT MyModule.ApiBaseUrl TYPE String DEFAULT 'https://api.example.com
 ALTER SETTINGS CONSTANT 'MyModule.ApiBaseUrl' VALUE 'https://staging.example.com' IN CONFIGURATION 'Staging';
 
 ```
+### [Shared and private values](#shared-and-private-values)
+
+An override holds its value one of two ways:
+
+- **Shared** — stored in the model, so it travels with the project in version
+  control and every developer gets it.
+- **Private** — stored on the developer’s own workstation and deliberately kept
+  out of the repository. This is the answer for a development secret: the
+  constant and the override are shared, the value is not.
+
+MDL **preserves that choice but never changes it** — the shared/private decision
+belongs to the constant, and configurations just respect it:
+
+| Statement | On a private override |
+| --- | --- |
+| `ALTER SETTINGS CONSTANT … VALUE …` | **refused** — setting a value would convert it to shared and publish a deliberately-local value into version control |
+| `ALTER SETTINGS DROP CONSTANT …` | allowed — removes the whole override, which is what was asked for |
+| `SHOW CONSTANT VALUES` | reports `(private)` rather than a blank cell |
+| `DESCRIBE SETTINGS` | emits a comment, not a re-executable statement |
+
+To make a private value shared (or the reverse), change it in Studio Pro.
+
 ## [See Also](#see-also-64)
 
 [CREATE ENTITY](#create-entity-1), [CREATE ENUMERATION](#create-enumeration-1)
@@ -26525,7 +26558,7 @@ The available settings categories are:
 | --- | --- |
 | `MODEL` | Application-level settings: AfterStartupMicroflow, BeforeShutdownMicroflow, HashAlgorithm, JavaVersion, etc. |
 | `CONFIGURATION` | Runtime configurations: DatabaseType, DatabaseUrl, HttpPortNumber, etc. Each named configuration is listed separately. |
-| `CONSTANT` | Constant value overrides per configuration. Shows which constants have non-default values in each configuration. |
+| `CONSTANT` | Constant value overrides per configuration. Shows which constants have non-default values in each configuration. An override whose value is private — stored on the developer’s workstation rather than in the shared model — is reported as `(private)`; its value is not in the project and mxcli cannot show it. |
 | `LANGUAGE` | Localization settings: DefaultLanguageCode and available languages. |
 | `WORKFLOWS` | Workflow engine settings: UserEntity, DefaultTaskParallelism, etc. |
 
@@ -26645,6 +26678,19 @@ ALTER SETTINGS CONFIGURATION 'production' DatabaseUrl = 'jdbc:postgresql://dbhos
 ALTER SETTINGS CONSTANT 'MyModule.ApiBaseUrl' VALUE 'https://api.staging.example.com' IN CONFIGURATION 'staging';
 
 ```
+
+An override’s value is either **shared** — stored in the model, and so in version
+control — or **private**, stored on the developer’s own workstation and kept out of
+the repository (the usual choice for development API tokens).
+
+MDL preserves that choice but never changes it. `ALTER SETTINGS CONSTANT ... VALUE`
+applies to shared values only; on a private override it is **refused**, because
+setting a value would convert it to a shared one, publish a deliberately-local value
+into version control, and break the developer’s local binding. Change the constant to
+a shared value in Studio Pro first, or drop the override. `DESCRIBE SETTINGS` reports
+a private override as a comment rather than a re-executable statement, for the same
+reason.
+
 ### [Set the default language](#set-the-default-language)
 
 ```
@@ -26673,11 +26719,18 @@ ALTER SETTINGS DROP CONSTANT 'MyModule.ApiBaseUrl' IN CONFIGURATION 'staging';
 
 ```
 CREATE CONFIGURATION 'Staging'
-  DatabaseType = 'POSTGRESQL',
+  DatabaseType = 'PostgreSql',
   DatabaseUrl = 'staging-db:5432',
   HttpPortNumber = 8080;
 
 ```
+
+`DatabaseType` must name a Mendix database type — `Db2`, `Hsqldb`, `MySql`,
+`Oracle`, `PostgreSql`, `SapHana` or `SqlServer`. The value is matched
+case-insensitively and stored in the spelling above; anything else is rejected by
+`mxcli check` and by the executor. A configuration created without properties gets
+Studio Pro’s defaults: `Hsqldb`, runtime port 8080, admin port 8090.
+
 ### [Drop a configuration](#drop-a-configuration)
 
 ```
