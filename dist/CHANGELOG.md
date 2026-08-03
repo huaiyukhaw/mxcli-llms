@@ -1,3 +1,7 @@
+## 2026-08-03 -- mxcli v0.16.0 @ 689e8ce
+- +73 / -0 lines
+- Sections changed: [ALTER SETTINGS](#alter-settings), [Inherited attributes](#inherited-attributes), [Inherited members](#inherited-members), [Notes](#notes-8)
+
 ## 2026-08-02 -- mxcli v0.16.0 @ 2fb4e67
 - +57 / -4 lines
 - Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", [3. Create a Claude Code environment](#3-create-a-claude-code-environment), [Description](#description-70), [Examples](#examples-38), [Examples](#examples-82)
