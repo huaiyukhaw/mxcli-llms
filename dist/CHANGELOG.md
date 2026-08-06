@@ -1,3 +1,7 @@
+## 2026-08-06 -- mxcli v0.16.0 @ 4fda072
+- +57 / -4 lines
+- Sections changed: [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [Reconciling stored widgets after a package upgrade (`mxcli widget sync`)](#reconciling-stored-widgets-after-a-package-upgrade-mxcli-widget-sync)
+
 ## 2026-08-03 -- mxcli v0.16.0 @ 689e8ce
 - +73 / -0 lines
 - Sections changed: [ALTER SETTINGS](#alter-settings), [Inherited attributes](#inherited-attributes), [Inherited members](#inherited-members), [Notes](#notes-8)
