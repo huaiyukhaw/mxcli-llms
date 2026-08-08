@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.16.0 @ 6937ba5 | Generated: 2026-08-07T04:22:36Z
+Version: mxcli v0.16.0 @ a8bc729 | Generated: 2026-08-08T03:20:04Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -110,6 +110,7 @@ no Studio Pro, no machine setup. Claude Code on the…
 - [Image Collections](https://huaiyukhaw.github.io/mxcli-llms/pages/language/image-collections.md): Image collections are Mendix’s way of bundling images (icons, logos, graphics) within a module. Each collection can contain…
 
 ## Part V: Project Tools
+- [Default Styling](https://www.mxcli.org/tools/theme.html)
 - [Code Navigation](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/code-navigation.md): mxcli provides a suite of cross-reference navigation commands that let you explore relationships between elements in a Mendix…
 - [SHOW CALLERS / CALLEES](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/callers-callees.md): These commands trace the call graph of your Mendix project, showing what calls a given element and what that element calls.
 - [SHOW REFERENCES / IMPACT](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/references-impact.md): These commands provide broader reference tracking and impact analysis, helping you understand how changes propagate through a…

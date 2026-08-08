@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ 6937ba5
-Generated: 2026-08-07T04:22:36Z
+Version:   mxcli v0.16.0 @ a8bc729
+Generated: 2026-08-08T03:20:04Z
 
 ---
 
@@ -852,7 +852,9 @@ This single command:
 2. Creates a blank Mendix project (`App.mpr`)
 3. Sets up AI tooling (`.claude/`, skills, `AGENTS.md`)
 4. Configures a Dev Container (`.devcontainer/`)
-5. Downloads the correct Linux mxcli binary for the container
+5. Runs one build, so the action stubs MxBuild regenerates are already settled
+6. Puts an mxcli binary in the project — a hard link to the one you ran on Linux,
+   a downloaded Linux build on macOS/Windows (the container needs a Linux ELF)
 
 Open the resulting `MyApp/` folder in VS Code and click **“Reopen in Container”** — you’re ready to go.
 
@@ -860,7 +862,8 @@ Options:
 
 ```
 mxcli new MyApp --version 10.24.0 --output-dir ./projects/my-app
-mxcli new MyApp --version 11.8.0 --skip-init   # Skip AI tooling setup
+mxcli new MyApp --version 11.8.0 --skip-init    # Skip AI tooling setup
+mxcli new MyApp --version 11.8.0 --skip-build   # Skip the first build
 
 ```
 ## [Dev Container for existing projects](#dev-container-for-existing-projects)
@@ -5453,7 +5456,7 @@ CALL MICROFLOW Sales.ACT_Order_CalculateTotal ($Order = $Order);
 
 ```
 ```
-# Run tests (requires Docker)
+# Run tests (Docker, or --local for mxcli's own runtime)
 mxcli test tests/ -p app.mpr
 
 ```
@@ -12526,6 +12529,200 @@ ACTIONBUTTON btnEdit (Caption: 'Edit', Action: PAGE App.Edit,
 
 - [MDL Quick Reference](#mdl-quick-reference) – syntax summary table
 
+# [Default Styling (`mxcli theme`)](#default-styling-mxcli-theme)
+
+A blank Mendix app looks like a blank Mendix app. `mxcli new` applies a default
+theme so a generated app looks like a product on first boot, and
+`mxcli theme apply` adds the same theme to a project you already have.
+
+```
+mxcli theme list                        # built-in themes; the default is marked *
+mxcli theme show signal                 # palette, colorway, and the files it writes
+mxcli theme apply -p app.mpr            # apply to an existing project
+mxcli theme apply ledger -p app.mpr     # switch theme (the previous one is removed)
+mxcli theme apply -p app.mpr --dry-run  # report changes without writing
+mxcli theme remove -p app.mpr           # take it back out
+
+mxcli new MyApp --version 11.13.0                # applies `signal`
+mxcli new MyApp --version 11.13.0 --theme none   # plain Atlas
+
+```
+## [The themes](#the-themes)
+
+| Name | Default palette | Character |
+| --- | --- | --- |
+| **signal** (default) | light | Cool slate, one teal signal colour, 4px radius, 32px rows, IBM Plex |
+| **ledger** | light | Warm paper, hairline rules instead of card shadows, Source Serif headings over Source Sans, 2px radius, 30px rows |
+| **console** | dark | Near-black ground, teal with a violet accent, Space Grotesk over JetBrains Mono, 6px radius, 28px rows, surfaces separated by lightness |
+
+All three share the same density discipline: an 8px spacing unit, monospace
+numerics, a visible focus ring on every focusable element, and every control
+growing to a 44px touch target below 768px.
+
+Only one theme applies at a time — `theme apply` removes the previous one,
+because two themes mapping the same Atlas variables would fight in the cascade.
+
+## [What it writes](#what-it-writes)
+
+Five things, all under `theme/`:
+
+| File | What |
+| --- | --- |
+| `theme/web/custom-variables.scss` | the theme’s palette — this is the file to edit |
+| `theme/web/_mxcli-atlas-map.scss` | the Atlas wiring: ~60 Atlas variables expressed in terms of the palette |
+| `theme/web/_mxcli-<name>.scss` | the other palette, the variant blocks, `@font-face`, recipe classes |
+| `theme/web/main.scss` | the variant switch plus two `@import` lines |
+| `theme/web/mxcli-fonts/` | vendored fonts (SIL OFL 1.1) |
+
+**The model is never touched.** No `.mpr` changes, so nothing here can affect a
+build, and the theme hot-applies under `mxcli run --local --watch`.
+
+**Atlas Core is never touched either.** Because Atlas components read the brand
+tokens, retuning them cascades into buttons, backgrounds, form inputs, cards,
+modals and the brand-aware pluggable widgets (Switch, Slider, ProgressBar,
+BadgeButton) with no per-widget CSS. That is also why the project stays
+upgradable across Mendix releases.
+
+## [Light and dark](#light-and-dark)
+
+`--variant auto` is the default and ships both palettes:
+
+```
+mxcli theme apply signal -p app.mpr                  # auto
+mxcli theme apply signal -p app.mpr --variant dark   # bake one palette, no switching
+
+```
+
+Under `auto` the app follows the operating system’s `prefers-color-scheme`
+**before first paint** — no flash, no script — and honours a `theme-light` or
+`theme-dark` class on the root element when something sets one.
+
+Mendix ships that slot (`theme/web/_theme-dark.scss` declares `:root.theme-dark`)
+but nothing that applies it, and its palette is stock Mendix blue. An mxcli theme
+re-declares the same selector from a file that compiles later, so the theme’s own
+dark palette wins.
+
+### [A user-facing toggle](#a-user-facing-toggle)
+
+```
+mxcli theme switcher install -p app.mpr --module MyFirstModule
+
+```
+
+**This is the one theme command that writes to the model.** It has to: the class
+has to be set by something the browser can run, and there is no theme-level hook
+to run script before first paint. It creates three JavaScript actions
+(`ToggleAppTheme`, `SetAppTheme`, `ApplyStoredTheme`) and a nanoflow, then you
+wire a button:
+
+```
+actionbutton btnTheme (caption: 'Theme', action: nanoflow MyFirstModule.ACT_ToggleTheme)
+
+```
+
+A click flips the palette and remembers the choice in `localStorage`. The class
+goes on `<html>`, so popups and modals — which Mendix renders at `<body>`,
+outside any page container — follow it too.
+
+**Known limit:** after a reload the app goes back to following the OS. Mendix has
+no page on-load event to re-apply the stored value, and the usual substitute (a
+data view with a nanoflow data source) is not authorable by mxcli on either
+engine yet. `ApplyStoredTheme` is installed and ready — wire it in Studio Pro if
+you need the choice to persist across reloads.
+
+## [Re-branding](#re-branding)
+
+Change one line in `theme/web/custom-variables.scss`:
+
+```
+:root {
+  --mxt-brand: #0f6e6b;   /* <- the one signal colour */
+
+```
+
+`_mxcli-atlas-map.scss` maps that onto `--brand-primary`, and Atlas builds the
+whole derived ramp (`--brand-primary-50` … `-900`) from it with CSS
+`color-mix()` — so buttons, links, active navigation and the brand-aware
+pluggable widgets follow immediately, in both palettes.
+
+The palette file declares only `--mxt-*` tokens, never Atlas variables directly.
+That is what makes a variant cheap: the dark block restates about thirty values
+instead of rewiring sixty. Pinning an Atlas variable to a literal colour is the
+one thing that breaks switching — a hardcoded `--font-color-default` is
+invisible the moment the ground goes dark.
+
+### [Import order in `main.scss`](#import-order-in-mainscss)
+
+`apply` appends its block to the **end** of `theme/web/main.scss`, so it lands
+after any `@import` the project already had there. If your app carries a
+stylesheet imported last specifically to win the cascade over Atlas, the theme’s
+partial now comes after it. Higher-specificity app classes are unaffected; a
+rule that relied purely on being last is not. Move your `@import` below the
+mxcli block — anything outside the fence is never touched.
+
+### [Two Atlas constraints worth knowing](#two-atlas-constraints-worth-knowing)
+
+- **The navigation rail stays dark in both palettes.** Atlas topbar widgets paint
+  their own text assuming a dark rail — the language selector uses
+  `--bg-color-secondary` with a `#fff` fallback, at a specificity
+  (`.navbar-brand .widget-language-selector .current-language-text`) that a
+  simple override cannot beat. Every mxcli theme keeps the rail dark and
+  re-declares those selectors at matching specificity, resolving the colour
+  through the rail token.
+- **`themesource/<name>/` is only compiled when `<name>` matches a real module**,
+  so a theme never writes there. `theme/web/main.scss` compiles last and is the
+  correct home for app-level styling.
+
+## [Recipe classes](#recipe-classes)
+
+Apply with `class:` on any widget.
+
+| Class | Use |
+| --- | --- |
+| `num` | monospace with tabular figures — ids, amounts, dates, so columns align |
+| `num-right` | right-align a numeric column |
+| `pill` + `pill-ok` / `pill-warn` / `pill-risk` / `pill-info` | status pills; pair with a `dynamicclasses` expression mapping an enum |
+| `stat` + `stat-label` / `stat-value` / `stat-delta` / `stat-delta-up` / `stat-delta-down` | KPI tile |
+| `density-compact` | 28px rows and inputs inside this container |
+
+## [Your edits are safe](#your-edits-are-safe)
+
+Every generated region is fenced, and the closing marker records a digest of what
+mxcli wrote:
+
+```
+// mxcli:theme:begin signal v1 — generated by `mxcli theme apply`; edit outside this block
+…
+// mxcli:theme:end signal b538a13336af87f6
+
+```
+
+- Edit **outside** the markers and mxcli never touches your lines.
+- Edit **inside** them and the next `apply` refuses rather than discarding your
+  work, naming the file and offering `--force`.
+- `apply` is idempotent — re-running an unchanged theme reports `unchanged` for
+  every file.
+- `remove` cuts the blocks back out and restores the file byte for byte.
+
+## [Verifying](#verifying)
+
+A theme that compiles cleanly can still render wrong, so check a running app
+rather than the build log:
+
+```
+mxcli run --local --watch --screenshot -p app.mpr
+
+```
+
+SCSS edits hot-apply, so `--watch` gives you a tight loop. If a rule seems not to
+apply, first confirm it is compiled at all — grep for the selector in
+`theme-cache/web/theme.compiled.css`. Absent and overridden look identical in the
+browser, and only one of them is a specificity problem.
+
+See also the `atlas-design` skill for the method behind the theme, and
+`theme-styling` for the SCSS compilation chain — both are installed into your
+project by `mxcli init`.
+
 # [Code Navigation](#code-navigation)
 
 mxcli provides a suite of cross-reference navigation commands that let you explore relationships between elements in a Mendix project. These commands answer questions like “what calls this microflow?”, “what would break if I change this entity?”, and “what does this element depend on?”
@@ -14697,7 +14894,7 @@ The testing framework supports two test file formats:
 
 ## [Prerequisites](#prerequisites-6)
 
-Running tests requires **Docker** for Mendix runtime validation. The test runner:
+Tests execute against a real Mendix runtime. **Docker is one way to get one, not the only one** — `--local` uses mxcli’s own runtime with no daemon, and is the faster path (see [Running Tests](#running-tests) for the mode comparison and the `--watch` / `--attach` loops). On the Docker path the test runner:
 
 1. Creates a fresh Mendix project using `mx create-project`
 2. Executes the MDL test script against the project
@@ -14979,24 +15176,28 @@ The `mxcli test` command executes test files and reports results.
 
 ## [Prerequisites](#prerequisites-7)
 
-Running tests requires **Docker** for Mendix runtime validation. The test runner uses:
+Tests need a Mendix runtime to execute against. There are two ways to get one,
+and **Docker is only needed for the first**:
 
-- `mx create-project` to create a fresh blank Mendix project
-- `mx check` to validate the project after applying MDL changes
+- **Docker** — the container path. Requires a running Docker daemon.
+- **`--local`** — mxcli’s own runtime, no daemon involved. It uses its own ports
+  (8081/8091) and its own `<project>_test` database, so a `mxcli run --local`
+  dev loop can keep serving the same project while tests run.
 
-The `mx` binary is located at:
+`--local` also downloads what it needs on first use. To pre-cache it:
+
+```
+mxcli setup mxbuild -p app.mpr
+
+```
+
+The `mx` binary, when you need it directly:
 
 | Environment | Path |
 | --- | --- |
 | Dev container | `~/.mxcli/mxbuild/{version}/modeler/mx` |
 | Repository | `reference/mxbuild/modeler/mx` |
 
-To auto-download mxbuild for the project’s Mendix version:
-
-```
-mxcli setup mxbuild -p app.mpr
-
-```
 ## [Basic Usage](#basic-usage-2)
 
 ```
@@ -15010,12 +15211,62 @@ mxcli test tests/sales.test.mdl -p app.mpr
 mxcli test tests/integration.test.md -p app.mpr
 
 ```
-## [Test Execution Flow](#test-execution-flow)
+## [Choosing a mode](#choosing-a-mode)
 
-1. **Create project** – A fresh Mendix project is created in a temporary directory using `mx create-project`
-2. **Execute MDL** – The test script is executed against the fresh project using `mxcli exec`
-3. **Validate** – `mx check` validates the resulting project for errors
-4. **Report** – Results are reported with pass/fail status per test case
+|  | Boot cost per run | Database | Needs Docker |
+| --- | --- | --- | --- |
+| `mxcli test …` | container restart | the container’s | yes |
+| `--local` | ~30s | `<project>_test` | no |
+| `--local --watch` | ~30s once, then ~2s | `<project>_test` | no |
+| `--attach` | none | **the running app’s** | no |
+
+```
+# No Docker daemon needed
+mxcli test tests/ -p app.mpr --local
+
+# Keep the runtime warm; re-runs on every test or model change (Ctrl-C to stop)
+mxcli test tests/ -p app.mpr --local --watch
+
+# Attach to an app you already have running — no boot at all
+mxcli run  --local --test-endpoint -p app.mpr    # terminal 1
+mxcli test tests/ -p app.mpr --attach            # terminal 2
+
+```
+
+`--watch` is the everyday loop: edit a test *or* the microflow under test, and
+the verdict lands in about two seconds.
+
+`--attach` skips even the first boot, at one cost worth knowing: the tests run
+against the running app’s database rather than a scratch one, so they can leave
+data behind in the app you are looking at. It needs the dev loop to have been
+started with `--test-endpoint`, because the endpoint’s handler is registered by
+the after-startup microflow and cannot be added to an app that is already up.
+
+## [How tests execute](#how-tests-execute)
+
+**`--local` — the test endpoint.** One microflow is generated per test, plus a
+Java action that registers a token-guarded HTTP endpoint. The app boots once;
+startup only registers the endpoint and runs no tests. Each test is then invoked
+by name over HTTP and returns its verdict in the response.
+
+Two consequences when reading a failing run:
+
+- A test that throws fails **only itself** and is reported as an error with the
+  root-cause message; the next test still runs.
+- Results are **returned**, not recovered from the runtime log.
+
+The endpoint executes microflows under a system context, so it is gated: it is
+not registered at all without a per-run token in the runtime’s environment,
+every request must present that token, non-loopback callers are refused, and it
+will only ever invoke the generated `MxTest.Test_*` microflows. The token is
+never written into your project.
+
+**Docker — the after-startup runner.** The whole suite is compiled into the
+project’s after-startup microflow, the container is restarted, and results are
+parsed out of its log. `--legacy-runner` selects this on a local run too.
+
+Both paths restore the project when they finish, and both report loudly if that
+restore fails — a modified project must never read as a clean pass.
 
 ## [Isolated Testing Pattern](#isolated-testing-pattern)
 
@@ -16130,6 +16381,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--screenshot-url` | app root | Page to shoot: full URL, or a path relative to the app root (e.g. `/p/customers`). Repeat for a multi-page set. |
 | `--screenshot-user` / `--screenshot-password` | — | Log in once (Mendix form auth) and reuse the session, so pages behind login render authenticated |
 | `--runtime-log` | `<projectDir>/.mxcli/runtime.log` | Runtime log file — JVM stdout/stderr **and** the application log (server stack traces + microflow `LOG` output); `-` disables |
+| `--test-endpoint` | off | Host mxcli’s token-guarded test endpoint so [`mxcli test … --attach`](#running-tests) runs a suite against this app with no boot of its own. Installed before the boot (the handler registers from after-startup, so it cannot be added to a running app); your project’s own after-startup microflow is chained, not displaced. Removed on exit. Tests then use **this app’s database** |
 | `--debug` | off | Enable the microflow debugger at boot; then use [`mxcli debug`](#debug-microflows--mxcli-debug) from another terminal. Behaviour-neutral until a breakpoint is set |
 | `--debug-pass` | `mxdebug` | Debugger password when `--debug` is set |
 | `--metrics` | off | Register a Prometheus meter registry; metrics served at `http://127.0.0.1:<admin-port>/prometheus` |
@@ -16241,6 +16493,10 @@ projects, solutions, branches, and worktrees — with a sortable overview at
   older ones: the hub persists a per-session endpoint history to `--sessions-file` (default
   `~/.mxcli/hub-sessions.json`, survives restarts) and prunes it after `--session-retention`
   (default 30 days). Re-registering keeps a **stable URL**.
+- Each endpoint shows **first seen** alongside last-seen, last-used, and uptime. First seen
+  is read from that persisted history, so it is the first time the endpoint was *ever*
+  exposed — unlike uptime, it does not reset when an idle container is reaped and the
+  preview reconnects.
 - `--hub` **implies `--local`**, boots the runtime with `ApplicationRootUrl` set to the
   assigned URL (so the SPA and `originURI` cookie work), and the tunnel reconnects forever.
   Combine with `--watch` for the full remote loop: edit here → hot-apply → refresh the tab.
@@ -16417,8 +16673,15 @@ See also: [PROPOSAL\_mxcli\_dev\_warm\_loop](../../docs/11-proposals/PROPOSAL_mx
 
 The **primary** way to start a Mendix + mxcli project from the web or an iPad — no
 local CLI, no GitHub template to pick from a (short) mobile list. Open an **empty
-repo** in Claude Code Web and paste the prompt below; the agent provisions
-everything and commits the result so future sessions self-bootstrap.
+repo** in Claude Code Web and paste the prompt below; the agent asks you what the app
+is, then provisions everything and commits the result so future sessions
+self-bootstrap.
+
+The interview comes first for a reason: the app name becomes the `.mpr` file name, the
+Studio Pro app name and the path baked into the SessionStart hook, so it is far cheaper
+to ask than to rename afterwards. The rest of the answers are the brief — they get
+written into the repo, so the session that resumes after an idle reap knows what it is
+building.
 
 Why a prompt instead of a GitHub template repo: the mobile “New repository” template
 dropdown shows only a small subset of templates, and a template repo needs per-Mendix-
@@ -16428,7 +16691,43 @@ can seed the model from a design prototype in the same session — nothing to ma
 ## [The prompt](#the-prompt)
 
 ```
-This is an empty repo. Provision it as a Mendix app developed with mxcli:
+This is an empty repo. You are going to provision it as a Mendix app developed with
+mxcli — but first find out what the app is.
+
+## Step 0 — interview me, and WAIT for my answers before running anything
+
+Ask all of these in ONE message, numbered, each with the default you would pick, so I
+can reply "defaults" or answer only the ones I care about. Do not start provisioning
+until I have replied.
+
+1. **One app, or a solution of several?** One Mendix app is the default. Say
+   "solution" if this is several apps in one repo — e.g. a backend that owns the data
+   and publishes OData/REST, and a frontend that consumes it. If so, ask for each
+   app's name and one line on what it owns, and follow the multi-app deltas below.
+2. **App name.** Becomes the `.mpr` file name, the app name in Studio Pro, and the
+   path in the session hook, so it is awkward to change later. One PascalCase word,
+   letters and digits only — `OrderPortal`, `FieldService`, `ClubAdmin`. Propose one
+   from my answer to Q3.
+3. **What is the app for?** One or two sentences: who uses it, and what it lets them
+   do. If my answer is vague ("a tool for work"), ask one follow-up — everything below
+   is derived from this.
+4. **What does it keep track of?** Three to six nouns that will become entities, and a
+   word on how they relate (e.g. "a Job has many Visits; each Visit has Photos"). For
+   a solution, also ask which app owns each noun.
+5. **Who logs in?** The user roles, and roughly what each may do (e.g. "Requester
+   creates and sees their own; Approver sees everything and approves").
+6. **Look and feel.** One of the bundled themes: `signal` (light, high contrast),
+   `ledger` (light, dense, data-heavy), `console` (dark), or `none` for stock Atlas.
+   Default `signal`.
+7. **Mendix version.** Default `11.13.0`.
+
+If I say "defaults" or ignore a question, choose something sensible for it, tell me
+what you chose in one line, and keep going — do not block on me twice.
+
+## Then provision
+
+Substitute my answers for `<AppName>`, `<version>` and `<theme>` throughout. For a
+solution, do steps 2–4 once per app and read "If this is a solution" first.
 
 1. Ensure `mxcli` is available. It should be pre-installed by the environment; if
    not, download a prebuilt binary for your OS/arch and put it at `./mxcli`, e.g.:
@@ -16445,28 +16744,130 @@ This is an empty repo. Provision it as a Mendix app developed with mxcli:
    release instead (`.../releases/download/vX.Y.Z/mxcli-<os>-<arch>`). Note: `go
    install …@latest` does **not** work — the generated ANTLR parser isn't committed,
    so use the prebuilt binary (a from-source build needs `make grammar`).
-2. Create the app at the repo root: `mxcli new App --version 11.6.3`
-   (or `mxcli init` if an .mpr already exists).
-3. Ensure the Claude tooling is set up: `mxcli init --tool claude`. This adds a
-   SessionStart hook to `.claude/settings.json` that self-bootstraps future sessions.
-4. Bring prerequisites up: `./mxcli run --local --setup --ensure-db -p App.mpr`
+2. Create the app, and put it at the **repo root** — that is where `.claude/` and the
+   `./mxcli` binary have to live for future sessions to self-bootstrap. `mxcli new`
+   refuses to write into a directory that is not empty, and a git repo always has
+   `.git`, so create it in a subfolder and move it up:
+
+   ```bash
+   ./mxcli new <AppName> --version <version> --theme <theme>
+   rm -f <AppName>/mxcli        # a hardlink to the ./mxcli you just ran; mv would
+                                # refuse it as "the same file"
+   shopt -s dotglob && mv <AppName>/* . && rmdir <AppName>
+   ```
+
+   (Use `mxcli init` instead if an `.mpr` already exists.) `mxcli new` also runs
+   `mxcli init`, which writes `.claude/settings.json` with a SessionStart hook plus
+   the `.claude/bootstrap-mxcli.sh` it runs — check that the `.mpr` named in the
+   script is right after the move.
+3. Confirm the Claude tooling: `./mxcli init --tool claude` (idempotent — it is what
+   step 2 already ran, and re-running it is the cheapest way to be sure the hook,
+   skills and commands are in place).
+4. Bring prerequisites up: `./mxcli run --local --setup --ensure-db -p <AppName>.mpr`
    (caches MxBuild + runtime, starts Postgres, creates the app database).
-5. Create a `FINDINGS.md` at the repo root and keep appending to it as you work.
+5. Write the brief to `README.md` at the repo root: the app name(s), my answers to
+   Q3–Q5 in my words, and the theme and Mendix version you used. For a solution, say
+   which app owns what and how they talk to each other. This is what tells the next
+   session — after an idle reap, with none of this conversation — what it is building.
+   Keep it short enough that it stays true.
+6. Create a `FINDINGS.md` at the repo root and keep appending to it as you work.
    Log anything surprising or broken: an mxcli command that errored, a workaround you
    applied, a `mxcli check` that passed but a real `mx check` later flagged. Note the
    Mendix + mxcli versions and how each finding was verified. This is durable context
    for the next session, and the most useful thing to share back to improve mxcli.
-6. COMMIT everything now — `App.mpr`, `.devcontainer/`, `.claude/` (including the
-   SessionStart hook), and `FINDINGS.md` — so that after idle reaping the next session
-   bootstraps from files, not from re-running this prompt.
-7. Boot and verify: `./mxcli run --local -p App.mpr` in the background, then confirm
-   the app answers HTTP 200 at http://localhost:8080/ and report.
-8. (Optional) For a browser preview from this cloud session, run
-   `./mxcli run --hub https://hub.mxcli.org -p App.mpr` and report the preview URL it
-   prints. This needs `MXCLI_HUB_KEY` set on the environment (see the workflow page);
-   without it, continue as a normal local run.
+7. COMMIT everything now — `<AppName>.mpr`, `.devcontainer/`, `.claude/` (the
+   SessionStart hook **and** `.claude/bootstrap-mxcli.sh`), `README.md` and
+   `FINDINGS.md` — so that after idle reaping the next session bootstraps from files,
+   not from re-running this prompt. The `mxcli` binary itself stays git-ignored (~85
+   MB); the bootstrap script is what fetches it back into a fresh clone, so committing
+   the script is what makes the hook survive a reap.
+8. Boot and verify: `./mxcli run --local -p <AppName>.mpr` in the background, then
+   confirm the app answers HTTP 200 at http://localhost:8080/ and report.
+9. (Optional) For a browser preview from this cloud session, run
+   `./mxcli run --hub https://hub.mxcli.org -p <AppName>.mpr` and report the preview
+   URL it prints. This needs `MXCLI_HUB_KEY` set on the environment (see the workflow
+   page); without it, continue as a normal local run.
 
-(Optional) Seed the domain model, pages, and microflows from this prototype: <paste or link a design here>.
+## If this is a solution (several apps in one repo)
+
+Each app is a full Mendix project — one `.mpr`, one runtime, one database. Same steps,
+with these deltas:
+
+- **Layout.** One subfolder per app, nothing at the repo root but `README.md`,
+  `FINDINGS.md` and `.claude/`. Run `mxcli new <AppName> --version <version> --theme
+  <theme>` once per app and leave each where it lands; do not move anything up.
+- **Ports.** Every app defaults to 8080/8090/6543 and they will collide. Give the
+  first app the defaults and the second `--app-port 8180 --admin-port 8190
+  --serve-port 6643`. Avoid 8081/8091/6544 — `mxcli test --local` uses those.
+- **Give each app its own hostname**, not just its own port. Cookies are keyed on
+  host name and **ignore the port**, so two apps on `localhost:8080` and
+  `localhost:8180` share one cookie jar: logging into one can silently replace the
+  other's `XASSESSIONID`. Two hostnames give two jars, and the differing ports do no
+  harm. Add them to `/etc/hosts` —
+
+  ```
+  127.0.0.1  backend.local frontend.local
+  ```
+
+  — and browse `http://backend.local:8080/` and `http://frontend.local:8180/`. The
+  runtime binds `127.0.0.1` and serves any `Host` you send it, and the client uses
+  relative URLs, so it works under any name that resolves to loopback. (`*.nip.io`
+  works too if you would rather not touch `/etc/hosts`; prefer `/etc/hosts` in a
+  locked-down container, where public wildcard DNS may not resolve — `localtest.me`
+  resolves to `::1` in some of them.)
+
+  Then record the name in each app's own configuration, so the runtime knows the URL
+  it is reached at and generates absolute URLs — OIDC/SAML redirect URIs, deep links
+  — against the host name rather than the listen address:
+
+  ```sql
+  alter settings configuration 'Default'
+    ApplicationRootUrl = 'http://backend.local:8080/';
+  ```
+
+  `run --local` picks that up at boot and prints which configuration it came from.
+  A blank app ships `http://localhost:8080/` there, and that stock loopback value is
+  deliberately ignored — otherwise every project would start advertising a URL, and
+  the wrong port under `--app-port`. Only a real host name is passed through.
+- **Databases** need no action: the name is derived from the `.mpr` file name, so
+  differently-named apps get different databases.
+- **The session hook.** `mxcli init` writes `.claude/settings.json` inside each app
+  folder, but Claude Code reads the one at the **repo root** — and it will not add a
+  second entry for you (it dedupes on the command, not on the project). Write the root
+  one yourself, one line per app, e.g.
+  `test -x backend/mxcli && (cd backend && ./mxcli run --local --setup --ensure-db -p Backend.mpr) || true`.
+  Verify it by checking that a fresh shell can boot each app.
+- **Previews.** Pass `--hub-solution <SolutionName>` to every `run --hub` so the apps
+  appear grouped in the hub overview instead of as unrelated previews.
+
+**Wire the integration in dependency order — the producer must be running first.**
+`CREATE ODATA CLIENT` fetches the `$metadata` at the moment you create it and caches
+it in the model; if the URL is unreachable it warns and leaves the client unvalidated,
+with no external entities to import. So: publish on the producer
+(`CREATE ODATA SERVICE … publish entity …`), boot it (`run --local`), and only then,
+on the consumer, `CREATE ODATA CLIENT … MetadataUrl: 'http://backend.local:8080/odata/…/$metadata'`
+followed by `CREATE EXTERNAL ENTITIES FROM …`. Use the hostname here too, so the
+cached contract and the constant below agree with what the browser sees. Point `ServiceUrl` at a **constant**
+(`ServiceUrl: @Module.SvcUrl`) so the address can be changed per environment without
+touching the model — it will not stay `localhost`. `mxcli syntax odata.publish` and
+`mxcli syntax odata.consume` have the full syntax; business events
+(`mxcli syntax business-events`) are the alternative when the link should be
+asynchronous.
+
+## Then propose the model — do not build it yet
+
+The blank template ships a `MyFirstModule`; the app's own work belongs in a module
+named after it. From the brief, propose in chat:
+
+- a module name, and the entities from Q4 with their attributes and associations
+- the user roles from Q5 and what each may read/write
+- the handful of pages that make it usable
+- for a solution: which app owns each entity, and what crosses the boundary — publish
+  only what the other app actually needs
+
+Show me that as MDL I can read, and wait for my go-ahead before executing it. If I
+gave you a design to work from, use it as the source of truth for the model and the
+pages: <paste or link a design here — otherwise ignore this line>.
 
 ```
 ## [Which mxcli version gets installed](#which-mxcli-version-gets-installed)
@@ -16495,13 +16896,30 @@ tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets 
   `make grammar` first). Enabling `go install` would require committing the generated
   parser (or generating it during module build) — a maintainer decision.
 
+## [Which Mendix version to ask for](#which-mendix-version-to-ask-for)
+
+The prompt defaults to the newest version that has a published MxBuild — everything
+mxcli does starts with downloading it, so “supported” means “on the CDN”. Check before
+bumping the default:
+
+```
+curl -sI -o /dev/null -w '%{http_code}\n' https://cdn.mendix.com/runtime/mxbuild-11.13.0.tar.gz   # 200
+curl -sI -o /dev/null -w '%{http_code}\n' https://cdn.mendix.com/runtime/mendix-11.13.0.tar.gz    # 200 (runtime)
+
+```
+
+Both have to answer `200` — `run --local` needs the runtime tarball as well as
+MxBuild. In a solution, give every app the **same** version: they share the
+`~/.mxcli/mxbuild` cache, and a mismatch means a second multi-hundred-MB download and
+two runtimes to keep straight.
+
 ## [Two rules that make this robust](#two-rules-that-make-this-robust)
 
-- **Committing the config (step 5) is mandatory.** The prompt is a *one-time seed*.
-  Its output — `.mpr` + `.devcontainer/` + `.claude/` with the SessionStart hook — must
-  be committed so the steady state is file-driven and deterministic. After that, every
-  new session runs the hook (`run --local --setup --ensure-db`) automatically; you
-  never re-paste the prompt.
+- **Committing the config (step 7) is mandatory.** The prompt is a *one-time seed*.
+  Its output — `.mpr` + `.devcontainer/` + `.claude/` with the SessionStart hook and
+  `bootstrap-mxcli.sh` — must be committed so the steady state is file-driven and
+  deterministic. After that, every new session runs the hook automatically; you never
+  re-paste the prompt. Miss the script and the hook has nothing to run after a reap.
 - **mxcli delivery is an environment concern, not the prompt’s.** Step 1 is the fragile
   part in a gated web session (a GitHub release `curl` may be blocked). The robust fix
   is for the Claude Code Web **environment image / setup script to pre-install mxcli**
@@ -16511,10 +16929,25 @@ tag (latest is v0.16.0) **and** as a rolling `nightly` pre-release, with assets 
 ## [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop)
 
 ```
-./mxcli run --local -p App.mpr --watch --screenshot   # warm dev loop + screenshots
-./mxcli exec change.mdl -p App.mpr                     # edit the model; the loop hot-applies
+./mxcli run --local -p <AppName>.mpr --watch --screenshot   # warm dev loop + screenshots
+./mxcli exec change.mdl -p <AppName>.mpr                     # edit the model; the loop hot-applies
 
 ```
+
+In a solution, run one loop per app from its own folder, with the second app on the
+alternate ports, and start the producer first so the consumer’s external entities
+resolve:
+
+```
+(cd backend  && ./mxcli run --local -p Backend.mpr --watch)
+(cd frontend && ./mxcli run --local -p Frontend.mpr --watch \
+                  --app-port 8180 --admin-port 8190 --serve-port 6643)
+
+```
+
+With `127.0.0.1 backend.local frontend.local` in `/etc/hosts`, browse them at
+`http://backend.local:8080/` and `http://frontend.local:8180/` so each app gets its
+own cookie jar.
 
 See [mxcli run –local](#mxcli-run-local) for the warm loop, `--watch`, `--ensure-db`, and
 the screenshot flags.
@@ -18206,10 +18639,29 @@ your-mendix-project/
 ├── settings.json          # Claude Code project settings
 ├── commands/              # Slash commands for Claude
 │   └── mendix/           # Mendix-specific commands
-└── lint-rules/            # Starlark lint rules
+├── lint-rules/            # Starlark lint rules
+└── lint-config.yaml       # Lint settings (excluded modules, rule overrides)
 CLAUDE.md                  # Project context for Claude
 
 ```
+#### [`lint-config.yaml`](#lint-configyaml)
+
+Seeded with the **System module excluded**. System is Mendix’s own platform
+module — you cannot document its entities, give them access rules, or rename
+their members — so linting it produces findings you can never action. On a
+blank app that was the large majority of all issues.
+
+`mxcli init` writes this file only when the project has no lint config yet
+(`.claude/lint-config.yaml`, `lint-config.yaml`, or `.lint-config.yaml`), so
+re-running init never discards your edits.
+
+Add Marketplace modules (`Atlas_Core`, `Administration`, …) to `excludeModules`
+if their findings distract you — they are equally read-only in practice.
+
+To lint System after all, remove it from `excludeModules`. Note the list always
+wins: it merges with `--exclude`, and a module listed there stays excluded even
+if you name it with `--modules` (lint warns when you try).
+
 ### [Cursor](#cursor-1)
 
 ```
@@ -31058,7 +31510,7 @@ Everything mxcli can do, organized by use case.
 | Stdin piping | `echo "CMD" | mxcli -p app.mpr` | Quiet mode, no prompts |
 | Docker build | `mxcli docker build -p app.mpr` | Build MDA in container |
 | Docker check | `mxcli docker check -p app.mpr` | Validate in container |
-| Testing | `mxcli test tests/ -p app.mpr` | `.test.mdl` / `.test.md` |
+| Testing | `mxcli test tests/ -p app.mpr [--local] [--watch] [--attach]` | `.test.mdl` / `.test.md`; `--local` needs no Docker, `--watch` keeps the runtime warm (~2s per run), `--attach` runs against an app already up |
 | SARIF output | `mxcli lint --format sarif` | For CI integration |
 | New project | `mxcli new <name> --version X.Y.Z` | Create project from scratch with all tooling |
 | Init project | `mxcli init` | Set up `.claude/` with skills |

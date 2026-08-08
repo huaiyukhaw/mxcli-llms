@@ -1,3 +1,7 @@
+## 2026-08-08 -- mxcli v0.16.0 @ a8bc729
+- +499 / -47 lines
+- Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", Attach to an app you already have running — no boot at all, Keep the runtime warm; re-runs on every test or model change (Ctrl-C to stop), No Docker daemon needed, Run tests (Docker, or --local for mxcli's own runtime), Run tests (requires Docker), [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [Default Styling (`mxcli theme`)](#default-styling-mxcli-theme) (+24 more)
+
 ## 2026-08-06 -- mxcli v0.16.0 @ 4fda072
 - +57 / -4 lines
 - Sections changed: [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [Reconciling stored widgets after a package upgrade (`mxcli widget sync`)](#reconciling-stored-widgets-after-a-package-upgrade-mxcli-widget-sync)

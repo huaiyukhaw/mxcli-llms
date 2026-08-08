@@ -1,13 +1,13 @@
 {
   "mxcli_release": "v0.16.0",
-  "mxcli_commit": "6937ba5",
-  "generated_at": "2026-08-07T04:22:36Z",
+  "mxcli_commit": "a8bc729",
+  "generated_at": "2026-08-08T03:20:04Z",
   "source": {
     "toc": "https://www.mxcli.org/toc.html",
     "print": "https://www.mxcli.org/print.html"
   },
   "outputs": {
-    "llms_txt_chars": 53995,
-    "llms_full_chars": 1106720
+    "llms_txt_chars": 54055,
+    "llms_full_chars": 1129788
   }
 }
