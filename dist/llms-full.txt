@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.16.0 @ a8bc729
-Generated: 2026-08-08T03:20:04Z
+Version:   mxcli v0.16.0 @ 2f5b182
+Generated: 2026-08-09T03:28:49Z
 
 ---
 
@@ -12564,14 +12564,15 @@ because two themes mapping the same Atlas variables would fight in the cascade.
 
 ## [What it writes](#what-it-writes)
 
-Five things, all under `theme/`:
+Six things, all under `theme/`:
 
 | File | What |
 | --- | --- |
 | `theme/web/custom-variables.scss` | the theme’s palette — this is the file to edit |
 | `theme/web/_mxcli-atlas-map.scss` | the Atlas wiring: ~60 Atlas variables expressed in terms of the palette |
 | `theme/web/_mxcli-<name>.scss` | the other palette, the variant blocks, `@font-face`, recipe classes |
-| `theme/web/main.scss` | the variant switch plus two `@import` lines |
+| `theme/web/_mxcli-widgets.scss` | the widget-module layer: colours Sass bakes before any token exists |
+| `theme/web/main.scss` | the variant switch plus the `@import` lines |
 | `theme/web/mxcli-fonts/` | vendored fonts (SIL OFL 1.1) |
 
 **The model is never touched.** No `.mpr` changes, so nothing here can affect a
@@ -12672,6 +12673,11 @@ mxcli block — anything outside the fence is never touched.
 - **`themesource/<name>/` is only compiled when `<name>` matches a real module**,
   so a theme never writes there. `theme/web/main.scss` compiles last and is the
   correct home for app-level styling.
+- **The widget modules bake some colours as Sass literals**, before any custom
+  property exists, so no token can move them — the Data Grid 2 pager caption is
+  the worst case, at 1.02:1 on a dark ground. `_mxcli-widgets.scss` corrects
+  those with ordinary rules; it is regenerated with the theme, so leave it alone
+  and put your own overrides outside the fence.
 
 ## [Recipe classes](#recipe-classes)
 
@@ -15260,6 +15266,55 @@ not registered at all without a per-run token in the runtime’s environment,
 every request must present that token, non-loopback callers are refused, and it
 will only ever invoke the generated `MxTest.Test_*` microflows. The token is
 never written into your project.
+
+### [The app’s own after-startup microflow](#the-apps-own-after-startup-microflow)
+
+Boot registers the endpoint and then runs the project’s own after-startup
+microflow, so tests see the app in the state it really boots into. The run
+prints which of the two happened, and `--skip-app-startup` opts out when a suite
+wants an empty, deterministic baseline.
+
+This keeps a suite behaving the same under `--local` and `--attach`. Note that
+what the startup microflow writes is not covered by `@cleanup rollback` — it
+runs at boot, outside any test’s transaction.
+
+### [`@cleanup`: what happens to a test’s data](#cleanup-what-happens-to-a-tests-data)
+
+`rollback` is the **default**, so a test’s database writes do not survive it.
+The endpoint opens a transaction around the call and rolls it back afterwards,
+including when the test throws.
+
+```
+/**
+ * @test creating an order does not leak
+ * @expect $result = 'ok'
+ */
+$result = CALL MICROFLOW Sales.CreateOrder(Amount = 100);
+/
+
+/**
+ * @test seed a fixture the app should keep
+ * @cleanup none
+ */
+$result = CALL MICROFLOW Sales.SeedCatalogue();
+/
+
+```
+
+| Strategy | Effect |
+| --- | --- |
+| `rollback` (default) | The test’s writes are rolled back, even if it throws |
+| `none` | The writes commit and persist |
+
+Rollback needs the test endpoint, so it applies to `--local` and `--attach`.
+The Docker / `--legacy-runner` path runs tests inside the after-startup action
+and has no context of its own to roll back, so it always commits.
+
+A rollback that fails is reported per test and summarised at the end — data
+left behind while the suite still says PASS is exactly what this is for.
+`--verbose` tags every test `[rolled back]`, `[committed]` or
+`[ROLLBACK FAILED]`. A misspelled strategy is a parse error, not a silent
+commit.
 
 **Docker — the after-startup runner.** The whole suite is compiled into the
 project’s after-startup microflow, the container is restarted, and results are

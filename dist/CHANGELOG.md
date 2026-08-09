@@ -1,3 +1,7 @@
+## 2026-08-09 -- mxcli v0.16.0 @ 2f5b182
+- +57 / -2 lines
+- Sections changed: [How tests execute](#how-tests-execute), [Re-branding](#re-branding), [What it writes](#what-it-writes)
+
 ## 2026-08-08 -- mxcli v0.16.0 @ a8bc729
 - +499 / -47 lines
 - Sections changed: -> registers and prints e.g. "Preview available at https://app.example.com", Attach to an app you already have running — no boot at all, Keep the runtime warm; re-runs on every test or model change (Ctrl-C to stop), No Docker daemon needed, Run tests (Docker, or --local for mxcli's own runtime), Run tests (requires Docker), [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [Default Styling (`mxcli theme`)](#default-styling-mxcli-theme) (+24 more)
