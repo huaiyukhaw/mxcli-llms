@@ -1,3 +1,7 @@
+## 2026-08-10 -- mxcli v0.16.0 @ 1e1773d
+- +111 / -7 lines
+- Sections changed: [Bundled Starlark Rules](#bundled-starlark-rules), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
+
 ## 2026-08-09 -- mxcli v0.16.0 @ 2f5b182
 - +57 / -2 lines
 - Sections changed: [How tests execute](#how-tests-execute), [Re-branding](#re-branding), [What it writes](#what-it-writes)
