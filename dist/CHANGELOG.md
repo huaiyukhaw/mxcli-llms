@@ -1,3 +1,7 @@
+## 2026-08-12 -- mxcli v0.17.0 @ 40ec849
+- +153 / -180 lines
+- Sections changed: [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [Idempotent Writes](#idempotent-writes), If this is a solution (several apps in one repo), Step 0 — interview me, and WAIT for my answers before running anything, Then propose the model — do not build it yet, Then provision, [4. Start the session with the bootstrap prompt](#4-start-the-session-with-the-bootstrap-prompt), [Both engines, every write path](#both-engines-every-write-path) (+9 more)
+
 ## 2026-08-10 -- mxcli v0.16.0 @ 1e1773d
 - +111 / -7 lines
 - Sections changed: [Bundled Starlark Rules](#bundled-starlark-rules), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)

@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.16.0 @ 1e1773d | Generated: 2026-08-10T03:48:42Z
+Version: mxcli v0.17.0 @ 40ec849 | Generated: 2026-08-12T04:01:51Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -297,6 +297,7 @@ These map to the Module Settings → Java…
 - [Package Structure](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/packages.md): Overview of the Go package organization and dependency relationships.
 - [Design Decisions](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/design-decisions.md): Key architectural decisions made during the development of ModelSDK Go, with rationale and trade-offs.
 - [MPR File Format](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/mpr-format.md): Mendix projects are stored in .mpr files, which are SQLite databases containing BSON-encoded model elements. This page provides…
+- [Idempotent Writes](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/idempotent-writes.md): Re-running an MDL script against a project that is already in sync leaves the .mpr and mprcontents/ files byte-identical . git…
 - [v1 vs v2](https://www.mxcli.org/internals/mpr-v1-v2.html)
 - [BSON Document Structure](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/bson-structure.md): How Mendix project documents are serialized in BSON format, including the role of $Type fields, nested structures, array version…
 - [Storage Names vs Qualified Names](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/storage-names.md): Mendix uses different “storage names” in BSON $Type fields than the “qualified names” shown in the TypeScript SDK documentation…
