@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.17.0 @ 40ec849 | Generated: 2026-08-12T04:01:51Z
+Version: mxcli v0.17.0 @ 4b15694 | Generated: 2026-08-13T04:06:26Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -107,6 +107,8 @@ no Studio Pro, no machine setup. Claude Code on the…
 - [Business Events](https://huaiyukhaw.github.io/mxcli-llms/pages/language/business-events.md): Business events enable event-driven integration between Mendix applications. An application can publish events when something…
 - [Event Services](https://huaiyukhaw.github.io/mxcli-llms/pages/language/event-services.md): An event service is a named container for business event messages. It defines the contract between publishers and consumers: what…
 - [Publishing and Consuming Events](https://huaiyukhaw.github.io/mxcli-llms/pages/language/pub-sub-events.md): Business events follow a publish-subscribe pattern. One application publishes events when significant actions occur, and other…
+- [Scheduled Events and Task Queues](https://huaiyukhaw.github.io/mxcli-llms/pages/language/scheduled-events.md): Two Mendix features for work that runs outside a user request. They are unrelated
+and easy to confuse:
 - [Image Collections](https://huaiyukhaw.github.io/mxcli-llms/pages/language/image-collections.md): Image collections are Mendix’s way of bundling images (icons, logos, graphics) within a module. Each collection can contain…
 
 ## Part V: Project Tools
@@ -241,6 +243,7 @@ microflows, pages, …) are nodes and their references (…
 - [Navigation Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/index.md): Statements for configuring application navigation profiles, home pages, login pages, and menu structures.
 - [ALTER NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/alter-navigation.md)
 - [SHOW NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/show-navigation.md)
+- [CREATE MENU](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/menu.md)
 - [Workflow Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/workflow/index.md): Statements for creating, inspecting, and dropping workflows.
 - [CREATE WORKFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/workflow/create-workflow.md)
 - [DROP WORKFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/workflow/drop-workflow.md)

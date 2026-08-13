@@ -1,3 +1,7 @@
+## 2026-08-13 -- mxcli v0.17.0 @ 4b15694
+- +890 / -252 lines
+- Sections changed: Park those edits as re-executable MDL, then update over them, Refuses if you have edited the module, naming what it would discard, What have I changed in this module since installing it?, [CREATE MENU](#create-menu), [Examples](#examples-10), [Examples](#examples-11), [Scheduled Events and Task Queues](#scheduled-events-and-task-queues), [CREATE IMAGE COLLECTION](#create-image-collection) (+255 more)
+
 ## 2026-08-12 -- mxcli v0.17.0 @ 40ec849
 - +153 / -180 lines
 - Sections changed: [Bootstrap prompt (empty repo → running Mendix app)](#bootstrap-prompt-empty-repo--running-mendix-app), [Idempotent Writes](#idempotent-writes), If this is a solution (several apps in one repo), Step 0 — interview me, and WAIT for my answers before running anything, Then propose the model — do not build it yet, Then provision, [4. Start the session with the bootstrap prompt](#4-start-the-session-with-the-bootstrap-prompt), [Both engines, every write path](#both-engines-every-write-path) (+9 more)
