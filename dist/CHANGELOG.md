@@ -1,3 +1,7 @@
+## 2026-08-14 -- mxcli v0.17.0 @ fa886b8
+- +109 / -0 lines
+- Sections changed: [Bundled widgets and install order](#bundled-widgets-and-install-order), [Constant values](#constant-values), [Prerequisites](#prerequisites-7), [When the installed version is no longer published](#when-the-installed-version-is-no-longer-published), [Why `diff` and `update` are slow, and what is cached](#why-diff-and-update-are-slow-and-what-is-cached)
+
 ## 2026-08-13 -- mxcli v0.17.0 @ 4b15694
 - +890 / -252 lines
 - Sections changed: Park those edits as re-executable MDL, then update over them, Refuses if you have edited the module, naming what it would discard, What have I changed in this module since installing it?, [CREATE MENU](#create-menu), [Examples](#examples-10), [Examples](#examples-11), [Scheduled Events and Task Queues](#scheduled-events-and-task-queues), [CREATE IMAGE COLLECTION](#create-image-collection) (+255 more)

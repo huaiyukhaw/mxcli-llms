@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.17.0 @ 4b15694
-Generated: 2026-08-13T04:06:26Z
+Version:   mxcli v0.17.0 @ fa886b8
+Generated: 2026-08-14T04:02:10Z
 
 ---
 
@@ -15540,6 +15540,18 @@ and **Docker is only needed for the first**:
   (8081/8091) and its own `<project>_test` database, so a `mxcli run --local`
   dev loop can keep serving the same project while tests run.
 
+A `--local` run boots the app with the same **constant values** `mxcli run --local`
+uses — the project configuration’s shared overrides layered over each constant’s
+default — and prints what it applied. Use `--configuration <name>` to choose
+between several, and `--constant Module.Name=value` (repeatable) to set one for
+this run only — it wins over everything and is never written anywhere. For a
+value that should persist on this machine without being committed, use
+`mxcli constant set` (see [Constant values](#constant-values) below). A constant
+the project does not declare is refused before anything boots. `--attach` takes
+none of these, since it inherits the constants of the app it attaches to. This
+matters whenever a test asserts on something a constant feeds: the two modes
+used to disagree silently.
+
 `--local` also downloads what it needs on first use. To pre-cache it:
 
 ```
@@ -15553,6 +15565,24 @@ The `mx` binary, when you need it directly:
 | --- | --- |
 | Dev container | `~/.mxcli/mxbuild/{version}/modeler/mx` |
 | Repository | `reference/mxbuild/modeler/mx` |
+
+## [Constant values](#constant-values)
+
+Highest layer wins:
+
+| Layer | Set with | In git? |
+| --- | --- | --- |
+| this run | `--constant Module.Name=value` | no |
+| this machine | `mxcli constant set Module.Name value` | no — gitignored, 0600 |
+| this configuration | `alter settings constant … in configuration 'X'` | yes |
+| default | `create constant … default '…'` | yes |
+
+`mxcli constant list` shows the winner for each constant and which layer set it,
+masking machine-local values unless `--show-values` is passed.
+
+A machine-local value normally takes effect at the next boot. `mxcli constant set … --apply` pushes it into a `mxcli run --local` that is already up, as
+`update_configuration` followed by `reload_model` — both are needed, since the
+first call only stages the change.
 
 ## [Basic Usage](#basic-usage-2)
 
@@ -32721,6 +32751,85 @@ mxcli diff-local -p app.mpr
 A headless install or update leaves two repairs for Mendix’s own tools: **CE0463** (the project’s stored widget instances are older than the widget packages beside them) and **CE6087** (a module references design properties an older Atlas spelled differently). Both are expected, not faults in the install. See [`mxcli fix`](#repairing-the-model-mxcli-fix) below.
 
 Measured: Administration 4.3.2 → 4.5.0 and DataWidgets 3.5.0 → 3.11.3 both reach **0 errors** afterwards.
+
+## [Bundled widgets and install order](#bundled-widgets-and-install-order)
+
+A module package carries a copy of every widget its pages use, pinned at the module author’s release time — and different modules pin different versions of the same widget. Atlas\_Web\_Content 4.3.0 ships five Data Widgets at 3.4.0 that DataWidgets 3.11.3 ships at 3.11.3.
+
+`install` and `update` keep the newer copy and say so:
+
+```
+  Kept 5 newer widget(s) the package would have rolled back:
+    widgets/com.mendix.widget.web.Datagrid.mpk — kept 3.11.3, package ships 3.4.0
+
+```
+
+Without this, module install order silently decided which widget versions the project ended up with, and nothing reported it — an out-of-date widget is not a check error. A package that ships the same widget both as a `.mpk` and as an unpacked tree (FeedbackModule 5.0.0) installs only the `.mpk`.
+
+## [When the installed version is no longer published](#when-the-installed-version-is-no-longer-published)
+
+`diff` and `update` both download the installed version to establish the local-edit baseline, so both fail when it has been unpublished — as NanoflowCommons 6.0.0 has, while a blank 11.13 app still ships it. `--force` does not help: it overrides a finding, and there is no finding to override. `mxcli marketplace update … --no-baseline` accepts that the question cannot be answered and updates anyway, discarding any local edits to that module without naming them.
+
+## [Why `diff` and `update` are slow, and what is cached](#why-diff-and-update-are-slow-and-what-is-cached)
+
+Both commands answer their question by building a **reference project**: a blank
+Mendix app of the consuming project’s version with the published module imported
+into it, so the comparison runs against a real project rather than against a
+`.mpk`. That costs a download plus two `mx` invocations, and `update` builds
+two references — the installed version, to answer “has anyone edited this?”, and
+the version being moved to.
+
+Two caches under `~/.mxcli/marketplace-refs/` keep that off the clock:
+
+| Cache | Keyed by | Holds | Saves |
+| --- | --- | --- | --- |
+| `blank/` | Mendix version | a whole blank app (~37 MB) | the `mx create-project` in **every** reference build |
+| `ref/` | published version UUID + Mendix version | the model only (~14 MB) | the whole reference, on a repeat |
+
+Measured on Administration (content 23513, 4.3.2 → 4.5.0, Mendix 11.12.1):
+
+```
+mxcli marketplace diff 23513 -p app.mpr --to 4.5.0
+
+  no cache      66s
+  cold cache    47s     (blank app built once, reused by the second reference)
+  warm           9s
+
+```
+
+A `ref/` entry stores the `.mpr` (and `mprcontents/`) and nothing else. A
+reference project is a whole blank Mendix app, but only its model is ever read —
+`widgets/`, `themesource/`, `theme-cache/` and `javascriptsource/` account for
+20 MB of 34 MB and are never opened, because an update takes the module’s
+bundled files from the `.mpk` rather than from the reference. Storing the model
+alone made entries 58% smaller and warm runs faster, since less is copied.
+
+The Mendix version is part of both keys, because a reference built at a
+different version reports Mendix’s own conversions as local edits. An entry is
+only used once its completion marker is present and the project’s version stamp
+has been re-checked on the way out, so a half-written or mislabelled entry is
+rebuilt rather than trusted.
+
+`ref/` keeps the 12 most recently used entries and evicts the rest — twelve is
+what a six-module update sweep builds, so a whole sweep stays cached at ~170 MB.
+It is bounded at all because running out of disk part way through an update is
+worse than rebuilding an entry: `update` does not roll back, so a failed write
+leaves the module already dropped. `blank/` is not bounded — one entry per
+Mendix version.
+
+```
+MXCLI_REF_CACHE_MAX=20 mxcli marketplace diff …   # keep more (0 = keep everything)
+MXCLI_NO_REF_CACHE=1   mxcli marketplace diff …   # build everything from scratch
+
+```
+
+Reach for `MXCLI_NO_REF_CACHE=1` before deleting anything: it answers “is this a
+stale-cache problem?” while leaving the evidence in place.
+
+Note that `--force` still builds the baseline. It is not wasted work — under
+`--force` the command prints the locally changed elements it is about to
+replace, and that list is the whole point of the check. Use `--no-baseline` when
+you genuinely want to skip it.
 
 ## [Repairing the model (`mxcli fix`)](#repairing-the-model-mxcli-fix)
 
