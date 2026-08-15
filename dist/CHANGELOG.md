@@ -1,3 +1,7 @@
+## 2026-08-15 -- mxcli v0.18.0 @ 0dda3a7
+- +27 / -1 lines
+- Sections changed: [5. Iterate](#5-iterate), [External browser preview (`--hub`)](#external-browser-preview---hub)
+
 ## 2026-08-14 -- mxcli v0.17.0 @ fa886b8
 - +109 / -0 lines
 - Sections changed: [Bundled widgets and install order](#bundled-widgets-and-install-order), [Constant values](#constant-values), [Prerequisites](#prerequisites-7), [When the installed version is no longer published](#when-the-installed-version-is-no-longer-published), [Why `diff` and `update` are slow, and what is cached](#why-diff-and-update-are-slow-and-what-is-cached)
