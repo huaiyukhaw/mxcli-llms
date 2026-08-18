@@ -1,3 +1,7 @@
+## 2026-08-18 -- mxcli v0.18.0 @ 5510716
+- +78 / -0 lines
+- Sections changed: [How tests execute](#how-tests-execute)
+
 ## 2026-08-15 -- mxcli v0.18.0 @ 0dda3a7
 - +27 / -1 lines
 - Sections changed: [5. Iterate](#5-iterate), [External browser preview (`--hub`)](#external-browser-preview---hub)
