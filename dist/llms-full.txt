@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.18.0 @ 5510716
-Generated: 2026-08-18T02:50:47Z
+Version:   mxcli v0.18.0 @ 8b7f1fa
+Generated: 2026-08-19T02:52:31Z
 
 ---
 
@@ -7213,6 +7213,37 @@ Change the type or constraints of an existing attribute with `MODIFY ATTRIBUTE`:
 ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Name: String(400) NOT NULL;
 
 ```
+
+**The type is not optional.** `MODIFY ATTRIBUTE` always parses a type, and its
+type slot accepts a bare qualified name (an entity or enumeration reference), so
+a clause written where the type belongs is read *as* the type:
+
+```
+-- WRONG: `SET` is read as the type name, not as a keyword
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Discount SET DEFAULT 0;
+
+-- Right: restate the type
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Discount Decimal DEFAULT 0;
+
+```
+
+mxcli refuses the first form and names the alternatives. Before it did, that
+statement silently rewrote the attribute to an enumeration and produced a
+project Mendix could not open ([#910](https://github.com/mendixlabs/mxcli/issues/910)).
+
+### [Clearing a default](#clearing-a-default)
+
+`DROP DEFAULT` removes a default value without touching the type:
+
+```
+ALTER ENTITY Sales.Customer DROP DEFAULT ON ATTRIBUTE Discount;
+
+```
+
+Clearing a default that is already absent is a no-op, not an error. A
+*calculated* attribute is refused rather than silently converted to a plain
+stored one — that is a different change.
+
 ## [RENAME Attributes](#rename-attributes)
 
 Rename an attribute with `RENAME ATTRIBUTE`:
@@ -7221,6 +7252,21 @@ Rename an attribute with `RENAME ATTRIBUTE`:
 ALTER ENTITY Sales.Customer RENAME ATTRIBUTE Phone TO PhoneNumber;
 
 ```
+
+Every reference stored *as* a reference follows the rename — microflow create and
+change members, page attribute widgets, and the entity’s own validation and
+access rules — and the command reports how many documents it updated.
+
+XPath constraints follow too — `[Phone = '06-1234']` and paths that reach the
+entity through an association alike — because a constraint’s target entity is
+known from where it is stored. Another entity’s attribute of the same name is
+left alone, and any constraint that cannot be resolved is reported rather than
+rewritten.
+
+Microflow expressions (`$Customer/Phone`) are **not** rewritten: a bare name
+there is only resolvable from the type of what precedes it. `mx check` reports
+those as CE0117, so build after renaming an attribute used in one.
+
 ## [ADD INDEX](#add-index)
 
 Add an index to the entity (the index name is optional):
@@ -7309,6 +7355,7 @@ ALTER ENTITY <Module>.<Entity> ADD ATTRIBUTE <name>: <type> [constraints];
 ALTER ENTITY <Module>.<Entity> DROP ATTRIBUTE <name>;
 
 ALTER ENTITY <Module>.<Entity> MODIFY ATTRIBUTE <name>: <type> [constraints];
+ALTER ENTITY <Module>.<Entity> DROP DEFAULT ON ATTRIBUTE <name>;
 
 ALTER ENTITY <Module>.<Entity> RENAME ATTRIBUTE <old-name> TO <new-name>;
 
@@ -8008,24 +8055,59 @@ END IF;
 ```
 ### [Nested IF](#nested-if)
 
-Since MDL does not support `CASE`/`WHEN` (switch statements), use nested `IF...ELSE` blocks:
+For multi-way branching on anything other than an enumeration, use nested `IF...ELSE`
+blocks. (To branch on an **enumeration**, use [CASE (Enum Split)](#case-enum-split)
+instead — it maps to a Mendix enum split rather than a chain of decisions.)
 
 ```
-IF $Order/Status = 'Draft' THEN
-  CHANGE $Order (Status = 'Submitted');
+IF $Order/TotalAmount > 10000 THEN
+  CHANGE $Order (DiscountPercentage = 15);
 ELSE
-  IF $Order/Status = 'Submitted' THEN
-    CHANGE $Order (Status = 'Approved');
+  IF $Order/TotalAmount > 5000 THEN
+    CHANGE $Order (DiscountPercentage = 10);
   ELSE
-    IF $Order/Status = 'Approved' THEN
-      CHANGE $Order (Status = 'Shipped');
+    IF $Order/TotalAmount > 1000 THEN
+      CHANGE $Order (DiscountPercentage = 5);
     ELSE
-      LOG WARNING 'Unexpected order status: ' + $Order/Status;
+      CHANGE $Order (DiscountPercentage = 0);
     END IF;
   END IF;
 END IF;
 
 ```
+### [Comparing Enumerations](#comparing-enumerations)
+
+An enumeration is compared against its **qualified value**, never a string literal.
+A string literal here fails the build with **CE0117** *“Error(s) in expression”* —
+`mxcli check` does not catch it (see
+[expression type checking](https://github.com/mendixlabs/mxcli/blob/main/docs/11-proposals/PROPOSAL_expression_type_checking.md)),
+so the first sign is a failed build.
+
+```
+-- CORRECT
+IF $Order/Status = Sales.OrderStatus.Draft THEN ... END IF;
+
+-- WRONG: CE0117 "Error(s) in expression."
+IF $Order/Status = 'Draft' THEN ... END IF;
+
+```
+
+The same applies to putting an enumeration into a string — concatenating it directly
+is CE0117, so render it first:
+
+```
+-- CORRECT
+LOG WARNING 'Unexpected status: ' + getCaption($Order/Status);
+
+-- WRONG: CE0117
+LOG WARNING 'Unexpected status: ' + $Order/Status;
+
+```
+
+The string form **is** accepted outside comparisons — in a `CREATE`/`CHANGE` member
+value, an attribute `DEFAULT`, and an XPath constraint (where enums live as strings at
+the database level). The qualified form works everywhere, so prefer it.
+
 ### [Complex Conditions](#complex-conditions)
 
 Conditions support `AND`, `OR`, and parentheses:
@@ -8162,13 +8244,43 @@ COMMIT $Order WITH EVENTS ON ERROR ROLLBACK;
 ```
 > **Note:** `ON ERROR` is not supported on `EXECUTE DATABASE QUERY` activities.
 
+## [CASE (Enum Split)](#case-enum-split)
+
+`CASE` branches on an **enumeration** and compiles to a Mendix enum split. It is not a
+general-purpose switch: the source is an enum attribute or variable, and the values are
+bare enum member names.
+
+```
+CASE $Order/Status
+  WHEN Draft, Submitted THEN
+    LOG INFO 'Not shipped yet';
+  WHEN Approved THEN
+    LOG INFO 'Ready to ship';
+  WHEN Shipped, (empty) THEN
+    LOG INFO 'Nothing to do';
+END CASE;
+
+```
+
+Rules, each of which `mxcli check` enforces:
+
+| Rule | Why |
+| --- | --- |
+| Values are **bare identifiers** — not `'Quoted'`, not `Module.Enum.Value` | Parse error otherwise |
+| One branch per enum value, **including `(empty)`** | A missing `(empty)` is **MDL056**; mxbuild reports **CE0079** for any uncovered value. Required even when the attribute is `not null` |
+| **No `ELSE`** | **MDL008**. An enum split is exclusive with one outgoing flow per value; mxbuild reports CE0079 per uncovered value *and* CE0773 on the else flow |
+| **No `AS` alias** | Parse error: `mismatched input 'as' expecting WHEN` |
+
+Several values may share a branch (`WHEN Draft, Submitted THEN …`). `CASE` works in
+nanoflows on the same terms.
+
 ## [Unsupported Control Flow](#unsupported-control-flow)
 
 The following constructs are **not** supported in MDL and will cause parse errors:
 
 | Unsupported | Use Instead |
 | --- | --- |
-| `CASE ... WHEN ... END CASE` | Nested `IF ... ELSE ... END IF` |
+| `CASE ... WHEN 'String' ... ELSE ...` | Bare enum values and a branch per value — see [CASE (Enum Split)](#case-enum-split); `CASE` itself is supported |
 | `TRY ... CATCH ... END TRY` | `ON ERROR { ... }` blocks on individual activities |
 
 ## [Complete Example](#complete-example-2)
@@ -8383,7 +8495,9 @@ END IF;
 
 ```
 
-Alternatively, enumeration values can be referenced as plain strings when the context is unambiguous:
+A plain string is accepted where the slot is already typed as the enumeration — a
+`CREATE`/`CHANGE` member value, an attribute `DEFAULT`, and an XPath constraint (enums
+are stored as strings at the database level):
 
 ```
 $Order = CREATE Sales.Order (
@@ -8391,6 +8505,21 @@ $Order = CREATE Sales.Order (
 );
 
 ```
+
+**It is not accepted in an expression.** Comparing an enumeration to a string, or
+concatenating one into a string, fails the build with **CE0117** *“Error(s) in
+expression”* — and `mxcli check` does not catch it, so the build is where you find out:
+
+```
+IF $Order/Status = 'Draft' THEN ...              -- CE0117
+LOG WARNING 'Status: ' + $Order/Status;          -- CE0117
+IF $Order/Status = Sales.OrderStatus.Draft THEN ...        -- correct
+LOG WARNING 'Status: ' + getCaption($Order/Status);        -- correct
+
+```
+
+The qualified form works in every context, so prefer it throughout.
+
 ## [Expression Contexts](#expression-contexts)
 
 Expressions appear in several places within microflow activities:
@@ -8398,9 +8527,9 @@ Expressions appear in several places within microflow activities:
 ### [In Conditions (IF, WHILE, WHERE)](#in-conditions-if-while-where)
 
 ```
-IF $Order/TotalAmount > 0 AND $Order/Status != 'Cancelled' THEN ...
+IF $Order/TotalAmount > 0 AND $Order/Status != Sales.OrderStatus.Cancelled THEN ...
 WHILE $Counter < $MaxRetries BEGIN ... END WHILE;
-RETRIEVE $Active FROM Sales.Order WHERE Status = 'Active';
+RETRIEVE $Active FROM Sales.Order WHERE Status = 'Active';   -- XPath: string is correct here
 
 ```
 ### [In Attribute Assignments (CREATE, CHANGE)](#in-attribute-assignments-create-change)
@@ -15651,6 +15780,22 @@ every request must present that token, non-loopback callers are refused, and it
 will only ever invoke the generated `MxTest.Test_*` microflows. The token is
 never written into your project.
 
+### [A run leaves the project byte-identical](#a-run-leaves-the-project-byte-identical)
+
+`mxcli test` injects an `MxTest` module, builds, runs, and removes it again. When
+cleanup succeeds the `.mpr` is restored **byte-for-byte**, so `git status` is
+clean after a run and a “run the tests, then assert the tree is clean” CI step
+holds.
+
+Restoring the model is not enough on its own: every unit write stamps a fresh
+UUID into the `.mpr`’s `_Transaction` row, and the inject/remove cycle relays
+SQLite’s pages, so the file differs even once its content matches. Version
+control compares bytes, and a `.mpr` diff is opaque.
+
+The restore is declined when cleanup failed, or when the `mprcontents/` tree
+changed during the run — in both cases the project is not in the state the
+snapshot describes, and putting the old file back would hide that.
+
 ### [`@expect`: what an assertion may say, and what happens when it cannot](#expect-what-an-assertion-may-say-and-what-happens-when-it-cannot)
 
 An `@expect` is a **Mendix expression that must evaluate to true**. Any
@@ -15719,15 +15864,65 @@ write; what it may not do is look the same as a test with six assertions.
 `--require-assertions` makes every vacuous test an ERROR for projects that want
 CI to enforce it.
 
-`@verify` was documented as an OQL post-condition and **is not implemented** —
-it is parsed and evaluated by nothing, so a test whose only assertion was a
-`@verify` asserted nothing. It is now rejected with an error pointing at
-`@expect`. To check a database post-condition, return the value from the
-microflow under test and assert on it, or query the app with `mxcli oql`.
+`@verify` asserts on the database instead of the return value — see below.
 
 The JUnit report (`--junit`) carries the assertion count as a
 `<property name="assertions">` on each case, and `classname`/`file` identify the
 source test file so a failure in a multi-file run says where it lives.
+
+### [`@verify`: asserting on what the microflow wrote](#verify-asserting-on-what-the-microflow-wrote)
+
+`@expect` sees only what a microflow returned. Most Mendix microflows are side
+effects, so `@verify` is how you assert on the rows one left behind — an OQL
+query, a comparison, and the value it must satisfy:
+
+```
+/**
+ * @test dealing a board writes 81 cells
+ * @cleanup none
+ * @expect $result = 'ok'
+ * @verify select count(*) as n from Sudoku.Cell = 81
+ * @verify select count(*) as n from Sudoku.Cell where Value = 0 > 0
+ */
+$result = CALL MICROFLOW Sudoku.ACT_DealGame();
+/
+
+```
+
+The query runs after the microflow returns, over the same admin API `mxcli oql`
+uses. Three rules follow, each enforced rather than left to trip you up:
+
+- **`@cleanup none` is required.** `rollback` is the default and undoes the
+  test’s writes before the query could see them, so a `@verify` on a rollback
+  test is refused rather than run against the pre-test state.
+- **The query must return exactly one row and one column** — aggregate it, or
+  select one attribute of one row. Picking a cell out of a table would be a
+  guess.
+- **The expected value is a literal**: a number, a quoted string, `true`/`false`
+  or `empty`. It is split off at the last comparison operator outside quotes and
+  parentheses, so a `where Value = 5` inside the query is left alone.
+- **Every selected column needs a name.** Mendix’s OQL rejects a bare
+  `select count(*)` with *“All OQL select columns must have a name”* — write
+  `select count(*) as n`.
+
+Operators are `=`, `!=` (`<>` accepted), `<`, `<=`, `>`, `>=`; numbers compare
+numerically even though the runtime returns them as strings.
+
+A `@verify` that cannot be evaluated — unknown entity, malformed OQL, a
+non-scalar result, or something that was never a query — is an **ERROR**, never
+a pass. A false one fails with the value that came back:
+
+```
+FAIL   dealing a board writes 81 cells
+       expected select count(*) as n from Sudoku.Cell = 81, actual: 27
+ERROR  cells exist for a game that does not
+       @verify select count(*) as n from Sudoku.NoSuch = 1: OQL error: Unknown entity
+
+```
+
+`@verify` needs the test endpoint, so it works under `--local` and `--attach`.
+The Docker / `--legacy-runner` path refuses a suite that uses it: its tests run
+during boot, so there is no point at which to query the app.
 
 ### [The app’s own after-startup microflow](#the-apps-own-after-startup-microflow)
 
@@ -17098,6 +17293,18 @@ the log instead of guessed.
 The intended cycle: an agent (or you) edits the model with `mxcli exec`/MDL — or edits
 a theme `.scss` — and the running `run --local` picks it up and hot-applies it.
 
+**A rebuild starts once the source stops changing, not on the first change.** An
+`mxcli exec` of a real script rewrites the `.mpr` and many `mprcontents/*.mxunit` files
+over several seconds; building on the first change would deploy whatever was on disk at
+that instant — a half-applied model. The watcher therefore waits for a couple of quiet
+polls before it builds, so a long `exec` produces one build of the finished model
+rather than a build of the first file it touched.
+
+This matters more than it used to. The old escape hatch was “run the script again”, and
+byte-idempotent `exec` closed it: re-running an already-applied script writes nothing,
+so nothing re-triggers the watcher and the stale build has no way out. If you do need to
+force a rebuild without changing anything, `touch` the `.mpr` — the signal is mtime.
+
 ## [Editing themes (SCSS): rebuild, don’t clear caches](#editing-themes-scss-rebuild-dont-clear-caches)
 
 A theme edit (e.g. `theme/web/main.scss`) needs a **rebuild**, not a cache-clear.
@@ -17825,6 +18032,42 @@ mxcli oql -p app.mpr "SELECT o.OrderNumber, c.Name FROM Sales.Order o JOIN Sales
 mxcli oql -p app.mpr "SELECT COUNT(*) FROM Sales.Customer"
 
 ```
+## [`ORDER BY` and null values](#order-by-and-null-values)
+
+`ORDER BY <attribute> DESC` on an attribute that some rows leave empty does **not**
+return the newest rows first. Mendix emits the ordering to the database without a
+null placement, so the database’s default applies — and on PostgreSQL, `DESC`
+means **NULLS FIRST**:
+
+```
+-- what Mendix sends for `ORDER BY DealtAt DESC LIMIT 3`
+SELECT "sales$game"."label" AS "label"
+FROM "sales$game"
+ORDER BY "sales$game"."dealtat" DESC
+LIMIT $1
+
+```
+
+With two null `DealtAt` rows in the table, that returns both nulls and then one
+real row — so “give me the most recent 3” silently answers with rows that are not
+recent, **stably** across runs. The stability is what makes it convincing and
+wrong: a degenerate sort key is every bit as repeatable as a correct one.
+
+Two things follow:
+
+- **Check for nulls before concluding the ordering is broken.**
+  `SELECT count(*) AS n FROM Sales.Game WHERE DealtAt = empty` settles it in one
+  query. Measured on Mendix 11.13.0 against PostgreSQL, `ORDER BY` on a DateTime
+  is passed through correctly and orders correctly when the values are present —
+  it is not ignored.
+- **Add `NULLS LAST` when the attribute is optional**, rather than falling back to
+  ordering by `id`. Ordering by `id` answers a different question (insertion
+  order), which happens to agree with recency only when nothing backdates a row.
+
+Null placement is database-specific — SQL Server and Oracle differ from
+PostgreSQL — so a query relying on the default behaves differently per
+environment. Being explicit is the portable choice.
+
 ## [Difference from Catalog Queries](#difference-from-catalog-queries)
 
 | Feature | OQL (`mxcli oql`) | Catalog (`SELECT FROM CATALOG.*`) |
@@ -22307,7 +22550,11 @@ The `DROP ATTRIBUTE` operation removes an attribute by name. Dropping an attribu
 
 The `MODIFY ATTRIBUTE` operation changes the type or constraints of an existing attribute. The attribute name must already exist in the entity. The full attribute definition (type and constraints) replaces the current one.
 
-The `RENAME ATTRIBUTE` operation changes an attribute’s name. This updates references within the entity but does not automatically update microflows, pages, or access rules that reference the old name.
+The `RENAME ATTRIBUTE` operation changes an attribute’s name and rewrites every reference Mendix stores as a reference — microflow create and change activity members, page attribute widgets, and the entity’s own validation and access rules — reporting how many documents it touched. Renaming onto a name the entity already uses is refused.
+
+XPath constraints are rewritten too, even though they name the attribute as a bare step. Each constraint’s target entity is known from where it is stored — a retrieve names its entity, a widget data source names its entity, an access rule lives inside one — and every further hop is an association or entity named in the path, so `[Phone = '...']` and `[Sales.Order_Customer/Sales.Customer/Phone = '...']` both follow the rename while another entity’s identically-named attribute does not. A constraint mxcli cannot resolve is listed in a warning and left exactly as it was.
+
+One kind of use is **not** rewritten: microflow expressions (`$obj/Phone`), where a bare name is only resolvable from the type of what precedes it. The command prints a note saying so, and `mx check` reports the leftovers as CE0117.
 
 The `ADD INDEX` and `DROP INDEX` operations manage database indexes. `ADD INDEX` takes an optional index name followed by one or more columns, each with an optional `ASC` or `DESC` sort direction; `DROP INDEX` takes the index name.
 
@@ -22397,7 +22644,7 @@ ALTER ENTITY Sales.Customer
 ## [Notes](#notes-5)
 
 - Each `ALTER ENTITY` statement performs a single operation. Chain multiple statements for multiple changes.
-- `RENAME` does not update references in microflows, pages, or access rules. Update those separately or use `SHOW IMPACT OF` to find affected elements.
+- `RENAME ATTRIBUTE` updates references in microflows, pages and access rules, and rewrites XPath constraints. It does not rewrite microflow expressions (`$obj/Attr`); use `SHOW IMPACT OF` to find the documents to check, or build and read the CE0117s.
 - `DROP` removes the attribute’s validation rules and index entries automatically.
 
 ## [See Also](#see-also-58)
@@ -23059,8 +23306,8 @@ CREATE MICROFLOW Sales.ACT_ApproveOrder
     (DECLARE $Order: Sales.Order)
     RETURN Boolean
 BEGIN
-    IF $Order/Status = 'Pending' THEN
-        CHANGE $Order (Status = 'Approved');
+    IF $Order/Status = Sales.OrderStatus.Pending THEN
+        CHANGE $Order (Status = Sales.OrderStatus.Approved);
         COMMIT $Order WITH EVENTS;
         LOG INFO NODE 'OrderProcessing' 'Order approved';
         RETURN true;
@@ -33118,7 +33365,7 @@ Modifies an existing entity without full replacement.
 | Add attribute | `ALTER ENTITY Module.Name ADD ATTRIBUTE Attr: Type [constraints];` | One action per statement |
 | Drop attribute | `ALTER ENTITY Module.Name DROP ATTRIBUTE AttrName;` |  |
 | Modify attribute | `ALTER ENTITY Module.Name MODIFY ATTRIBUTE Attr: NewType [constraints];` | Change type/constraints |
-| Rename attribute | `ALTER ENTITY Module.Name RENAME ATTRIBUTE OldName TO NewName;` |  |
+| Rename attribute | `ALTER ENTITY Module.Name RENAME ATTRIBUTE OldName TO NewName;` | Also rewrites stored references and XPath constraints; microflow expressions are not rewritten |
 | Add index | `ALTER ENTITY Module.Name ADD INDEX [IdxName] (Col1 [ASC|DESC], ...);` | Name optional |
 | Drop index | `ALTER ENTITY Module.Name DROP INDEX IdxName;` | By index name |
 | Set documentation | `ALTER ENTITY Module.Name SET DOCUMENTATION 'text';` |  |
@@ -33254,7 +33501,7 @@ AUTHENTICATION Basic, Session
 
 | Unsupported | Use Instead | Notes |
 | --- | --- | --- |
-| `CASE ... WHEN ... END CASE` | Nested `IF ... ELSE ... END IF` | Switch not implemented |
+| `CASE ... WHEN 'String' ... ELSE ...` | Bare enum values, one branch per value | `CASE` itself IS supported for **enum splits**; what fails is quoted/qualified values, an `ELSE` branch (MDL008), and an `AS` alias |
 | `TRY ... CATCH ... END TRY` | `ON ERROR { ... }` blocks | Use error handlers on specific activities |
 
 **Notes:**
@@ -34208,7 +34455,7 @@ These constructs will cause parse errors:
 
 | Unsupported | Use Instead |
 | --- | --- |
-| `CASE ... WHEN ... END CASE` | Nested `IF ... ELSE ... END IF` |
+| `CASE ... WHEN 'String' ... ELSE ...` | Bare enum values, one branch per value including `(empty)` — `CASE` itself IS supported for enum splits |
 | `TRY ... CATCH ... END TRY` | `ON ERROR { ... }` blocks on specific activities |
 
 ## [Boolean Attributes Must Have Defaults](#boolean-attributes-must-have-defaults)
