@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.18.0 @ 8b7f1fa
-Generated: 2026-08-19T02:52:31Z
+Version:   mxcli v0.18.0 @ b763353
+Generated: 2026-08-21T02:57:16Z
 
 ---
 
@@ -4138,6 +4138,42 @@ END;
 /
 
 ```
+## [POST a Binary Body (File Upload)](#post-a-binary-body-file-upload)
+
+Mendix models a binary request body on the **REST CALL activity**, not on a
+consumed REST client document. The expression is the file document’s `Contents`
+member, and the content type goes on a header.
+
+```
+CREATE MICROFLOW Integration.UploadDocument (
+  $Doc: Integration.UploadedFile
+)
+RETURNS Boolean AS $Ok
+BEGIN
+  DECLARE $Ok Boolean = false;
+  $Response = REST CALL POST 'https://api.example.com/documents'
+    HEADER 'ContentType' = 'application/pdf'
+    BODY BINARY $Doc/Contents
+    TIMEOUT 300
+    RETURNS response;
+  SET $Ok = $Response/StatusCode = 200;
+  RETURN $Ok;
+END;
+/
+
+```
+
+`RETURNS response` binds a `System.HttpResponse`, so the microflow’s own return
+type must match what you do with it — returning `$Response` from a
+`RETURNS String` microflow is `CE0117` at the end event.
+
+`$Doc` must be a specialization of `System.FileDocument`.
+
+A consumed REST **client document** has no binary body — its three body types
+(`Rest$JsonBody`, `Rest$StringBody`, `Rest$ImplicitMappingBody`) are all textual
+— so `Body: file from $Doc` in a `CREATE REST CLIENT` operation is refused as
+**MDL-REST02**. Downloading is unaffected: `Response: file as $Doc` works.
+
 ## [Basic Authentication](#basic-authentication)
 
 ```
@@ -8274,6 +8310,43 @@ Rules, each of which `mxcli check` enforces:
 Several values may share a branch (`WHEN Draft, Submitted THEN …`). `CASE` works in
 nanoflows on the same terms.
 
+## [SPLIT TYPE (Object Type Split)](#split-type-object-type-split)
+
+`SPLIT TYPE` branches on an object’s **runtime specialization** and compiles to a Mendix
+object type decision. Branches use the same `WHEN … THEN` shape as [CASE](#case-enum-split),
+so the two splits differ only in what they branch on.
+
+```
+SPLIT TYPE $Animal
+  WHEN Zoo.Dog THEN
+    CAST $Dog;
+    LOG INFO 'woof';
+  WHEN Zoo.Cat THEN
+    LOG INFO 'meow';
+  WHEN Zoo.Animal THEN
+    LOG INFO 'some other animal';
+  WHEN (empty) THEN
+    LOG INFO 'no animal at all';
+END SPLIT;
+
+```
+
+Use `CAST` inside a branch to bind the specialized variable its body needs.
+
+| Rule | Why |
+| --- | --- |
+| A branch for **every** subtype **and** the base entity | mxbuild reports **CE0090** *“The ‘X’ value should be configured for an outgoing flow”* for each type with no branch. The base entity is what covers “none of the more specific ones” |
+| `WHEN (empty) THEN` is the **null-object** branch, not a default | It is taken when the variable is empty. It does **not** cover unnamed types — measured on 11.13.0, one named type plus an empty branch still gives CE0090 for every other type. Branch on the base entity for that |
+| The empty branch cannot be omitted | **CE0089**. mxcli emits the flow unconditionally, so MDL cannot express a split without one |
+| A non-void microflow needs a `RETURN` after `END SPLIT;` | Branches converge on a merge that continues to the end event — otherwise **MDL003** and **CE0067** |
+
+The pre-#913 spelling — `CASE Zoo.Dog` for a branch and `ELSE` for the empty one — still
+parses and builds the identical flow, but warns **MDL065**. It was replaced because `CASE`
+introduced a *branch* here while introducing the *subject* in `CASE $x WHEN v THEN`, and
+because `ELSE` reads as a default branch and never was one.
+
+`SPLIT TYPE` works in nanoflows on the same terms.
+
 ## [Unsupported Control Flow](#unsupported-control-flow)
 
 The following constructs are **not** supported in MDL and will cause parse errors:
@@ -9696,6 +9769,42 @@ LISTVIEW lvProducts (DataSource: DATABASE MyModule.Product) {
 }
 
 ```
+#### [Specialization templates](#specialization-templates)
+
+When the list view’s entity is a **generalization**, it can render a different
+body per specialization. A template is identified by the entity it renders — it
+has no name, hence `TEMPLATE FOR <entity>`:
+
+```
+LISTVIEW vehicleListView (DataSource: DATABASE Pages.Vehicle) {
+  -- the default body, used for an object no template matches
+  DYNAMICTEXT defaultVehicle (Content: '{1} {2}', ContentParams: [{1} = Brand, {2} = Model])
+
+  TEMPLATE FOR Pages.Bus {
+    DYNAMICTEXT busLabel (Content: 'Bus, capacity {1}', ContentParams: [{1} = PassengerCapacity])
+  }
+  TEMPLATE FOR Pages.Truck {
+    DYNAMICTEXT truckLabel (Content: 'Truck, max load {1} kg', ContentParams: [{1} = MaxLoadKg])
+  }
+}
+
+```
+
+Widgets written directly in the list view body are the default rendering.
+Templates keep their **source order**: Mendix stores and matches in that order,
+so it is authored rather than derived, and `DESCRIBE PAGE` emits them as stored.
+
+Inside a template the context object is the specialization, so an attribute only
+that specialization has still resolves — `PassengerCapacity` above exists on
+`Pages.Bus`, not on `Pages.Vehicle`.
+
+The entity must be the list view’s entity or a specialization of it, and there
+may be at most one template per entity; both are refused rather than written,
+because a template that cannot match never renders.
+
+> A Gallery’s `TEMPLATE <name>` is a different construct — a named content slot,
+> not a per-specialization body.
+
 ### [GALLERY](#gallery)
 
 A pluggable widget that displays items in a card/grid layout:
@@ -10889,7 +10998,8 @@ SHOW USER ROLES;
 -- Access rules
 SHOW ACCESS ON MICROFLOW Shop.ACT_ProcessOrder;
 SHOW ACCESS ON PAGE Shop.Order_Edit;
-SHOW ACCESS ON Shop.Customer;
+SHOW ACCESS ON ENTITY Shop.Customer;
+SHOW ACCESS ON Shop.Customer;         -- a bare name means the entity
 
 -- Full matrix
 SHOW SECURITY MATRIX;
@@ -11104,6 +11214,30 @@ GRANT Shop.User ON Shop.Customer (WRITE (Email));
 -- Result: READ (Name, Notes), WRITE (Email)
 
 ```
+
+Merging only ever widens access — rights rank `None < ReadOnly < ReadWrite`, and a
+GRANT takes whichever is higher. To take access away, use [REVOKE](#revoke-on-entities);
+that is what makes the two commands inverses rather than two spellings of “set”.
+
+### [One Rule per Constraint](#one-rule-per-constraint)
+
+The constraint is part of a rule’s identity. Two GRANTs for the same role with the
+**same** `WHERE` update one rule; with **different** constraints they produce two,
+which is how row-level security is normally written:
+
+```
+-- Two separate rules for one role
+GRANT Shop.User ON Shop.Order (READ *) WHERE '[Status = ''Open'']';
+GRANT Shop.User ON Shop.Order (READ (Total)) WHERE '[Owner = $currentUser]';
+
+```
+
+Mendix combines them at runtime: a role’s effective access is the union of every
+rule naming it. An unconstrained rule is distinct from a constrained one, so
+adding a `WHERE` to an existing GRANT creates a second rule rather than narrowing
+the first — and because a rule is matched on its constraint, re-running a script
+updates the same rules instead of accumulating new ones.
+
 ### [Multiple Roles on the Same Entity](#multiple-roles-on-the-same-entity)
 
 Each GRANT creates a separate access rule. An entity can have rules for multiple roles:
@@ -11146,7 +11280,8 @@ A full `REVOKE` (without rights list) removes the entire access rule. A partial 
 ## [Viewing Entity Access](#viewing-entity-access)
 
 ```
--- See which roles have access to an entity
+-- See which roles have access to an entity (the two spellings are synonyms)
+SHOW ACCESS ON ENTITY Shop.Customer;
 SHOW ACCESS ON Shop.Customer;
 
 -- Full matrix across a module
@@ -14487,6 +14622,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **CONV012** | Exclusive split captions – Checks that decision branches have meaningful captions |
 | **CONV013** | Error handling on external calls – Ensures external service calls have error handling |
 | **CONV014** | No continue error handling – Warns against using CONTINUE error handling without logging |
+| **MDL-FLOW01** | Un-describable branch structure – Decision branches that re-enter each other’s paths, so `DESCRIBE MICROFLOW` cannot render them as nested `IF`s without changing what they mean |
 
 ## [Running Built-in Rules](#running-built-in-rules)
 
@@ -23571,7 +23707,7 @@ DROP MICROFLOW Sales.ACT_CreateOrder;
 ## [Synopsis](#synopsis-31)
 
 ```
-CREATE [ OR MODIFY ] JAVA ACTION module.Name ( parameters )
+CREATE [ OR MODIFY ] JAVA ACTION module.Name [ FOLDER 'folder_path' ] ( parameters )
     RETURNS type
     [ EXPOSED AS 'caption' IN 'category' ]
     AS $$ java_code $$
@@ -23601,6 +23737,8 @@ The optional `EXPOSED AS` clause makes the action visible in the Studio Pro tool
 
 [`module.Name`](#modulename-11)
 The qualified name of the Java action.
+[`FOLDER 'folder_path'`](#folder-folder_path)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`parameters`](#parameters-1-1)
 Comma-separated parameter declarations. Each parameter has a name, colon, and type. Supported types:
 
@@ -23716,7 +23854,7 @@ AS $$ return false; $$;
 ## [Synopsis](#synopsis-32)
 
 ```
-CREATE [ OR MODIFY ] JAVASCRIPT ACTION module.Name ( parameters )
+CREATE [ OR MODIFY ] JAVASCRIPT ACTION module.Name [ FOLDER 'folder_path' ] ( parameters )
     RETURNS type
     [ EXPOSED AS 'caption' IN 'category' ]
     [ PLATFORM Web | Native | Hybrid | All ]
@@ -23759,6 +23897,8 @@ toolbox under the given category.
 
 [`module.Name`](#modulename-12)
 The qualified name of the JavaScript action.
+[`FOLDER 'folder_path'`](#folder-folder_path-1)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`parameters`](#parameters-1-2)
 Comma-separated parameter declarations (name, colon, type). Supported types:
 
@@ -24703,7 +24843,7 @@ Mendix security operates at two levels. **Module roles** define permissions with
 | Show module roles | `SHOW MODULE ROLES [IN module]` |
 | Show user roles | `SHOW USER ROLES` |
 | Show demo users | `SHOW DEMO USERS` |
-| Show access on element | `SHOW ACCESS ON MICROFLOW|PAGE module.Name` |
+| Show access on element | `SHOW ACCESS ON [ENTITY|MICROFLOW|PAGE|NANOFLOW] module.Name` |
 | Show security matrix | `SHOW SECURITY MATRIX [IN module]` |
 | Alter project security level | `ALTER PROJECT SECURITY LEVEL OFF|PROTOTYPE|PRODUCTION` |
 | Toggle demo users | `ALTER PROJECT SECURITY DEMO USERS ON|OFF` |
@@ -24841,7 +24981,9 @@ Grants access rights to module roles. There are four forms of the GRANT statemen
 
 ### [Entity Access](#entity-access-3)
 
-The entity access form creates or updates an access rule on an entity for a given module role. **GRANT is additive**: if the role already has an access rule on the entity, the new rights are merged with existing ones. Existing permissions are never downgraded by a GRANT.
+The entity access form creates or updates an access rule on an entity for a given module role. **GRANT is additive**: if the role already has an access rule on the entity, the new rights are merged with existing ones. Existing permissions are never downgraded by a GRANT — use [REVOKE](#revoke-1) to take access away.
+
+A rule is identified by its role set **and** its `WHERE` constraint, so two GRANTs with different constraints produce two rules rather than overwriting one another. Mendix combines them: a role’s effective access is the union of every rule naming it.
 
 Entity access rules control:
 
@@ -25362,7 +25504,7 @@ DESCRIBE NAVIGATION Responsive;
 ## [Synopsis](#synopsis-45)
 
 ```
-CREATE [ OR MODIFY ] MENU module.name ( menu_item [ menu_item ... ] )
+CREATE [ OR MODIFY ] MENU module.name [ FOLDER 'folder_path' ] ( menu_item [ menu_item ... ] )
 DESCRIBE MENU module.name
 DROP MENU module.name
 
@@ -25406,6 +25548,8 @@ a fixed point.
 
 [`module.name`](#modulename-20)
 Qualified name of the menu document.
+[`FOLDER 'folder_path'`](#folder-folder_path-2)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`'caption'`](#caption-2)
 The item’s label, in single quotes.
 [`PAGE` / `MICROFLOW`](#page--microflow)
@@ -25883,7 +26027,7 @@ The optional `CUSTOM_NAME_MAP` clause overrides the attribute names generated fr
 [`module.Name`](#modulename-23)
 The qualified name of the JSON structure.
 [`FOLDER 'folder/path'`](#folder-folderpath)
-Optional. Places the document in the specified Studio Pro folder (forward-slash separated).
+Optional. Places the document in the specified Studio Pro folder (forward-slash separated), creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`COMMENT 'description'`](#comment-description)
 Optional. A description for the JSON structure document.
 [`SNIPPET 'json_sample'`](#snippet-json_sample)
@@ -25938,6 +26082,7 @@ CREATE OR REPLACE JSON STRUCTURE MyModule.JSON_Pet
 
 ```
 CREATE [ OR MODIFY ] IMPORT MAPPING module.Name
+    [ FOLDER 'folder_path' ]
     [ WITH JSON STRUCTURE module.JsonStructure ]
     [ WITH XML SCHEMA module.XmlSchema ]
 {
@@ -25989,6 +26134,8 @@ If `OR MODIFY` is specified and the mapping already exists, it is updated in pla
 
 [`module.Name`](#modulename-24)
 The qualified name of the import mapping.
+[`FOLDER 'folder_path'`](#folder-folder_path-3)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`WITH JSON STRUCTURE module.JsonStructure`](#with-json-structure-modulejsonstructure)
 Associates the mapping with the named JSON structure. The structure defines the JSON shape.
 [`WITH XML SCHEMA module.XmlSchema`](#with-xml-schema-modulexmlschema)
@@ -26107,6 +26254,7 @@ exists”*, and Studio Pro shows the field unmapped.
 
 ```
 CREATE [ OR MODIFY ] EXPORT MAPPING module.Name
+    [ FOLDER 'folder_path' ]
     [ WITH JSON STRUCTURE module.JsonStructure ]
     [ WITH XML SCHEMA module.XmlSchema ]
     [ NULL VALUES { LeaveOutElement | SendAsNil } ]
@@ -26156,6 +26304,8 @@ If `OR MODIFY` is specified and the mapping already exists, it is updated in pla
 
 [`module.Name`](#modulename-25)
 The qualified name of the export mapping.
+[`FOLDER 'folder_path'`](#folder-folder_path-4)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`WITH JSON STRUCTURE module.JsonStructure`](#with-json-structure-modulejsonstructure-1)
 Associates the mapping with the named JSON structure.
 [`WITH XML SCHEMA module.XmlSchema`](#with-xml-schema-modulexmlschema-1)
@@ -26252,6 +26402,7 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 
 ```
 CREATE [ OR MODIFY ] DATA TRANSFORMER module.Name
+    [ FOLDER 'folder_path' ]
     SOURCE { JSON | XML } 'sample'
 {
     { JSLT | XSLT } 'transformation';
@@ -26284,6 +26435,8 @@ The `SOURCE` clause provides a representative input document. Mendix uses it to 
 
 [`module.Name`](#modulename-26)
 The qualified name of the data transformer.
+[`FOLDER 'folder_path'`](#folder-folder_path-5)
+Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`SOURCE JSON 'sample'`](#source-json-sample)
 A representative JSON input document. Multi-line samples can use `$$...$$` quoting.
 [`SOURCE XML 'sample'`](#source-xml-sample)
@@ -28272,14 +28425,35 @@ MOVE document_type qualified_name TO FOLDER 'folder_path' IN module_name
 ```
 ## [Description](#description-76)
 
-Moves a document to a different folder or module. Supported document types are `PAGE`, `MICROFLOW`, `NANOFLOW`, `SNIPPET`, `ENUMERATION`, and `ENTITY`. When moving to a folder, missing intermediate folders are created automatically. Cross-module moves change the qualified name of the document, which may break by-name references elsewhere in the project.
+Moves a document to a different folder or module. Every top-level document type is supported, spelled the way `DESCRIBE` spells it. When moving to a folder, missing intermediate folders are created automatically. Cross-module moves change the qualified name of the document, which may break by-name references elsewhere in the project.
 
 Entity moves only support moving to a module (not to a folder), because entities are embedded in domain model documents.
+
+A `FOLDER` clause on `CREATE OR MODIFY` moves an existing document as well, so a
+script that already creates a document does not need a separate `MOVE` to place
+it.
 
 ## [Parameters](#parameters-79)
 
 [**document\_type**](#document_type)
-The type of document to move. One of: `PAGE`, `MICROFLOW`, `NANOFLOW`, `SNIPPET`, `ENUMERATION`, `ENTITY`.
+The type of document to move:
+
+| Group | Types |
+| --- | --- |
+| Pages | `PAGE`, `SNIPPET`, `BUILDING BLOCK`, `LAYOUT`, `MENU` |
+| Logic | `MICROFLOW`, `NANOFLOW`, `WORKFLOW`, `QUEUE`, `SCHEDULED EVENT` |
+| Domain | `ENUMERATION`, `CONSTANT`, `REGULAR EXPRESSION`, `ENTITY` |
+| Mappings | `JSON STRUCTURE`, `IMPORT MAPPING`, `EXPORT MAPPING` |
+| Code | `JAVA ACTION`, `JAVASCRIPT ACTION`, `DATABASE CONNECTION`, `DATA TRANSFORMER` |
+| Resources | `IMAGE COLLECTION`, `ICON COLLECTION` |
+| Integration | `REST CLIENT`, `PUBLISHED REST SERVICE`, `ODATA CLIENT`, `ODATA SERVICE`, `BUSINESS EVENT SERVICE` |
+| AI | `MODEL`, `AGENT`, `KNOWLEDGE BASE`, `CONSUMED MCP SERVICE` |
+
+`FOLDER` moves a folder rather than a document — see the example below.
+
+If the named document turns out to be a different type, the statement is refused
+and the error names what it actually is.
+
 [**qualified\_name**](#qualified_name-9)
 The current `Module.Name` of the document to move.
 [**module\_name**](#module_name-3)
@@ -28316,6 +28490,45 @@ MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
 MOVE PAGE OldModule.CustomerPage TO FOLDER 'Screens' IN NewModule;
+
+```
+### [Move a mapping or JSON structure](#move-a-mapping-or-json-structure)
+
+```
+MOVE IMPORT MAPPING MyModule.IMM_Order TO FOLDER 'Private/Import mappings';
+MOVE EXPORT MAPPING MyModule.EXM_Order TO FOLDER 'Private/Export mappings';
+MOVE JSON STRUCTURE MyModule.JSON_Order TO FOLDER 'Private/JSON structures';
+
+```
+### [Place a document while creating it](#place-a-document-while-creating-it)
+
+Every document type takes a `FOLDER` clause on `CREATE`, so a document can be
+placed by the statement that creates it. On pages and snippets it is a property
+(`Folder: 'path'`); on microflows and nanoflows a keyword before `BEGIN`; on
+everything else a keyword straight after the qualified name:
+
+```
+CREATE OR MODIFY JSON STRUCTURE MyModule.JSON_Order
+  FOLDER 'Private/JSON structures'
+  SNIPPET '{"id": 1}';
+
+CREATE QUEUE MyModule.Q_Orders FOLDER 'Private/Queues' ( Parallelism: 3 );
+
+CREATE JAVA ACTION MyModule.JA_Sync FOLDER 'Private/Java' ()
+  RETURNS String AS $$return null;$$;
+
+```
+
+The clause applies to an existing document too, so re-running a script that
+gained one files the document rather than leaving it where it was. Omitting the
+clause leaves the document where it is; it never returns it to the module root.
+
+`DESCRIBE` emits the clause, so a description replays into the same folder.
+
+### [Move a folder](#move-a-folder)
+
+```
+MOVE FOLDER MyModule.OldName TO FOLDER 'Archive';
 
 ```
 ### [Check impact before a cross-module move](#check-impact-before-a-cross-module-move)
@@ -29586,6 +29799,33 @@ microflow. mxcli carries the stored value onto the rebuilt document instead of
 minting a new one, so re-running a script does not renumber operations in your
 deployed model.
 
+## [A changed document only shows what changed](#a-changed-document-only-shows-what-changed)
+
+Skipping the write answers “nothing changed”. When something *did* change, the
+document is still rebuilt from scratch — so without further care, a one-line edit
+lands as a wholesale replacement. Editing a single argument of a single
+JavaScript action call used to re-mint **36 of a nanoflow’s 37** element
+identities; the same edit to a microflow re-minted 21 of 22. Studio Pro’s changes
+view and `git diff` both key on those identities, so a two-line change read as
+“the whole document was replaced”. It was also cumulative: changing a value and
+changing it back produced a semantically identical document that shared none of
+its element IDs with the original.
+
+mxcli now matches the rebuilt document against the stored one element by element
+— by shape, and by name where there is one — and puts the stored `$ID` back on
+every element that still corresponds, rewriting each pointer to it in the same
+pass. On the case above the diff is now the one changed line, all 37 identities
+kept, and a change plus its revert returns to the original bytes exactly.
+
+Inserting or deleting an activity mints IDs only for the elements that are
+genuinely new; the rest of the flow keeps its identities rather than shifting
+onto its neighbours’.
+
+Element IDs are *not* the database’s identity — a `GUID` is, and that has always
+been carried through. See [the note in
+CLAUDE.md](https://github.com/ako/mxcli/blob/main/CLAUDE.md) on why the two must
+not be confused.
+
 ## [Both engines, every write path](#both-engines-every-write-path)
 
 The policy lives in one place (`modelsdk/canon`) and is applied at the single
@@ -29623,9 +29863,22 @@ Two cautions, both of which produce a meaningless zero:
 - **Make sure the script is actually re-runnable.** A script containing
   `create module` or `create enumeration` fails on the second run and writes
   nothing, so the diff is empty for the wrong reason. Check the run’s output.
-- **Run the control.** Repeat with `MXCLI_ALWAYS_WRITE=1` and confirm the diff is
-  *non-empty*. If it is empty too, your measurement cannot detect churn and the
-  clean result proves nothing.
+- **Run the control** — and note that it is a control on *mtimes*, not on
+  content. Since identities are carried, `MXCLI_ALWAYS_WRITE=1` produces the same
+  **bytes**; what it changes is that the files are rewritten at all. Compare
+  `stat -c %y` instead of `sha256sum` and confirm the timestamps *do* move. If
+  they do not, nothing ran and the clean result proves nothing.
+  
+  ```
+  find mprcontents -name '*.mxunit' | sort | xargs stat -c '%Y %n' > t-before.txt
+  MXCLI_ALWAYS_WRITE=1 mxcli exec script.mdl -p app.mpr
+  find mprcontents -name '*.mxunit' | sort | xargs stat -c '%Y %n' > t-after.txt
+  diff t-before.txt t-after.txt    # expect output — writes landed
+  
+  ```
+
+The console tells you the same thing, per document: a statement whose write was
+skipped reports `Unchanged nanoflow: …` rather than `Replaced nanoflow: …`.
 
 For a per-unit view of what would be skipped, `scripts/mprsnapshot -canon` emits
 canonical digests keyed by unit id.
@@ -32321,7 +32574,7 @@ Everything mxcli can do, organized by use case.
 | Full-text search | `SEARCH 'keyword'` | Across all strings and source |
 | Show languages | `LIST LANGUAGES` | All languages in the project |
 | Show project security | `LIST PROJECT SECURITY` | Security overview |
-| Show access rules | `LIST ACCESS ON Module.Entity` | Entity/microflow/page access |
+| Show access rules | `LIST ACCESS ON [ENTITY] Module.Name` | Entity/microflow/page/nanoflow access |
 | Show settings | `LIST SETTINGS` | Project-level settings |
 
 ## [Write: Create and modify documents](#write-create-and-modify-documents)
@@ -33515,7 +33768,10 @@ AUTHENTICATION Basic, Session
 | --- | --- | --- |
 | Microflow folder | `FOLDER 'path'` (before BEGIN) | `CREATE MICROFLOW ... FOLDER 'ACT' BEGIN ... END;` |
 | Page folder | `Folder: 'path'` (in properties) | `CREATE PAGE ... (Folder: 'Pages/Detail') { ... }` |
-| Move to folder | `MOVE PAGE|MICROFLOW|SNIPPET|NANOFLOW|ENUMERATION Module.Name TO FOLDER 'path';` | Folders created automatically |
+| Move to folder | `MOVE <doctype> Module.Name TO FOLDER 'path';` | Folders created automatically. Any top-level doctype, spelled as `DESCRIBE` spells it |
+| Move a mapping / structure | `MOVE IMPORT MAPPING|EXPORT MAPPING|JSON STRUCTURE Module.Name TO FOLDER 'path';` |  |
+| Place while creating | `CREATE <doctype> Module.Name FOLDER 'path' ...` | Every doctype. Pages/snippets use `Folder: 'path'` as a property; microflows/nanoflows a keyword before `BEGIN` |
+| Place an existing document | `CREATE OR MODIFY ... FOLDER 'path' ...` | Moves it; omitting the clause leaves placement alone |
 | Move to module root | `MOVE PAGE Module.Name TO Module;` | Removes from folder |
 | Move across modules | `MOVE PAGE Old.Name TO NewModule;` | **Breaks by-name references** – use `LIST IMPACT OF` first |
 | Move to folder in other module | `MOVE PAGE Old.Name TO FOLDER 'path' IN NewModule;` |  |
@@ -33531,7 +33787,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | List module roles | `LIST MODULE ROLES [IN Module];` | All roles or filtered by module |
 | List user roles | `LIST USER ROLES;` | Project-level user roles |
 | List demo users | `LIST DEMO USERS;` | Configured demo users |
-| List access on element | `LIST ACCESS ON MICROFLOW|PAGE|Entity Mod.Name;` | Which roles can access |
+| List access on element | `LIST ACCESS ON [ENTITY|MICROFLOW|PAGE|NANOFLOW] Mod.Name;` | Which roles can access; a bare name means the entity |
 | List security matrix | `LIST SECURITY MATRIX [IN Module];` | Full access overview |
 | Create module role | `CREATE MODULE ROLE Mod.Role [DESCRIPTION 'text'];` |  |
 | Drop module role | `DROP MODULE ROLE Mod.Role;` |  |

@@ -1,3 +1,7 @@
+## 2026-08-21 -- mxcli v0.18.0 @ b763353
+- +272 / -16 lines
+- Sections changed: [A changed document only shows what changed](#a-changed-document-only-shows-what-changed), [Convention Rules](#convention-rules), [Data Widgets](#data-widgets), [Description](#description-40), [Description](#description-76), [Examples](#examples-3), [Examples](#examples-88), [Inspecting Security](#inspecting-security) (+22 more)
+
 ## 2026-08-19 -- mxcli v0.18.0 @ 8b7f1fa
 - +271 / -24 lines
 - Sections changed: [ALTER ENTITY](#alter-entity-2), [CASE (Enum Split)](#case-enum-split), [Description](#description-21), [Enumeration Values](#enumeration-values), [Examples](#examples-40), [Expression Contexts](#expression-contexts), [How tests execute](#how-tests-execute), [IF / ELSE](#if--else) (+9 more)
