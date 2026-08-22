@@ -1,3 +1,7 @@
+## 2026-08-22 -- mxcli v0.19.0 @ b313ff0
+- +360 / -225 lines
+- Sections changed: Customer Module Tests, Customer module, [Test Annotations](#test-annotations), [Test Formats](#test-formats), [Testing](#testing), Association Setup, Entity Creation, Names are concatenated in display order (+58 more)
+
 ## 2026-08-21 -- mxcli v0.18.0 @ b763353
 - +272 / -16 lines
 - Sections changed: [A changed document only shows what changed](#a-changed-document-only-shows-what-changed), [Convention Rules](#convention-rules), [Data Widgets](#data-widgets), [Description](#description-40), [Description](#description-76), [Examples](#examples-3), [Examples](#examples-88), [Inspecting Security](#inspecting-security) (+22 more)

@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.18.0 @ b763353
-Generated: 2026-08-21T02:57:16Z
+Version:   mxcli v0.19.0 @ b313ff0
+Generated: 2026-08-22T02:49:18Z
 
 ---
 
@@ -2184,7 +2184,7 @@ CREATE ASSOCIATION MyModule.Order_Product
 
 ```
 
-Options: `PREVENT` (block deletion if referenced), `DELETE` (cascade delete), or leave it out for the default behavior.
+Options: `PREVENT` (block deletion if referenced), `CASCADE` (delete the associated objects too), or leave it out for the default behavior — delete the object and null out the references.
 
 ## [Using OR MODIFY for idempotent scripts](#using-or-modify-for-idempotent-scripts)
 
@@ -11019,6 +11019,62 @@ ALTER PROJECT SECURITY DEMO USERS ON;
 ALTER PROJECT SECURITY DEMO USERS OFF;
 
 ```
+## [Guest (Anonymous) Access](#guest-anonymous-access)
+
+Guest access is Studio Pro’s “Anonymous users” setting: it lets people use part of
+the app without signing in. It is a flag plus a user role, and the role carries
+the weight – **whatever it can read is public**.
+
+```
+-- The role anonymous visitors are given. System.User is what lets an
+-- unauthenticated session exist at all.
+CREATE USER ROLE Anonymous (Shop.Viewer, System.User);
+
+ALTER PROJECT SECURITY GUEST ACCESS ON ROLE Anonymous;
+
+-- Grant exactly what should be public, and nothing else.
+GRANT Anonymous ON Shop.Product (read *);
+
+```
+
+Turning it off keeps the stored role, so switching it back on needs no `ROLE`
+clause:
+
+```
+ALTER PROJECT SECURITY GUEST ACCESS OFF;
+ALTER PROJECT SECURITY GUEST ACCESS ON;
+
+```
+### [The role is mandatory](#the-role-is-mandatory)
+
+Mendix fails the build with **CE0133** – *“No user role for anonymous users
+selected even though the feature anonymous users is enabled”* – when guest access
+is on and no role is set. `GUEST ACCESS ON` is therefore refused unless a role is
+given in the statement or already stored in the project:
+
+```
+Error: GUEST ACCESS ON requires a role: no anonymous user role is configured,
+and Mendix rejects anonymous access without one (CE0133).
+
+```
+### [mxcli validates the role; Mendix does not](#mxcli-validates-the-role-mendix-does-not)
+
+An anonymous role that does not exist builds with **zero** extra errors in
+Mendix – the app is valid, and anonymous visitors simply get nothing. That makes
+a typo invisible until someone opens the public page, so mxcli checks the name
+against the project’s user roles and refuses an unknown one:
+
+```
+Error: user role not found: Anonymus (project user roles: Administrator, User).
+
+```
+### [Review what you made public](#review-what-you-made-public)
+
+Lint rule **SEC004** flags a project with guest access enabled, because any
+unconstrained `read *` granted to the anonymous role is readable by the whole
+internet ([DIVD-2022-00019](https://csirt.divd.nl/cases/DIVD-2022-00019/)). Add an
+XPath constraint to each anonymous grant, or do not grant it.
+
 ## [See Also](#see-also-18)
 
 - [Module Roles and User Roles](#module-roles-and-user-roles) – defining roles
@@ -15506,7 +15562,10 @@ Each time a project is opened, it is added to the history via `tui.SaveHistory(p
 
 # [Testing](#testing)
 
-mxcli includes a testing framework for validating Mendix projects using MDL test files. Tests verify that MDL scripts execute correctly and that the resulting project passes validation.
+mxcli includes a testing framework for a Mendix app’s own logic: each test calls
+into the running app — a microflow, a retrieve — and asserts on what came back or
+what was written. It is not a check that an MDL script parses; that is
+[`mxcli check`](#validating-with-mxcli-check).
 
 ## [Overview](#overview-1)
 
@@ -15514,17 +15573,17 @@ The testing framework supports two test file formats:
 
 | Format | Extension | Description |
 | --- | --- | --- |
-| MDL test files | `.test.mdl` | Pure MDL scripts with test annotations |
-| Markdown test files | `.test.md` | Literate tests with prose and embedded MDL code blocks |
+| MDL test files | `.test.mdl` | Tests as MDL blocks with annotations |
+| Markdown test files | `.test.md` | Literate tests with prose and embedded `mdl-test` blocks |
 
 ## [Prerequisites](#prerequisites-6)
 
-Tests execute against a real Mendix runtime. **Docker is one way to get one, not the only one** — `--local` uses mxcli’s own runtime with no daemon, and is the faster path (see [Running Tests](#running-tests) for the mode comparison and the `--watch` / `--attach` loops). On the Docker path the test runner:
+Tests execute against a real Mendix runtime. **Docker is one way to get one, not the only one** — `--local` uses mxcli’s own runtime with no daemon, and is the faster path (see [Running Tests](#running-tests) for the mode comparison and the `--watch` / `--attach` loops). Either way the runner:
 
-1. Creates a fresh Mendix project using `mx create-project`
-2. Executes the MDL test script against the project
-3. Validates the result with `mx check`
-4. Reports pass/fail results
+1. Installs a temporary `MxTest` module holding one microflow per test
+2. Boots (or reuses) the app and invokes each test over a token-guarded endpoint
+3. Evaluates that test’s assertions and reports pass, fail or error
+4. Removes what it installed, leaving the project byte-identical
 
 ## [Quick Start](#quick-start-3)
 
@@ -15539,7 +15598,7 @@ mxcli test tests/sales.test.mdl -p app.mpr
 ## [Test Workflow](#test-workflow)
 
 1. Write test files using `.test.mdl` or `.test.md` format
-2. Add `@test` and `@expect` annotations for assertions
+2. Name each test with `@test` and assert with `@expect` / `@verify` / `@throws`
 3. Run tests with `mxcli test`
 4. Review results
 
@@ -15548,24 +15607,31 @@ mxcli test tests/sales.test.mdl -p app.mpr
 ```
 -- tests/customer.test.mdl
 
--- @test Create customer entity
-CREATE PERSISTENT ENTITY MyFirstModule.Customer (
-    Name: String(200) NOT NULL,
-    Email: String(200)
-);
--- @expect 0 errors
+/**
+ * @test a new customer is active by default
+ * @expect $customer/IsActive = true
+ */
+$customer = call microflow MyFirstModule.ACT_CreateCustomer(Name = 'Acme');
+/
 
--- @test Add association
-CREATE ASSOCIATION MyFirstModule.Order_Customer
-    FROM MyFirstModule.Order
-    TO MyFirstModule.Customer
-    TYPE Reference;
--- @expect 0 errors
+/**
+ * @test the seed microflow writes five customers
+ * @cleanup none
+ * @expect count($customers) = 5
+ * @verify select count(*) as n from MyFirstModule.Customer = 5
+ */
+call microflow MyFirstModule.ACT_Seed();
+retrieve $customers from MyFirstModule.Customer;
+/
 
 ```
+
+An assertion the runner cannot evaluate is reported as an ERROR, never as a
+pass — see [Test Annotations](#test-annotations).
+
 ## [Playwright UI Testing](#playwright-ui-testing)
 
-For browser-based testing that verifies widgets render correctly in the DOM, see [Playwright Testing](#playwright-testing). While `mxcli test` validates that MDL scripts execute correctly and the project passes `mx check`, Playwright testing goes further by verifying the running application in a real browser – checking that widgets are visible, forms accept input, and navigation works.
+For browser-based testing that verifies widgets render correctly in the DOM, see [Playwright Testing](#playwright-testing). `mxcli test` asserts on what the app’s logic returns and writes; Playwright testing asserts on what the app renders – that widgets are visible, forms accept input, and navigation works.
 
 ```
 # MDL validation (this page)
@@ -15578,222 +15644,286 @@ mxcli playwright verify tests/ -p app.mpr
 ## [Related Pages](#related-pages-2)
 
 - [Test Formats](#test-formats) – `.test.mdl` and `.test.md` file formats
-- [Test Annotations](#test-annotations) – `@test` and `@expect` annotations
+- [Test Annotations](#test-annotations) – `@test`, `@expect`, `@verify`, `@throws`, `@cleanup`
 - [Running Tests](#running-tests) – `mxcli test` command and Docker requirements
 - [Playwright Testing](#playwright-testing) – Browser-based UI testing with playwright-cli
 - [Diff](#diff) – Comparing scripts against project state
 
 # [Test Formats](#test-formats)
 
-mxcli supports two test file formats: `.test.mdl` for pure MDL tests and `.test.md` for literate tests with documentation.
+`mxcli test` reads two file formats: `.test.mdl` for plain MDL tests, and
+`.test.md` for tests embedded in documentation. Both describe the same thing — a
+named test, some MDL to run against the app, and what must be true afterwards —
+and both use the same [annotations](#test-annotations).
 
-## [.test.mdl Format](#testmdl-format)
+A test’s body calls into the app. It is not a script that builds a project: the
+statements run against a booted runtime, and the assertions are about what they
+returned or wrote.
 
-Pure MDL scripts with test annotations. Each test case is marked with `@test` and optionally `@expect`.
+## [`.test.mdl`](#testmdl)
+
+A test is a javadoc comment followed by its statements. A line containing just
+`/` ends it, the way it ends any MDL block:
 
 ```
--- @test Create a new module
-CREATE MODULE TestModule;
--- @expect 0 errors
-
--- @test Create entity with attributes
-CREATE PERSISTENT ENTITY TestModule.Customer (
-    Name: String(200) NOT NULL,
-    Email: String(200) UNIQUE,
-    IsActive: Boolean DEFAULT true
+/**
+ * @test concatenating a name
+ * @expect $result = 'John Doe'
+ */
+$result = call microflow MyModule.ConcatNames(
+  FirstName = 'John', LastName = 'Doe'
 );
--- @expect 0 errors
+/
 
--- @test Create enumeration
-CREATE ENUMERATION TestModule.Status (
-    Active 'Active',
-    Inactive 'Inactive'
+/**
+ * @test the seed microflow writes five brands
+ * @cleanup none
+ * @expect count($Brands) = 5
+ */
+retrieve $Brands from eShop.CatalogBrand;
+/
+
+```
+
+Two rules about layout are worth knowing, because getting them wrong used to be
+silent:
+
+- **A file may open with a header comment** — a `/** … */` block or `--` lines —
+  and it is not part of the first test. The test’s own doc comment is the last
+  one above its statements. A `/** … */` header may carry
+  [`@setup`](#setup), which then applies to every test in the
+  file.
+- **One `@test` per block.** Because the `/` is what ends a test, omitting it
+  merges two tests into one. That is refused by name rather than resolved, since
+  either resolution runs one of the two and drops the other.
+
+## [`.test.md`](#testmd)
+
+The same tests, inside `mdl-test` fenced code blocks, with prose around them. One
+block is one test; everything outside the fences is documentation and is ignored.
+
+```
+# Customer module
+
+## Names are concatenated in display order
+
+Given a first and a last name, `ConcatNames` returns them separated by a space:
+
+```mdl-test
+/**
+ * @test concatenating a name
+ * @expect $result = 'John Doe'
+ */
+$result = call microflow MyModule.ConcatNames(
+  FirstName = 'John', LastName = 'Doe'
 );
--- @expect 0 errors
-
--- @test Create microflow
-CREATE MICROFLOW TestModule.ACT_Activate(
-    $customer: TestModule.Customer
-) RETURNS Boolean AS $result
-BEGIN
-    DECLARE $result Boolean = false;
-    CHANGE $customer (IsActive = true);
-    COMMIT $customer;
-    SET $result = true;
-    RETURN $result;
-END;
--- @expect 0 errors
-
-```
-## [.test.md Format](#testmd-format)
-
-Literate test files that combine prose documentation with embedded MDL code blocks. The test runner extracts and executes the MDL code blocks while ignoring the prose.
-
-```
-# Customer Module Tests
-
-This test suite validates the customer management module.
-
-## Entity Creation
-
-Create the customer entity with standard fields:
-
-```sql
-CREATE PERSISTENT ENTITY TestModule.Customer (
-    Name: String(200) NOT NULL,
-    Email: String(200)
-);
-```
-
-## Association Setup
-
-Link customers to their orders:
-
-```sql
-CREATE ASSOCIATION TestModule.Order_Customer
-    FROM TestModule.Order
-    TO TestModule.Customer
-    TYPE Reference;
 ```
 
 ```
 
-The `.test.md` format is useful for:
+Use it when the reasoning around a test is worth as much as the test — a
+specification that stays honest because it runs.
 
-- Documenting test intent alongside the test code
-- Creating test suites that serve as tutorials
-- Sharing test cases with non-technical stakeholders
+## [File organisation](#file-organisation)
 
-## [File Organization](#file-organization)
+`mxcli test` takes a file or a directory. A directory run picks up every
+`*.test.mdl` and `*.test.md` in it (not recursively) and reports them as one
+suite.
 
 ```
 tests/
-├── domain-model.test.mdl     # Entity and association tests
-├── microflows.test.mdl        # Microflow logic tests
-├── security.test.mdl          # Access rule tests
-├── pages.test.mdl             # Page creation tests
-└── integration.test.md        # Full integration test with docs
+├── domain-model.test.mdl
+├── microflows.test.mdl
+├── security.test.mdl
+└── ordering.test.md
 
 ```
-## [Naming Conventions](#naming-conventions-1)
 
-- Use descriptive file names that indicate what is being tested
-- Group related tests in the same file
-- Use the `@test` annotation to name individual test cases within a file
+Names are yours to choose; the `.test.mdl` / `.test.md` suffix is what makes a
+file a test file.
+
+## [Related Pages](#related-pages-3)
+
+- [Test Annotations](#test-annotations) — `@test`, `@expect`, `@verify`, `@throws`, `@cleanup`
+- [Running Tests](#running-tests) — `mxcli test`, `--local`, `--watch`, `--attach`
 
 # [Test Annotations](#test-annotations)
 
-Test annotations control test execution and define expectations. They are placed in comments within `.test.mdl` files.
-
-## [@test](#test)
-
-Marks the start of a named test case.
-
-**Syntax:**
+Annotations describe what a test is and what must be true when it finishes. They
+live in the javadoc comment above a test’s statements, one per line, each opening
+its line:
 
 ```
--- @test <description>
-
-```
-
-**Example:**
-
-```
--- @test Create customer entity
-CREATE PERSISTENT ENTITY MyModule.Customer (
-    Name: String(200) NOT NULL
-);
+/**
+ * @test dealing a board writes 81 cells
+ * @cleanup none
+ * @expect $result = 'ok'
+ * @verify select count(*) as n from Sudoku.Cell = 81
+ */
+$result = call microflow Sudoku.ACT_DealGame();
+/
 
 ```
 
-Each `@test` annotation starts a new test case. All MDL statements between one `@test` and the next (or end of file) belong to that test case.
-
-## [@expect](#expect)
-
-Defines the expected outcome of a test case.
-
-**Syntax:**
-
-```
--- @expect <expectation>
-
-```
-### [Expected Outcomes](#expected-outcomes)
-
-| Expectation | Description |
+| Tag | Purpose |
 | --- | --- |
-| `0 errors` | The test should complete with no errors from `mx check` |
-| `error` | The test is expected to produce an error |
-| `<n> errors` | The test should produce exactly N errors |
+| `@test <name>` | Names the test. Required — a doc comment without it is not a test. |
+| `@expect <condition>` | A Mendix expression over the body’s variables that must be true. Repeatable. |
+| `@verify <oql> <op> <value>` | An OQL post-condition on the database. Repeatable. |
+| `@throws '<message>'` | The body is expected to raise an error. |
+| `@setup <Module.Microflow>` | A microflow to call before the body. Repeatable. |
+| `@cleanup rollback|none` | Whether the test’s writes survive it. `rollback` is the default. |
 
-**Examples:**
+A tag is read only when it **opens its line** (after the javadoc `*` and its
+indentation). Quoting one inside a sentence — ``@expect $x = 1`` — is
+documentation, not an assertion.
 
-```
--- @test Valid entity creation
-CREATE PERSISTENT ENTITY MyModule.Customer (
-    Name: String(200) NOT NULL
-);
--- @expect 0 errors
+## [`@test`](#test)
 
--- @test Missing module should fail
-CREATE PERSISTENT ENTITY NonExistent.Entity (
-    Name: String(200)
-);
--- @expect error
+Names the test, and marks the doc comment as one. Everything between that comment
+and the `/` that ends the block is the test’s body.
 
-```
-## [Complete Example](#complete-example-5)
+A file may open with a header comment, in either spelling, and it is not part of
+the first test. Exactly one `@test` may appear per block: the `/` is what ends a
+test, and leaving it out is refused by name rather than silently running one of
+the two tests it merges.
 
-```
--- @test Setup: Create module and enumeration
-CREATE MODULE TestSales;
+## [`@expect`](#expect)
 
-CREATE ENUMERATION TestSales.OrderStatus (
-    Draft 'Draft',
-    Submitted 'Submitted',
-    Completed 'Completed'
-);
--- @expect 0 errors
-
--- @test Create entity with enum attribute
-CREATE PERSISTENT ENTITY TestSales.Order (
-    OrderNumber: String(50) NOT NULL,
-    Status: Enumeration(TestSales.OrderStatus) DEFAULT 'Draft',
-    TotalAmount: Decimal DEFAULT 0
-);
--- @expect 0 errors
-
--- @test Create microflow with validation
-CREATE MICROFLOW TestSales.ACT_SubmitOrder(
-    $order: TestSales.Order
-) RETURNS Boolean AS $success
-BEGIN
-    DECLARE $success Boolean = false;
-
-    IF $order/TotalAmount <= 0 THEN
-        VALIDATION FEEDBACK $order/TotalAmount MESSAGE 'Total must be positive';
-        RETURN false;
-    END IF;
-
-    CHANGE $order (Status = 'Submitted');
-    COMMIT $order;
-    SET $success = true;
-    RETURN $success;
-END;
--- @expect 0 errors
-
--- @test Security: grant access
-CREATE MODULE ROLE TestSales.User;
-GRANT EXECUTE ON MICROFLOW TestSales.ACT_SubmitOrder TO TestSales.User;
-GRANT TestSales.User ON TestSales.Order (CREATE, DELETE, READ *, WRITE *);
--- @expect 0 errors
+Any Mendix expression that must evaluate to true — not a fixed `$var = value`
+shape:
 
 ```
-## [Notes](#notes-2)
+@expect $result = 'John Doe'                    -- equality
+@expect $product/Name != 'Widget'               -- inequality (<> is accepted too)
+@expect length($result) = 81                    -- built-in functions
+@expect find($result, '0') >= 0 and $count > 3  -- and / or / not(...)
+@expect $status = MyModule.Status.Open          -- enumeration values
+@expect count($Customers) = 5                   -- how many rows a list holds
 
-- Test cases run sequentially; earlier test cases set up state for later ones
-- The test runner validates using `mx check` after executing each test case (or the full script)
-- Tests that modify the project are run against an isolated copy, not the original MPR file
+```
+
+`count($list)` is the one aggregate an assertion can make. Counting a list is a
+Mendix Aggregate list **activity**, not an expression function, so mxcli lifts it
+into that activity ahead of the decision that evaluates the condition. `sum`,
+`average`, `minimum` and `maximum` aggregate an *attribute* over the list, which
+an assertion has no way to supply — call a microflow that returns the figure and
+assert on its result.
+
+**An assertion the runner cannot compile is an ERROR, never a pass.** Unknown
+functions, wrong arity, unbalanced parentheses, and expressions that evaluate to
+a value rather than a condition are all rejected by name:
+
+```
+ERROR  a self-evident falsehood
+       @expect randomInt($result) = 1: randomInt() is not a Mendix expression
+       function at column 1 ("randomInt")
+
+```
+
+A failing assertion reports what came back, whenever the observed value’s type is
+pinned down by the assertion itself:
+
+```
+FAIL  the board is 81 squares
+      expected length($result) = 81, actual: 27
+
+```
+
+`@expect` cannot be combined with `@throws`: a body expected to fail produces no
+result to assert on, so the combination is refused rather than ignored.
+
+## [`@verify`](#verify)
+
+`@expect` only sees what a microflow returned. Most Mendix microflows are side
+effects, so `@verify` asserts on the rows one left behind — an OQL query, a
+comparison operator, and the value it must satisfy:
+
+```
+@verify select count(*) as n from Sudoku.Cell = 81
+@verify select count(*) as n from Sudoku.Cell where Value = 0 > 0
+
+```
+
+The query runs after the microflow returns, over the same admin API `mxcli oql`
+uses. Three rules follow:
+
+- The result must be **one row and one column** (`select count(*) as n …`, or one
+  attribute of one row). OQL requires the column to be named, so write `as n`.
+- `@cleanup rollback` — the default — is **refused** with `@verify`: the writes
+  would be undone before the query could see them. Add `@cleanup none`.
+- The **legacy after-startup runner refuses the whole suite**, because its tests
+  run during boot with nothing to query yet. Use `--local` or `--attach`.
+
+A query that cannot be evaluated is an ERROR, distinct from one that returns the
+wrong value (FAIL).
+
+## [`@throws`](#throws)
+
+Marks a body that is expected to raise an error. The verdict starts as a failure
+and only the error handler clears it, so a body that completes normally fails the
+test.
+
+```
+/**
+ * @test rejects an empty order
+ * @throws 'validation failed'
+ */
+$result = call microflow Sales.ACT_Submit(Order = $empty);
+/
+
+```
+## [`@setup`](#setup)
+
+Names a **microflow** to call before the test’s own statements — a fixture in a
+Mendix app is a microflow, so there is nothing to declare:
+
+```
+/**
+ * @test the seed microflow writes five brands
+ * @setup eShop.ACT_SeedCatalog
+ * @cleanup none
+ * @expect count($Brands) = 5
+ */
+retrieve $Brands from eShop.CatalogBrand;
+/
+
+```
+
+Repeat it to compose fixtures; they run in the order written. Declare it once in
+the file’s header comment and every test in the file gets it, the file’s
+fixtures first:
+
+```
+/**
+ * Seeds every test below.
+ * @setup eShop.ACT_SeedCatalog
+ */
+
+```
+
+A header may carry only `@setup`. `@expect`, `@verify`, `@throws` and `@cleanup`
+describe one test’s execution, so a header carrying one is refused by name.
+
+The setup runs **inside the test’s transaction**, so under the `@cleanup rollback` default it is undone with the test and every test starts from the same
+state. A failing setup is an **ERROR** naming the microflow, not a FAIL: the test
+never ran, and a broken fixture should not read as a broken feature.
+
+`@setup` calls a microflow with no arguments — a fixture that needs arguments
+gets a wrapper microflow. There is no `@teardown`; `@cleanup rollback` is the
+teardown.
+
+## [`@cleanup`](#cleanup)
+
+`rollback` (the default) wraps the test in a transaction that is rolled back when
+it returns, so its writes do not survive it. `none` leaves them in place — needed
+whenever a later test, or a `@verify`, has to see them. An unknown strategy is a
+parse error.
+
+## [Related Pages](#related-pages-4)
+
+- [Test Formats](#test-formats) — the `.test.mdl` and `.test.md` file layouts
+- [Running Tests](#running-tests) — `mxcli test`, `--local`, `--watch`, `--attach`
 
 # [Running Tests](#running-tests)
 
@@ -16494,7 +16624,7 @@ mxcli playwright verify tests/ -p app.mpr --junit results.xml
 # JUnit XML output is consumed by CI systems (GitHub Actions, Jenkins, etc.)
 
 ```
-## [Related Pages](#related-pages-3)
+## [Related Pages](#related-pages-5)
 
 - [Testing](#testing) – MDL test framework (`mxcli test`)
 - [Docker Run](#mxcli-docker-run) – Building and running the Mendix app in Docker
@@ -16646,7 +16776,7 @@ For one-off queries without the REPL:
 mxcli sql --driver postgres --dsn 'postgres://user:pass@localhost:5432/mydb' "SELECT * FROM users"
 
 ```
-## [Related Pages](#related-pages-4)
+## [Related Pages](#related-pages-6)
 
 - [SQL CONNECT](#sql-connect) – Connection syntax and driver details
 - [Querying External Databases](#querying-external-databases) – Query syntax and schema exploration
@@ -16951,7 +17081,7 @@ The IMPORT pipeline:
 
 The IMPORT command automatically connects to the Mendix application’s PostgreSQL database based on the project’s configuration settings. You do not need to manually connect to the Mendix database.
 
-## [Complete Example](#complete-example-6)
+## [Complete Example](#complete-example-5)
 
 ```
 -- Connect to external source
@@ -16978,7 +17108,7 @@ IMPORT FROM legacy QUERY 'SELECT name, dept_name FROM employees WHERE active = t
 SQL DISCONNECT legacy;
 
 ```
-## [Notes](#notes-3)
+## [Notes](#notes-2)
 
 - The target entity must already exist in the Mendix project
 - Column types are automatically converted where possible
@@ -17911,7 +18041,7 @@ mxcli docker check -p app.mpr
 mxcli docker build -p app.mpr
 
 ```
-## [Related Pages](#related-pages-5)
+## [Related Pages](#related-pages-7)
 
 - [mxcli docker build](#mxcli-docker-build) – Building with PAD patching
 - [mxcli docker run](#mxcli-docker-run) – Running applications
@@ -18070,7 +18200,7 @@ mxcli docker build -p app.mpr --skip-check
 
 When using mxcli in interactive REPL mode, the TUI can auto-check the project on file changes, giving immediate feedback on whether MDL modifications introduced errors.
 
-## [Related Pages](#related-pages-6)
+## [Related Pages](#related-pages-8)
 
 - [Docker Build](#mxcli-docker-build) – Building a Mendix application with PAD patching
 - [Docker Run](#mxcli-docker-run) – Building and running the app in Docker
@@ -19040,7 +19170,7 @@ On startup, the server auto-discovers the Mendix project:
 
 If no project is found, the server still provides syntax highlighting and parse diagnostics, but semantic features (reference validation, hover definitions, completion from project) are disabled.
 
-## [Related Pages](#related-pages-7)
+## [Related Pages](#related-pages-9)
 
 - [Protocol Details](#protocol) – stdio transport and initialization
 - [Capabilities](#capabilities-1) – full list of supported LSP methods
@@ -19414,7 +19544,7 @@ mxcli add-tool cursor
 
 This creates only the tool-specific files without overwriting existing configuration.
 
-## [Related Pages](#related-pages-8)
+## [Related Pages](#related-pages-10)
 
 - [What Gets Created](#what-gets-created-2) – detailed directory listing
 - [Customizing Skills](#customizing-skills) – modifying generated skill files
@@ -19562,7 +19692,7 @@ Skills are stored in `.ai-context/skills/` (universal, shared by all tools) and 
 
 Edit any skill file to adjust the patterns the AI follows. Common customizations include:
 
-### [Naming Conventions](#naming-conventions-2)
+### [Naming Conventions](#naming-conventions-1)
 
 Change the default naming patterns in `generate-domain-model.md`:
 
@@ -19912,7 +20042,7 @@ defer reader.Close()
 
 The library automatically detects the MPR format version (v1 or v2) and handles both transparently.
 
-## [Complete Example](#complete-example-7)
+## [Complete Example](#complete-example-6)
 
 ```
 package main
@@ -20063,7 +20193,7 @@ defer writer.Close()
 
 The writer provides access to the underlying reader via `writer.Reader()`.
 
-## [Complete Example](#complete-example-8)
+## [Complete Example](#complete-example-7)
 
 ```
 package main
@@ -20730,7 +20860,7 @@ writer.CreateAssociation(dm.ID, assoc)
 
 The `api/` package provides a high-level, fluent builder API inspired by the Mendix Web Extensibility Model API. It simplifies common operations with method chaining and sensible defaults.
 
-## [Setup](#setup)
+## [Setup](#setup-1)
 
 ```
 package main
@@ -20847,7 +20977,7 @@ _, err := modelAPI.Microflows.CreateMicroflow("ACT_ProcessOrder").
     Build()
 
 ```
-## [Complete Example](#complete-example-9)
+## [Complete Example](#complete-example-8)
 
 ```
 package main
@@ -21179,7 +21309,7 @@ if err != nil {
 
 Complete fluent API examples for common tasks.
 
-## [Setup](#setup-1)
+## [Setup](#setup-2)
 
 All examples start with the same setup:
 
@@ -22641,7 +22771,7 @@ INDEX (OrderNumber)
 INDEX (OrderDate DESC);
 
 ```
-## [Notes](#notes-4)
+## [Notes](#notes-3)
 
 - `String` requires an explicit length: `String(200)`. Use `String(unlimited)` for unbounded text.
 - `EXTENDS` must appear **before** the opening parenthesis, not after the closing one.
@@ -22777,7 +22907,7 @@ ALTER ENTITY Sales.Customer
     SET POSITION (100, 200);
 
 ```
-## [Notes](#notes-5)
+## [Notes](#notes-4)
 
 - Each `ALTER ENTITY` statement performs a single operation. Chain multiple statements for multiple changes.
 - `RENAME ATTRIBUTE` updates references in microflows, pages and access rules, and rewrites XPath constraints. It does not rewrite microflow expressions (`$obj/Attr`); use `SHOW IMPACT OF` to find the documents to check, or build and read the CE0117s.
@@ -22913,7 +23043,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 );
 
 ```
-## [Notes](#notes-6)
+## [Notes](#notes-5)
 
 - Enumeration values can also be managed incrementally with `ALTER ENUMERATION ... ADD VALUE` and `ALTER ENUMERATION ... REMOVE VALUE`.
 - The `DEFAULT` value on an entity attribute references the enumeration value name as a quoted string (e.g., `DEFAULT 'Draft'`).
@@ -22969,7 +23099,7 @@ CREATE [ OR MODIFY ] ASSOCIATION module.name
     TO to_module.to_entity
     TYPE { Reference | ReferenceSet }
     [ OWNER { Default | Both | Parent | Child } ]
-    [ DELETE_BEHAVIOR { DELETE_BUT_KEEP_REFERENCES | DELETE_AND_REFERENCES } ]
+    [ DELETE_BEHAVIOR { DELETE_BUT_KEEP_REFERENCES | DELETE_AND_REFERENCES | DELETE_IF_NO_REFERENCES | CASCADE | PREVENT } ]
 
 ```
 ## [Description](#description-25)
@@ -22996,8 +23126,11 @@ The `DELETE_BEHAVIOR` clause controls what happens when an object on the FROM si
 
 | Behavior | Description |
 | --- | --- |
-| `DELETE_BUT_KEEP_REFERENCES` | Delete the object and set references to null |
+| `DELETE_BUT_KEEP_REFERENCES` | Delete the object and set references to null (the default) |
 | `DELETE_AND_REFERENCES` | Delete the object and all associated objects on the TO side |
+| `CASCADE` | Alias for `DELETE_AND_REFERENCES` |
+| `DELETE_IF_NO_REFERENCES` | Refuse the delete while anything still references the object |
+| `PREVENT` | Alias for `DELETE_IF_NO_REFERENCES` |
 
 If `OR MODIFY` is specified, the statement is idempotent: if the association already exists, it is updated to match the new definition.
 
@@ -23072,7 +23205,7 @@ CREATE ASSOCIATION HR.Employee_Department
     TYPE Reference;
 
 ```
-## [Notes](#notes-7)
+## [Notes](#notes-6)
 
 - The naming convention `Module.Child_Parent` reflects that the child (TO) entity holds the reference to the parent (FROM) entity. This can be counterintuitive – the `FROM` entity is the parent, and the `TO` entity is the child.
 - Internally, Mendix stores the FROM entity pointer as `ParentPointer` and the TO entity pointer as `ChildPointer`. These BSON field names are inverted relative to what you might expect.
@@ -24847,6 +24980,7 @@ Mendix security operates at two levels. **Module roles** define permissions with
 | Show security matrix | `SHOW SECURITY MATRIX [IN module]` |
 | Alter project security level | `ALTER PROJECT SECURITY LEVEL OFF|PROTOTYPE|PRODUCTION` |
 | Toggle demo users | `ALTER PROJECT SECURITY DEMO USERS ON|OFF` |
+| Toggle guest access | `ALTER PROJECT SECURITY GUEST ACCESS ON [ROLE UserRole]|OFF` |
 | Drop module role | `DROP MODULE ROLE module.Role` |
 | Drop user role | `DROP USER ROLE Name` |
 | Drop demo user | `DROP DEMO USER 'username'` |
@@ -25605,7 +25739,7 @@ From the command line:
 mxcli describe menu Atlas_Core.Phone_Menu -p app.mpr
 
 ```
-## [Notes](#notes-8)
+## [Notes](#notes-7)
 
 **A menu item cannot open a page that takes a required parameter.** There is nowhere
 to supply the argument, and Mendix rejects the model with **CE1571** (“No argument
@@ -26211,7 +26345,7 @@ CREATE OR MODIFY IMPORT MAPPING MyModule.IMM_Pet
 };
 
 ```
-## [Notes](#notes-9)
+## [Notes](#notes-8)
 
 - The child entity must own the FK (`FROM child TO parent`). Using the wrong association direction causes validation errors at runtime.
 - Arrays in the JSON sample map directly to child entity objects — there is no intermediate container entity (unlike export mappings).
@@ -26387,7 +26521,7 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 };
 
 ```
-## [Notes](#notes-10)
+## [Notes](#notes-9)
 
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
@@ -26633,7 +26767,7 @@ CREATE OR MODIFY MODEL MyModule."GPT4Model" (
 /
 
 ```
-### [Cleanup](#cleanup)
+### [Cleanup](#cleanup-1)
 
 ```
 DROP MODEL MyModule.GPT4Model;
@@ -26958,7 +27092,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 /
 
 ```
-## [Notes](#notes-11)
+## [Notes](#notes-10)
 
 - Agents must be dropped before their referenced models, knowledge bases, and MCP services.
 - The model and knowledge base documents must exist before the agent is created.
@@ -28727,7 +28861,7 @@ ALTER MODULE MyModule
   );
 
 ```
-## [Notes](#notes-12)
+## [Notes](#notes-11)
 
 Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
@@ -31923,7 +32057,7 @@ The catalog is implemented in `mdl/catalog/catalog.go`. It:
 
 The catalog lives for the duration of the mxcli session and is discarded on exit.
 
-## [Related Pages](#related-pages-9)
+## [Related Pages](#related-pages-11)
 
 - [SQLite Schema](#sqlite-schema) – table definitions and indexes
 - [FTS5 Full-Text Search](#fts5-full-text-search) – how full-text search works
@@ -33802,6 +33936,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Revoke entity access | `REVOKE Mod.Role ON Mod.Entity;` |  |
 | Set security level | `ALTER PROJECT SECURITY LEVEL OFF|PROTOTYPE|PRODUCTION;` |  |
 | Toggle demo users | `ALTER PROJECT SECURITY DEMO USERS ON|OFF;` |  |
+| Toggle guest access | `ALTER PROJECT SECURITY GUEST ACCESS ON ROLE UserRole|OFF;` | Anonymous users; role required (CE0133) |
 | Create demo user | `CREATE DEMO USER 'name' PASSWORD 'pass' [ENTITY Module.Entity] (UserRole, ...);` |  |
 | Drop demo user | `DROP DEMO USER 'name';` |  |
 
@@ -34239,7 +34374,7 @@ MDL does not perform implicit type conversions. Types must match exactly.
 - `Boolean` to `String`
 - Any type to `AutoNumber` (if not empty)
 
-## [Complete Example](#complete-example-10)
+## [Complete Example](#complete-example-9)
 
 ```
 /** Example entity demonstrating all data types */
