@@ -1,3 +1,7 @@
+## 2026-08-24 -- mxcli v0.19.0 @ 1421f11
+- +113 / -30 lines
+- Sections changed: Mendix Microflow Skill, [Skills and CLAUDE.md](#skills-and-claudemd), [Adding custom skills](#adding-custom-skills), [Annotations](#annotations-1), [Available skills](#available-skills), [Description](#description-28), [Microflows - Supported Statements](#microflows---supported-statements), [The format](#the-format) (+4 more)
+
 ## 2026-08-22 -- mxcli v0.19.0 @ b313ff0
 - +360 / -225 lines
 - Sections changed: Customer Module Tests, Customer module, [Test Annotations](#test-annotations), [Test Formats](#test-formats), [Testing](#testing), Association Setup, Entity Creation, Names are concatenated in display order (+58 more)
