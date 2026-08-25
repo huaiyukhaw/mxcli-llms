@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.19.0 @ 1421f11 | Generated: 2026-08-24T02:58:14Z
+Version: mxcli v0.19.0 @ 29cf21c | Generated: 2026-08-25T02:53:27Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 

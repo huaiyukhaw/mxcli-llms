@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.19.0 @ 1421f11
-Generated: 2026-08-24T02:58:14Z
+Version:   mxcli v0.19.0 @ 29cf21c
+Generated: 2026-08-25T02:53:27Z
 
 ---
 
@@ -7797,7 +7797,7 @@ Multiple annotations can be stacked before a single activity:
 @caption 'Validate and save'
 @color Green
 @annotation 'Final step: commit the validated order'
-COMMIT $Order WITH EVENTS;
+COMMIT $Order;
 
 ```
 ## [Complete Example](#complete-example-1)
@@ -7884,13 +7884,13 @@ COMMIT $Order;
 
 Options:
 
-- `WITH EVENTS` – triggers event handlers (before/after commit microflows)
+- `WITHOUT EVENTS` – skips the event handlers (before/after commit microflows), which otherwise run
 - `REFRESH` – refreshes the object in the client after committing
 
 ```
-COMMIT $Order WITH EVENTS;
+COMMIT $Order;
 COMMIT $Order REFRESH;
-COMMIT $Order WITH EVENTS REFRESH;
+COMMIT $Order REFRESH;
 
 ```
 ### [DELETE](#delete)
@@ -8115,10 +8115,10 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 
 | Activity | Syntax | Returns |
 | --- | --- | --- |
-| Create object | `$Var = CREATE Module.Entity (Attr = val);` | Entity object |
-| Change object | `CHANGE $Var (Attr = val);` | – |
-| Commit | `COMMIT $Var [WITH EVENTS] [REFRESH];` | – |
-| Delete | `DELETE $Var;` | – |
+| Create object | `$Var = CREATE Module.Entity (Attr = val) [COMMIT [WITHOUT EVENTS]] [REFRESH];` | Entity object |
+| Change object | `CHANGE $Var (Attr = val) [COMMIT [WITHOUT EVENTS]] [REFRESH];` | – |
+| Commit | `COMMIT $Var [WITHOUT EVENTS] [REFRESH];` | Omitted = with events |
+| Delete | `DELETE $Var [REFRESH];` | – |
 | Rollback | `ROLLBACK $Var [REFRESH];` | – |
 | Retrieve (DB) | `RETRIEVE $Var FROM Module.Entity [WHERE ...] [LIMIT n];` | Entity or list |
 | Retrieve (assoc) | `RETRIEVE $Var FROM $Obj/Module.Assoc;` | Entity or list |
@@ -8344,7 +8344,7 @@ $Response = CALL MICROFLOW Integration.CallExternalAPI (
 };
 
 -- Rollback on commit failure
-COMMIT $Order WITH EVENTS ON ERROR ROLLBACK;
+COMMIT $Order ON ERROR ROLLBACK;
 
 ```
 > **Note:** `ON ERROR` is not supported on `EXECUTE DATABASE QUERY` activities.
@@ -9076,7 +9076,7 @@ BEGIN
 
   -- Finalize
   CHANGE $Order (Status = 'Placed');
-  COMMIT $Order WITH EVENTS;
+  COMMIT $Order;
 
   RETURN true;
 END;
@@ -23490,15 +23490,17 @@ Primitive types: `String`, `Integer`, `Long`, `Decimal`, `Boolean`, `DateTime`. 
 **Object Operations**
 
 ```
-$Var = CREATE Module.Entity ( Attr1 = value1, Attr2 = value2 );
-CHANGE $Entity ( Attr = value );
-COMMIT $Entity [ WITH EVENTS ] [ REFRESH ];
-DELETE $Entity;
+$Var = CREATE Module.Entity ( Attr1 = value1, Attr2 = value2 ) [ COMMIT [ WITHOUT EVENTS ] ] [ REFRESH ];
+CHANGE $Entity ( Attr = value ) [ COMMIT [ WITHOUT EVENTS ] ] [ REFRESH ];
+COMMIT $Entity [ WITHOUT EVENTS ] [ REFRESH ];
+DELETE $Entity [ REFRESH ];
 ROLLBACK $Entity [ REFRESH ];
 
 ```
 
-`CREATE` instantiates a new object with initial attribute values. `CHANGE` modifies attributes on an existing object. `COMMIT` persists changes to the database – `WITH EVENTS` triggers before/after commit event handlers, `REFRESH` updates client-side state. `ROLLBACK` reverts uncommitted changes to an object.
+`CREATE` instantiates a new object with initial attribute values. `CHANGE` modifies attributes on an existing object. `COMMIT` persists changes to the database – the before/after commit event handlers run unless you write `WITHOUT EVENTS`, matching Studio Pro’s default, and `REFRESH` updates client-side state. `ROLLBACK` reverts uncommitted changes to an object.
+
+Every one of these modifiers is optional, and leaving one out always means Mendix’s own default – `Commit: No` and `Refresh in client: No` throughout, and `With events: Yes` on the standalone `COMMIT`. A bare statement therefore produces the same activity as dragging a fresh one onto the Studio Pro canvas.
 
 **Retrieval**
 
@@ -23659,7 +23661,7 @@ CREATE MICROFLOW Sales.ACT_ApproveOrder
 BEGIN
     IF $Order/Status = Sales.OrderStatus.Pending THEN
         CHANGE $Order (Status = Sales.OrderStatus.Approved);
-        COMMIT $Order WITH EVENTS;
+        COMMIT $Order;
         LOG INFO NODE 'OrderProcessing' 'Order approved';
         RETURN true;
     ELSE
@@ -23749,7 +23751,7 @@ BEGIN
         Status = 'Draft',
         CreatedBy = '[%CurrentUser%]'
     );
-    COMMIT $Order WITH EVENTS;
+    COMMIT $Order;
     RETURN $Order;
 END;
 
@@ -33942,10 +33944,10 @@ AUTHENTICATION Basic, Session
 | Entity declaration | `DECLARE $Entity Module.Entity;` | No AS keyword, no = empty |
 | List declaration | `DECLARE $List List of Module.Entity = empty;` |  |
 | Assignment | `SET $Var = expression;` | Variable must be declared first |
-| Create object | `$Var = CREATE Module.Entity (Attr = value);` |  |
-| Change object | `CHANGE $Entity (Attr = value);` |  |
-| Commit | `COMMIT $Entity [WITH EVENTS] [REFRESH];` |  |
-| Delete | `DELETE $Entity;` |  |
+| Create object | `$Var = CREATE Module.Entity (Attr = value) [COMMIT [WITHOUT EVENTS]] [REFRESH];` |  |
+| Change object | `CHANGE $Entity (Attr = value) [COMMIT [WITHOUT EVENTS]] [REFRESH];` |  |
+| Commit | `COMMIT $Entity [WITHOUT EVENTS] [REFRESH];` | Omitted = with events, matching Studio Pro |
+| Delete | `DELETE $Entity [REFRESH];` |  |
 | Rollback | `ROLLBACK $Entity [REFRESH];` | Reverts uncommitted changes |
 | Retrieve (DB) | `RETRIEVE $Var FROM Module.Entity [WHERE condition];` | Database XPath retrieve |
 | Retrieve (Assoc) | `RETRIEVE $List FROM $Parent/Module.AssocName;` | Retrieve by association |
