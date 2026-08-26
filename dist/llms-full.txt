@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.19.0 @ 29cf21c
-Generated: 2026-08-25T02:53:27Z
+Version:   mxcli v0.19.0 @ 4b58b89
+Generated: 2026-08-26T02:59:19Z
 
 ---
 
@@ -12150,19 +12150,61 @@ ALTER SETTINGS CONSTANT 'MyModule.ApiBaseUrl' VALUE 'https://staging.example.com
 ```
 ### [Language Settings](#language-settings)
 
-Set the default language for the application:
+A project’s **enabled languages** are the only ones a build emits translations
+for. A translation written for any other language is stored in the model, passes
+`mx check`, and is silently discarded at build time — so enabling the language is
+the step that makes translating an app do anything.
 
 ```
 ALTER SETTINGS LANGUAGE <Key> = <Value>;
+ALTER SETTINGS LANGUAGE ADD [OR MODIFY] '<code>' [( <option>: <value>, ... )];
+ALTER SETTINGS LANGUAGE MODIFY '<code>' ( <option>: <value>, ... );
+ALTER SETTINGS LANGUAGE REMOVE '<code>';
+
+```
+```
+-- enable a language; the defaults match Studio Pro's Add Language dialog
+ALTER SETTINGS LANGUAGE ADD 'de_DE';
+
+-- with options
+ALTER SETTINGS LANGUAGE ADD 'ar_SD' (CheckCompleteness: true, CustomDateFormat: 'yyyy-MM-dd');
+
+-- change one that is already enabled (only the options named are touched)
+ALTER SETTINGS LANGUAGE MODIFY 'de_DE' (CheckCompleteness: true);
+
+-- make it the default (it must already be enabled)
+ALTER SETTINGS LANGUAGE DefaultLanguageCode = 'de_DE';
+
+-- disable it
+ALTER SETTINGS LANGUAGE REMOVE 'de_DE';
 
 ```
 
-Example:
+A language is identified by its **code** alone — Studio Pro’s “Arabic, Sudan” is
+derived from `ar_SD` for display and is not stored in the model.
 
-```
-ALTER SETTINGS LANGUAGE DefaultLanguageCode = 'en_US';
+| option | meaning |
+| --- | --- |
+| `CheckCompleteness` | report errors and warnings for texts that have no translation in this language, instead of letting them fall back to the default silently. The **default language is always checked** whatever this says. |
+| `CustomDateFormat`, `CustomTimeFormat`, `CustomDateTimeFormat` | override Mendix’s date/time formatting for this language. Empty means default formatting. |
 
-```
+`ADD OR MODIFY` is the upsert — it enables a language that is not there and
+changes one that is. It is what `DESCRIBE SETTINGS` emits, so a described project
+replays onto one that already has some of its languages.
+
+Two things to know about removal:
+
+- The **default language cannot be removed** — every missing translation falls
+  back on it. Change `DefaultLanguageCode` first.
+- Removing a language **does not delete its translations**. They stay in the
+  model and stop being built; the run reports how many source strings are
+  affected. To remove them, use
+  `CREATE OR REPLACE TRANSLATIONS FOR '<code>' ( );`.
+
+> `SHOW LANGUAGES` lists languages that have **translations**, which is not the
+> same list — a stock app reports eight while one is enabled. For the enabled
+> list use `DESCRIBE SETTINGS`.
+
 ### [Workflow Settings](#workflow-settings)
 
 Configure workflow behavior such as the user entity and task parallelism:
@@ -12184,6 +12226,103 @@ ALTER SETTINGS WORKFLOWS DefaultTaskParallelism = '5';
 - [Navigation and Settings](#navigation-and-settings) – overview of navigation and settings
 - [Navigation Profiles](#navigation-profiles-1) – navigation profile configuration
 - [Workflows](#workflows-1) – workflow definitions
+
+# [Translations](#translations)
+
+Every user-visible string in a Mendix app — page titles, widget captions, button
+labels, validation messages, enum captions, menu items — is a text with one
+translation per language. MDL works on them in bulk: **one file per language**.
+
+## [The loop](#the-loop)
+
+```
+# 1. export — an untranslated string comes back with an EMPTY target
+mxcli -p app.mpr -c "describe translations for de_DE" > de_DE.mdl
+
+# 2. fill in the right-hand sides, by hand or by handing the file to an LLM
+
+# 3. write them back
+mxcli exec de_DE.mdl -p app.mpr
+
+```
+
+`DESCRIBE` emits the `CREATE` form, so the export format and the import format
+are the same file and the empty targets are the prompt. A whole app is typically
+a few hundred distinct source strings, so one file per language stays practical.
+
+## [Statements](#statements)
+
+```
+DESCRIBE TRANSLATIONS [IN <Module>] FOR <lang>;
+
+CREATE            TRANSLATIONS [IN <Module>] FOR <lang> ( '<source>' AS '<target>', ... );
+CREATE OR MODIFY  TRANSLATIONS [IN <Module>] FOR <lang> ( ... );
+CREATE OR REPLACE TRANSLATIONS [IN <Module>] FOR <lang> ( ... );
+
+```
+
+Entries use `AS`, not a colon: a translation maps a user-provided name to another
+name.
+
+| Verb | Meaning |
+| --- | --- |
+| `CREATE` | the “add a language” form — refuses if that language already has translations in scope |
+| `CREATE OR MODIFY` | merge; a source string the file does not name keeps what it has |
+| `CREATE OR REPLACE` | the file is authoritative — a translation whose source it does not name is **removed**, and the run says which |
+
+`IN <Module>` scopes both directions, and under `OR REPLACE` it **bounds the
+deletion** — without it, per-module files would wipe each other on every run.
+
+## [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled)
+
+This is the one thing worth knowing before translating anything.
+
+A translation written for a language the project has **not enabled** is stored in
+the model, passes `mx check`, is kept by Studio Pro — and is **discarded at build
+time**. Measured with `mxbuild --target=deploy`: the string appears nowhere under
+`deployment/`, and no `translations_<code>.properties` is produced at all.
+
+So it is possible to translate four hundred strings into German, see every run
+report success, and get no German in the app. `CREATE TRANSLATIONS` warns when
+the language is not enabled. Enable it first — see
+[Project Settings](#project-settings).
+
+A stock app invites the mistake: it enables **one** language while its marketplace
+modules ship translations in **nine**, so “other languages already have
+translations here” is true and misleading.
+
+> `SHOW LANGUAGES` lists languages that **have translations**, which is a
+> different list — a stock app reports eight while one is enabled. The enabled
+> list is in `DESCRIBE SETTINGS`.
+
+## [Drift: a source string that was edited](#drift-a-source-string-that-was-edited)
+
+The dictionary is keyed on the **source string**, so `Save` is translated once
+for every place it occurs. The flip side is that editing a source after the file
+was written stops it matching.
+
+A key that matches nothing is **reported, not skipped** — and where the
+translation identifies the moved source unambiguously, the run names the fix:
+
+```
+Warning: 1 source string(s) in the file matched nothing in the project.
+
+  "Thingz" as "Grejer"
+      No text has "Thingz" as its source. A text now reads "Things" and carries
+      the sv_SE "Grejer" — the source was probably edited. Change the file to:
+        "Things" as "Grejer"
+
+```
+## [Notes](#notes)
+
+- **The source language** is the project’s default: the left-hand column is what
+  `DESCRIBE` shows for it. Translating *into* the source language is refused — it
+  would overwrite the strings everything else is keyed on.
+- **A rewrite keeps other languages.** Re-executing a page or microflow does not
+  drop the translations MDL cannot express, so you need not re-import a language
+  after editing a document.
+- **To remove a language’s translations**, make an empty file authoritative:
+  `CREATE OR REPLACE TRANSLATIONS FOR de_DE ( );`
 
 # [Workflows](#workflows-1)
 
@@ -13123,11 +13262,15 @@ theme so a generated app looks like a product on first boot, and
 
 ```
 mxcli theme list                        # built-in themes; the default is marked *
-mxcli theme show signal                 # palette, colorway, and the files it writes
+mxcli theme show signal                 # palette, colorway, tokens, files it writes
 mxcli theme apply -p app.mpr            # apply to an existing project
 mxcli theme apply ledger -p app.mpr     # switch theme (the previous one is removed)
+mxcli theme apply signal ledger console -p app.mpr   # a switchable set
 mxcli theme apply -p app.mpr --dry-run  # report changes without writing
 mxcli theme remove -p app.mpr           # take it back out
+
+mxcli theme create acme -p app.mpr      # a theme this project owns
+mxcli theme list -p app.mpr             # ...which then lists beside the built-ins
 
 mxcli new MyApp --version 11.13.0                # applies `signal`
 mxcli new MyApp --version 11.13.0 --theme none   # plain Atlas
@@ -13145,21 +13288,86 @@ All three share the same density discipline: an 8px spacing unit, monospace
 numerics, a visible focus ring on every focusable element, and every control
 growing to a 44px touch target below 768px.
 
-Only one theme applies at a time — `theme apply` removes the previous one,
-because two themes mapping the same Atlas variables would fight in the cascade.
+## [Several themes at once, switchable at runtime](#several-themes-at-once-switchable-at-runtime)
+
+```
+mxcli theme apply signal ledger console -p app.mpr
+
+```
+
+All three compile into one stylesheet and the app switches between them by a
+class on `<html>` — no rebuild, no reload, no server round trip. The first named
+renders by default.
+
+That works because a theme is almost entirely token values. The Atlas wiring, the
+recipe layer and the widget layer are **byte-identical in every theme** and
+resolve every colour through `var(--mxt-*)`, so one copy of them serves the whole
+set; only the palette, the fonts and a few skin rules differ. Each palette is
+declared on its own root selector:
+
+```
+:root:not(.mxt-ledger):not(.mxt-console), :root.mxt-signal { --mxt-brand: #0f6e6b; … }
+:root.mxt-ledger  { --mxt-brand: #1f3a5f; … }
+:root.mxt-console { --mxt-brand: #2dd4bf; … }
+
+```
+
+The default claims `:root` **minus** every other skin’s class rather than a bare
+`:root`. Bare would keep matching once another class was set, so its rules would
+leak under every other theme and the winner would come down to specificity.
+Negation makes the scopes mutually exclusive: exactly one palette is ever live,
+and the result never depends on import order.
+
+Measured on a real 11.13 app, same page, class swap only:
+
+|  | brand | ground | radius | type | cards |
+| --- | --- | --- | --- | --- | --- |
+| signal (default) | `#0f6e6b` | `#f4f6f8` | 4px | IBM Plex Sans | shadow |
+| ledger | `#1f3a5f` | `#f7f4ee` | 2px | Source Sans 3 | hairline |
+| console | `#2dd4bf` | `#0e1116` | 6px | Space Grotesk | flat |
+
+Light/dark is a separate axis and keeps working: each theme brings both palettes,
+so picking a theme preserves the variant and vice versa.
+
+A single theme is still emitted exactly as before — a bare `:root`, no scoping —
+so nothing changes for a project that installs one.
+
+### [Driving it from the app](#driving-it-from-the-app)
+
+```
+mxcli theme apply signal ledger console -p app.mpr
+mxcli theme switcher install -p app.mpr --module MyFirstModule
+
+```
+
+With a set installed, `switcher install` also generates `SetAppSkin`,
+`CycleAppSkin`, `ApplyStoredSkin` and a `ACT_CycleSkin` nanoflow, built against
+the set that is actually installed — so a cycle button can never offer a theme
+whose CSS is not in the page.
+
+```
+actionbutton btnSkin (caption: 'Theme', action: nanoflow MyFirstModule.ACT_CycleSkin)
+
+```
+
+The same reload caveat as the light/dark toggle applies: the choice is remembered
+in `localStorage` but nothing re-applies it on load, because Mendix has no page
+on-load event mxcli can author. `ApplyStoredSkin` is installed and ready to wire
+in Studio Pro.
 
 ## [What it writes](#what-it-writes)
 
-Six things, all under `theme/`:
+Seven things, all under `theme/`:
 
 | File | What |
 | --- | --- |
 | `theme/web/custom-variables.scss` | the theme’s palette — this is the file to edit |
 | `theme/web/_mxcli-atlas-map.scss` | the Atlas wiring: ~60 Atlas variables expressed in terms of the palette |
-| `theme/web/_mxcli-<name>.scss` | the other palette, the variant blocks, `@font-face`, recipe classes |
+| `theme/web/_mxcli-<name>.scss` | the other palette, the variant blocks, `@font-face`, this theme’s skin |
+| `theme/web/_mxcli-recipes.scss` | the recipe layer: `num` / `pill` / `stat` / focus / density — shared |
 | `theme/web/_mxcli-widgets.scss` | the widget-module layer: colours Sass bakes before any token exists |
 | `theme/web/main.scss` | the variant switch plus the `@import` lines |
-| `theme/web/mxcli-fonts/` | vendored fonts (SIL OFL 1.1) |
+| `theme/web/mxcli-fonts/` | vendored fonts, each theme’s own `OFL-<name>.txt` (SIL OFL 1.1) |
 
 **The model is never touched.** No `.mpr` changes, so nothing here can affect a
 build, and the theme hot-applies under `mxcli run --local --watch`.
@@ -13216,6 +13424,61 @@ no page on-load event to re-apply the stored value, and the usual substitute (a
 data view with a nanoflow data source) is not authorable by mxcli on either
 engine yet. `ApplyStoredTheme` is installed and ready — wire it in Studio Pro if
 you need the choice to persist across reloads.
+
+## [A theme this project owns](#a-theme-this-project-owns)
+
+The three built-in themes are a house style, not a brand. `theme create`
+scaffolds a fourth into `theme/mxcli-themes/<name>/`, and from then on it is a
+theme like any other — `theme list -p` shows it, `theme apply <name>` installs
+it, `theme remove` takes it out.
+
+```
+mxcli theme create acme -p app.mpr                        # scaffold from signal
+mxcli theme create acme -p app.mpr --from console         # ...or from console
+mxcli theme create acme -p app.mpr --from design.css      # ...and seed the palette
+mxcli theme apply acme -p app.mpr
+
+```
+
+That folder is the right place because of two constraints. It is **committed** —
+a theme derived from a design is source the team shares, which rules out
+`.mxcli/`, that `mxcli init` puts in `.gitignore`. And it is **not compiled** —
+mxbuild’s entry point is `theme/web/main.scss` and it does not glob `theme/` for
+other stylesheets, so the sources sit inert until `theme apply` copies them into
+`theme/web/`. (Verified against a real 11.13 build: nothing under
+`theme/mxcli-themes/` reaches `deployment/`.)
+
+Scaffolding copies an existing theme rather than starting from nothing, so the
+Atlas wiring and the widget layer — identical in every theme, and where most of
+the hard-won detail lives — come across byte for byte. What you edit is the
+palette. A local theme named after a built-in shadows it, so “signal, but with
+our brand” is a valid thing to create.
+
+### [Seeding a palette from a design](#seeding-a-palette-from-a-design)
+
+A theme’s palette is nothing but `--mxt-*` custom properties, so a design tool
+seeds one by declaring them. That is the whole contract — anywhere in a `.css`,
+`.scss` or `.html` file:
+
+```
+:root { --mxt-brand: #7f5af0; --mxt-ground: #fffffe; }
+@media (prefers-color-scheme: dark) { :root { --mxt-ground: #16161a; } }
+
+```
+
+Declarations inside a dark block (`prefers-color-scheme: dark`, `.theme-dark`,
+`[data-theme="dark"]`) seed the dark palette; everything else seeds the light
+one. Tokens the design does not name keep the base theme’s value, so a
+three-colour design still yields a complete, working palette.
+
+`mxcli theme show signal` prints the vocabulary. A `--mxt-*` name the base theme
+does not declare is **an error**, not an extra: nothing would read it, so the
+theme would apply cleanly and render unchanged — the one failure mode this path
+exists to avoid.
+
+Inferring a palette from a mockup’s inline styles was the alternative, and it is
+a guess: two greys in a design do not say which is the app ground and which is a
+hovered row. Ask the design step to emit a token block instead.
 
 ## [Re-branding](#re-branding)
 
@@ -13814,7 +14077,7 @@ The graph builtins return empty when the community tables aren’t built, so run
 `refresh catalog communities` before `lint` in the same session. See
 [Writing Custom Rules](#writing-custom-rules).
 
-## [Notes](#notes)
+## [Notes](#notes-1)
 
 - Quality depends on edge completeness. The `refs` graph captures control flow,
   CRUD, associations, generalization, widget datasources/actions, layout, and
@@ -14410,7 +14673,7 @@ mxcli -p app.mpr -c "SELECT Name FROM CATALOG.ENTITIES WHERE ModuleName = 'Sales
 mxcli -p app.mpr -c "SELECT Name FROM CATALOG.MICROFLOWS LIMIT 10"
 
 ```
-## [Notes](#notes-1)
+## [Notes](#notes-2)
 
 - Always run `REFRESH CATALOG` (or `REFRESH CATALOG FULL`) before querying
 - Table and column names are case-sensitive in some contexts
@@ -16178,6 +16441,26 @@ pins down its type (`@expect $a = $b`, where both sides are variables). Mendix�
 expression engine is typed, and a wrong guess would fail the build rather than
 the test.
 
+### [A file that does not parse is one ERROR, not a dead run](#a-file-that-does-not-parse-is-one-error-not-a-dead-run)
+
+A malformed test file is reported the same way an uncompilable assertion is:
+against itself, as an ERROR that counts with the failures. The tests in every
+other file still run.
+
+```
+  PASS  the board is 81 squares (6ms, 2 assertions)
+  ERROR  broken.test.mdl (file could not be parsed)
+         test "first" is followed by another @test doc comment ("second") with
+         no '/' separator between them
+
+```
+
+`--list` prints the same thing under the listing and exits non-zero, so a
+directory that was only partly readable cannot look like a clean one. A path
+that does not *exist* is still a hard error — that is a mistake in the
+invocation, not a malformed test, and continuing would run a different suite
+than the one that was asked for.
+
 ### [A test that asserts nothing, and `@verify`](#a-test-that-asserts-nothing-and-verify)
 
 Every result line reports what the test actually checked:
@@ -17177,7 +17460,7 @@ IMPORT FROM legacy QUERY 'SELECT name, dept_name FROM employees WHERE active = t
 SQL DISCONNECT legacy;
 
 ```
-## [Notes](#notes-2)
+## [Notes](#notes-3)
 
 - The target entity must already exist in the Mendix project
 - Column types are automatically converted where possible
@@ -17395,9 +17678,15 @@ so structural changes need a restart; behavioural changes do not.
 - A **PostgreSQL** database. Defaults: `127.0.0.1:5432`, user `mendix`, database
   derived from the project file name (`App1112.mpr` → `app1112`). Two ways to have it:
   - **`--ensure-db`** (recommended for a fresh session) provisions it: starts the
-    local Postgres service if the port is down, and creates the app role + database
-    if missing (via a local `sudo -u postgres` superuser). For a non-local `--db-host`
-    it only verifies reachability — mxcli won’t provision a remote database.
+    local Postgres server if the port is down, and creates the app role + database
+    if missing. It uses a service manager, or a user-owned `initdb`/`pg_ctl` cluster
+    under `~/.mxcli/postgres` when no service becomes ready (e.g. Arch) — no
+    `postgres` OS account or `sudo` required. For a non-local `--db-host` it only verifies
+    reachability — mxcli won’t provision a remote database.
+    The user-owned cluster persists across sessions; its server log is
+    `~/.mxcli/postgres/server.log`. Stop it with
+    `pg_ctl -D "$HOME/.mxcli/postgres/data" stop`. To remove it, stop it first and
+    then delete `~/.mxcli/postgres` (this permanently deletes its databases).
   - Otherwise create it once yourself; without `--ensure-db`, `run --local` stops with
     an actionable message if the DB is unreachable:
     
@@ -17420,7 +17709,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
 | `--serve-port` | 6543 | `mxbuild --serve` port |
-| `--db-host` | 127.0.0.1:5432 | Database `host:port` |
+| `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
 | `--db-user` / `--db-password` | mendix / mendix | Database credentials |
 | `--screenshot` | off | Capture a Playwright PNG after boot and each applied change |
@@ -22840,7 +23129,7 @@ INDEX (OrderNumber)
 INDEX (OrderDate DESC);
 
 ```
-## [Notes](#notes-3)
+## [Notes](#notes-4)
 
 - `String` requires an explicit length: `String(200)`. Use `String(unlimited)` for unbounded text.
 - `EXTENDS` must appear **before** the opening parenthesis, not after the closing one.
@@ -22976,7 +23265,7 @@ ALTER ENTITY Sales.Customer
     SET POSITION (100, 200);
 
 ```
-## [Notes](#notes-4)
+## [Notes](#notes-5)
 
 - Each `ALTER ENTITY` statement performs a single operation. Chain multiple statements for multiple changes.
 - `RENAME ATTRIBUTE` updates references in microflows, pages and access rules, and rewrites XPath constraints. It does not rewrite microflow expressions (`$obj/Attr`); use `SHOW IMPACT OF` to find the documents to check, or build and read the CE0117s.
@@ -23112,7 +23401,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 );
 
 ```
-## [Notes](#notes-5)
+## [Notes](#notes-6)
 
 - Enumeration values can also be managed incrementally with `ALTER ENUMERATION ... ADD VALUE` and `ALTER ENUMERATION ... REMOVE VALUE`.
 - The `DEFAULT` value on an entity attribute references the enumeration value name as a quoted string (e.g., `DEFAULT 'Draft'`).
@@ -23274,7 +23563,7 @@ CREATE ASSOCIATION HR.Employee_Department
     TYPE Reference;
 
 ```
-## [Notes](#notes-6)
+## [Notes](#notes-7)
 
 - The naming convention `Module.Child_Parent` reflects that the child (TO) entity holds the reference to the parent (FROM) entity. This can be counterintuitive – the `FROM` entity is the parent, and the `TO` entity is the child.
 - Internally, Mendix stores the FROM entity pointer as `ParentPointer` and the TO entity pointer as `ChildPointer`. These BSON field names are inverted relative to what you might expect.
@@ -25042,7 +25331,7 @@ Statements for managing project security: module roles, user roles, entity acces
 
 Mendix security operates at two levels. **Module roles** define permissions within a single module (entity access, microflow execution, page visibility). **User roles** aggregate module roles into project-wide identities assigned to end users.
 
-## [Statements](#statements)
+## [Statements](#statements-1)
 
 | Statement | Description |
 | --- | --- |
@@ -25532,7 +25821,7 @@ Statements for configuring application navigation profiles, home pages, login pa
 
 Mendix applications can have multiple navigation profiles (Responsive, Tablet, Phone, NativePhone) that each define a home page, optional login page, optional 404 page, and a hierarchical menu tree. Navigation profiles control which page the user sees first and how they navigate through the application.
 
-## [Statements](#statements-1)
+## [Statements](#statements-2)
 
 | Statement | Description |
 | --- | --- |
@@ -25823,7 +26112,7 @@ From the command line:
 mxcli describe menu Atlas_Core.Phone_Menu -p app.mpr
 
 ```
-## [Notes](#notes-7)
+## [Notes](#notes-8)
 
 **A menu item cannot open a page that takes a required parameter.** There is nowhere
 to supply the argument, and Mendix rejects the model with **CE1571** (“No argument
@@ -25858,7 +26147,7 @@ Statements for creating, inspecting, and dropping workflows.
 
 Mendix workflows model long-running business processes with user tasks, decisions, parallel splits, and other activity types. A workflow is parameterized by a context entity that carries the data flowing through the process.
 
-## [Statements](#statements-2)
+## [Statements](#statements-3)
 
 | Statement | Description |
 | --- | --- |
@@ -26187,7 +26476,7 @@ Statements for managing JSON structures, import mappings, export mappings, and d
 
 These document types support moving data between Mendix entities and external data formats (JSON, XML). They are typically used together: a JSON structure defines the external shape, import and export mappings translate between that shape and Mendix entities, and data transformers reshape raw data before it enters a mapping.
 
-## [Statements](#statements-3)
+## [Statements](#statements-4)
 
 | Statement | Description |
 | --- | --- |
@@ -26429,7 +26718,7 @@ CREATE OR MODIFY IMPORT MAPPING MyModule.IMM_Pet
 };
 
 ```
-## [Notes](#notes-8)
+## [Notes](#notes-9)
 
 - The child entity must own the FK (`FROM child TO parent`). Using the wrong association direction causes validation errors at runtime.
 - Arrays in the JSON sample map directly to child entity objects — there is no intermediate container entity (unlike export mappings).
@@ -26605,7 +26894,7 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 };
 
 ```
-## [Notes](#notes-9)
+## [Notes](#notes-10)
 
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
@@ -26724,7 +27013,7 @@ The Mendix Agent Editor introduces four document types that must be set up in de
 3. **Consumed MCP Service** — an external tool server (Model Context Protocol)
 4. **Agent** — an AI agent that references a model and optionally uses knowledge bases and MCP services
 
-## [Statements](#statements-4)
+## [Statements](#statements-5)
 
 | Statement | Description |
 | --- | --- |
@@ -27176,7 +27465,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 /
 
 ```
-## [Notes](#notes-10)
+## [Notes](#notes-11)
 
 - Agents must be dropped before their referenced models, knowledge bases, and MCP services.
 - The model and knowledge base documents must exist before the agent is created.
@@ -27192,7 +27481,7 @@ Statements for managing business event services.
 
 Business event services enable asynchronous, event-driven communication between Mendix applications (and external systems) using the Mendix Business Events platform. A service defines named messages with typed attributes and specifies whether the application publishes or subscribes to each message.
 
-## [Statements](#statements-5)
+## [Statements](#statements-6)
 
 | Statement | Description |
 | --- | --- |
@@ -28343,6 +28632,9 @@ CREATE CONFIGURATION 'name' [key = value, ...]
 DROP CONFIGURATION 'name'
 
 ALTER SETTINGS LANGUAGE key = value
+ALTER SETTINGS LANGUAGE ADD [OR MODIFY] 'code' [( option: value, ... )]
+ALTER SETTINGS LANGUAGE MODIFY 'code' ( option: value, ... )
+ALTER SETTINGS LANGUAGE REMOVE 'code' 
 
 ALTER SETTINGS WORKFLOWS key = value
 
@@ -28357,7 +28649,8 @@ Modifies project settings by category. Each category has its own syntax and avai
 
 **CONSTANT** settings override the default value of a project constant within a specific runtime configuration. Both the constant name and the configuration name must be enclosed in single quotes.
 
-**LANGUAGE** settings control localization, primarily the default language code.
+**LANGUAGE** settings control localization: the default language code, and the
+list of **enabled** languages — the only ones a build emits translations for.
 
 **WORKFLOWS** settings control the workflow engine, including the user entity used for workflow tasks and default task parallelism.
 
@@ -28416,10 +28709,36 @@ reason.
 
 ### [Set the default language](#set-the-default-language)
 
+The code must already be enabled; `ALTER SETTINGS LANGUAGE DefaultLanguageCode`
+is validated against the enabled list.
+
 ```
 ALTER SETTINGS LANGUAGE DefaultLanguageCode = 'en_US';
 
 ```
+### [Enable, change and disable a language](#enable-change-and-disable-a-language)
+
+```
+ALTER SETTINGS LANGUAGE ADD 'de_DE';
+ALTER SETTINGS LANGUAGE ADD 'ar_SD' (CheckCompleteness: true, CustomDateFormat: 'yyyy-MM-dd');
+ALTER SETTINGS LANGUAGE ADD OR MODIFY 'de_DE' (CheckCompleteness: true);
+ALTER SETTINGS LANGUAGE MODIFY 'de_DE' (CustomDateFormat: 'dd.MM.yyyy');
+ALTER SETTINGS LANGUAGE REMOVE 'de_DE';
+
+```
+
+Options: `CheckCompleteness` (report errors for texts with no translation in this
+language — the default language is always checked regardless),
+`CustomDateFormat`, `CustomTimeFormat`, `CustomDateTimeFormat`.
+
+`MODIFY` touches only the options it names, so turning on the completeness check
+cannot clear a custom format set elsewhere. `ADD OR MODIFY` is the upsert and is
+what `DESCRIBE SETTINGS` emits.
+
+Removing the **default** language is refused. Removing any other language does
+**not** delete its translations — they stay in the model, stop being built, and
+the run reports how many source strings are affected.
+
 ### [Configure workflow user entity](#configure-workflow-user-entity)
 
 ```
@@ -28945,7 +29264,7 @@ ALTER MODULE MyModule
   );
 
 ```
-## [Notes](#notes-11)
+## [Notes](#notes-12)
 
 Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically

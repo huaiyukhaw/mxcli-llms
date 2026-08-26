@@ -1,3 +1,7 @@
+## 2026-08-26 -- mxcli v0.19.0 @ 4b58b89
+- +353 / -34 lines
+- Sections changed: 1. export — an untranslated string comes back with an EMPTY target, 2. fill in the right-hand sides, by hand or by handing the file to an LLM, 3. write them back, [Default Styling (`mxcli theme`)](#default-styling-mxcli-theme), [Translations](#translations), [A theme this project owns](#a-theme-this-project-owns), [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled), [ALTER SETTINGS](#alter-settings) (+33 more)
+
 ## 2026-08-25 -- mxcli v0.19.0 @ 29cf21c
 - +23 / -21 lines
 - Sections changed: [Annotations](#annotations-1), [Description](#description-28), [Error Handling](#error-handling-2), [Examples](#examples-40), [Microflows - Supported Statements](#microflows---supported-statements), [Object Operations](#object-operations), [Sub-Microflow Pattern](#sub-microflow-pattern), [Summary Table](#summary-table)
