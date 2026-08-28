@@ -1,3 +1,7 @@
+## 2026-08-28 -- mxcli v0.20.0 @ 9bb6338
+- +184 / -9 lines
+- Sections changed: Check for errors (should have no CE0463), Check the project, Create a fresh project, Find the mx binary, Validate, [Test Annotations](#test-annotations), [ALTER SETTINGS](#alter-settings), [Description](#description-49) (+6 more)
+
 ## 2026-08-26 -- mxcli v0.19.0 @ 4b58b89
 - +353 / -34 lines
 - Sections changed: 1. export — an untranslated string comes back with an EMPTY target, 2. fill in the right-hand sides, by hand or by handing the file to an LLM, 3. write them back, [Default Styling (`mxcli theme`)](#default-styling-mxcli-theme), [Translations](#translations), [A theme this project owns](#a-theme-this-project-owns), [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled), [ALTER SETTINGS](#alter-settings) (+33 more)

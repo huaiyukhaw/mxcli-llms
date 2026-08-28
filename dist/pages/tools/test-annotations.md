@@ -21,7 +21,7 @@ $result = call microflow Sudoku.ACT_DealGame();
 | `@test <name>` | Names the test. Required — a doc comment without it is not a test. |
 | `@expect <condition>` | A Mendix expression over the body’s variables that must be true. Repeatable. |
 | `@verify <oql> <op> <value>` | An OQL post-condition on the database. Repeatable. |
-| `@throws '<message>'` | The body is expected to raise an error. |
+| `@throws ['<message>']` | The body is expected to raise an error; with a message, one whose text contains it. |
 | `@setup <Module.Microflow>` | A microflow to call before the body. Repeatable. |
 | `@cleanup rollback|none` | Whether the test’s writes survive it. `rollback` is the default. |
 

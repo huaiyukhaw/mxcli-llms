@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.19.0 @ 4b58b89
-Generated: 2026-08-26T02:59:19Z
+Version:   mxcli v0.20.0 @ 9bb6338
+Generated: 2026-08-28T13:41:52Z
 
 ---
 
@@ -2729,7 +2729,7 @@ The first time you run this, it will download the MxBuild toolchain for your pro
 If you have `mx` installed locally (e.g., from a Mendix installation), you can run the check directly:
 
 ```
-~/.mxcli/mxbuild/*/modeler/mx check app.mpr
+mxcli docker check -p app.mpr
 
 ```
 
@@ -2737,7 +2737,7 @@ Or use mxcli to auto-download and run it:
 
 ```
 mxcli setup mxbuild -p app.mpr
-~/.mxcli/mxbuild/*/modeler/mx check app.mpr
+mxcli docker check -p app.mpr
 
 ```
 ## [The recommended workflow](#the-recommended-workflow)
@@ -12201,6 +12201,47 @@ Two things to know about removal:
   affected. To remove them, use
   `CREATE OR REPLACE TRANSLATIONS FOR '<code>' ( );`.
 
+#### [Set the default language *before* authoring content](#set-the-default-language-before-authoring-content)
+
+The default language is not only a fallback — it is **the language a new caption
+is written in**. `Caption: 'Opslaan'` has to be stored under some language code
+(Mendix has no language-neutral text), and mxcli uses the project’s
+`DefaultLanguageCode`.
+
+So the order of these two statements changes the result:
+
+```
+-- right: the page's texts are stored as nl_NL
+ALTER SETTINGS LANGUAGE ADD 'nl_NL';
+ALTER SETTINGS LANGUAGE DefaultLanguageCode = 'nl_NL';
+CREATE PAGE MyModule.Opslaan ( Title: 'Opslaanpagina', ... ) { ... }
+
+-- wrong: the page is authored while en_US is still the default, so its texts
+-- are stored as en_US and stay there
+CREATE PAGE MyModule.Opslaan ( Title: 'Opslaanpagina', ... ) { ... }
+ALTER SETTINGS LANGUAGE DefaultLanguageCode = 'nl_NL';
+
+```
+
+Changing `DefaultLanguageCode` **does not move text that already exists** — it
+would be rewriting content you authored. Nothing reports the mismatch either:
+`mx check` gives 0 errors both ways, and the symptom only appears in Studio Pro,
+as the empty-caption placeholder plus a “no translation for this language”
+warning.
+
+**If you get the order wrong, re-run the `CREATE` statements.** With the new
+default in place the texts are stored under it; the old language’s copy stays
+alongside as a harmless extra translation.
+
+```
+-- recovery: same script, run again after the default is correct
+CREATE OR MODIFY PAGE MyModule.Opslaan ( Title: 'Opslaanpagina', ... ) { ... }
+
+```
+
+`CREATE TRANSLATIONS FOR '<the default>'` is **not** the way out — it is refused,
+because the default is the source language every other translation is keyed on.
+
 > `SHOW LANGUAGES` lists languages that have **translations**, which is not the
 > same list — a stock app reports eight while one is enabled. For the enabled
 > list use `DESCRIBE SETTINGS`.
@@ -16102,7 +16143,7 @@ $result = call microflow Sudoku.ACT_DealGame();
 | `@test <name>` | Names the test. Required — a doc comment without it is not a test. |
 | `@expect <condition>` | A Mendix expression over the body’s variables that must be true. Repeatable. |
 | `@verify <oql> <op> <value>` | An OQL post-condition on the database. Repeatable. |
-| `@throws '<message>'` | The body is expected to raise an error. |
+| `@throws ['<message>']` | The body is expected to raise an error; with a message, one whose text contains it. |
 | `@setup <Module.Microflow>` | A microflow to call before the body. Repeatable. |
 | `@cleanup rollback|none` | Whether the test’s writes survive it. `rollback` is the default. |
 
@@ -16205,6 +16246,35 @@ $result = call microflow Sales.ACT_Submit(Order = $empty);
 /
 
 ```
+
+The message is **matched as a substring** of the error Mendix raised, so an
+expectation names the part of the message the test can predict. A real message
+routinely carries an activity name or an object id, which is why the match is not
+equality:
+
+```
+FAIL  rejects an empty order (6ms, 1 assertion)
+       expected an error containing 'validation failed',
+       actual: Could not find object of type 'Sales.Order'
+
+```
+
+Write `@throws` **on its own** to expect any exception, when the message is not
+the thing under test:
+
+```
+/**
+ * @test rejects an empty order
+ * @throws
+ */
+$result = call microflow Sales.ACT_Submit(Order = $empty);
+/
+
+```
+
+Anything after `@throws` that is not a single-quoted string is an error, not a
+message — `@throws not found` is refused rather than read as an unquoted one.
+
 ## [`@setup`](#setup)
 
 Names a **microflow** to call before the test’s own statements — a fixture in a
@@ -16605,13 +16675,13 @@ For manual testing or debugging, you can replicate the test runner’s workflow:
 ```
 # Create a fresh project
 cd /tmp/test-workspace
-~/.mxcli/mxbuild/*/modeler/mx create-project
+~/.mxcli/mxbuild/<version>/modeler/mx create-project
 
 # Apply MDL changes
 mxcli exec script.mdl -p /tmp/test-workspace/App.mpr
 
 # Validate
-~/.mxcli/mxbuild/*/modeler/mx check /tmp/test-workspace/App.mpr
+mxcli docker check -p /tmp/test-workspace/App.mpr
 
 ```
 
@@ -18493,7 +18563,7 @@ mxcli docker check -p app.mpr
 ```
 ## [What It Does](#what-it-does-2)
 
-1. **Resolves the `mx` binary** – Looks for `mx` in the mxbuild directory, PATH, or cached installations at `~/.mxcli/mxbuild/*/modeler/mx`
+1. **Resolves the `mx` binary** – Looks for `mx` in the mxbuild directory, PATH, or cached installations at `~/.mxcli/mxbuild/<version>/modeler/mx`
 2. **Runs `mx check`** – Executes the Mendix project checker against the `.mpr` file
 3. **Reports results** – Outputs errors, warnings, and deprecations to the console
 
@@ -18764,7 +18834,7 @@ This downloads mxbuild to `~/.mxcli/mxbuild/{version}/` and makes the `mx` tool 
 
 ```
 # Find the mx binary
-MX=~/.mxcli/mxbuild/*/modeler/mx
+MX=~/.mxcli/mxbuild/<version>/modeler/mx
 
 # Check a project
 $MX check /path/to/app.mpr
@@ -26572,6 +26642,42 @@ CREATE JSON STRUCTURE MyModule.JSON_WeatherResponse
     );
 
 ```
+### [Naming an array’s item element](#naming-an-arrays-item-element)
+
+An array’s item is the anonymous `[…]` entry, so it has no JSON key and the plain
+form cannot reach it. `ITEM OF` addresses it by the array’s key:
+
+```
+CREATE JSON STRUCTURE MyModule.JSON_Invoice
+    SNIPPET '{"lines": [{"sku": "A1"}], "tags": ["urgent"]}'
+    CUSTOM NAME MAP (
+        'lines'         AS 'OrderLines',
+        ITEM OF 'lines' AS 'OrderLine',
+        ITEM OF 'tags'  AS 'Tag'
+    );
+
+```
+
+The two clauses are independent: naming an item does not require renaming its
+array. `ITEM OF` also names a primitive array’s wrapper element, which is that
+array’s item.
+
+A **root-level** array has no key either — `ITEM OF 'Root'` names its item:
+
+```
+CREATE JSON STRUCTURE MyModule.JSON_Feed
+    SNIPPET '[{"id": 1}]'
+    CUSTOM NAME MAP (ITEM OF 'Root' AS 'Entry');
+
+```
+
+Left unnamed, an item keeps its generated name (`<Array>Item`, the singular for a
+primitive array’s wrapper, `JsonObject` at the root).
+
+An entry naming a key the snippet does not contain is an error (`MDL-JSON01`),
+as is `ITEM OF` on a key that is not an array (`MDL-JSON02`) — previously such an
+entry applied to nothing and reported nothing.
+
 ### [Idempotent replacement](#idempotent-replacement)
 
 ```
@@ -26622,6 +26728,27 @@ Each entity block specifies one of three strategies:
 
 Marking an attribute with `KEY` designates it as the lookup key for FIND and FIND OR CREATE.
 
+### [Requirements for FIND](#requirements-for-find)
+
+An element that searches has two requirements, both refused by `mxcli check` and
+by `exec` rather than left to the build:
+
+| Rule | Requirement | Build error if ignored |
+| --- | --- | --- |
+| `MDL-MAP02` | At least one member marked `KEY`, on **each** searching element | CE0250 “Object element must have a key defined…” |
+| `MDL-MAP03` | The entity must be **persistable** | CE0251 “Searching for an object is not allowed for the entity ‘X’, because it is not persistable.” |
+
+Persistability is taken from the **generalization chain**, not the entity’s own
+setting: an entity declared with plain `CREATE ENTITY` that extends a
+non-persistent parent is still not searchable.
+
+An element with a custom handler (`FIND module.Entity BY module.Microflow(...)`)
+is exempt from both — the microflow *is* the find.
+
+`MDL-MAP02` needs no project. `MDL-MAP03` resolves the entity from the script
+when the script creates it, and from the project otherwise; an entity it cannot
+resolve is left alone rather than assumed non-persistable.
+
 ### [Nested Objects and Arrays](#nested-objects-and-arrays)
 
 Child entities are nested inside the parent’s `{ }` block using the association path:
@@ -26640,19 +26767,43 @@ If `OR MODIFY` is specified and the mapping already exists, it is updated in pla
 ## [Parameters](#parameters-52)
 
 [`module.Name`](#modulename-24)
+
 The qualified name of the import mapping.
+
 [`FOLDER 'folder_path'`](#folder-folder_path-3)
+
 Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
+
 [`WITH JSON STRUCTURE module.JsonStructure`](#with-json-structure-modulejsonstructure)
+
 Associates the mapping with the named JSON structure. The structure defines the JSON shape.
+
 [`WITH XML SCHEMA module.XmlSchema`](#with-xml-schema-modulexmlschema)
+
 Associates the mapping with the named XML schema instead of a JSON structure.
+
+The reference is **resolved** against the project: a name that matches no XML
+schema is refused by `mxcli check -p` and by `exec`, naming the schemas that
+exist. mxbuild otherwise reports it as CE1613 “The selected XML schema ‘X’ no
+longer exists” at the end of a build.
+
+A project holding **no** XML schemas disables the check rather than refusing
+every mapping — there is no `CREATE XML SCHEMA` in MDL, so an XML schema is
+only ever something imported into the project by hand, and having none is the
+ordinary case. The same resolution applies to `WITH JSON STRUCTURE`.
+
 [`CREATE | FIND | FIND OR CREATE`](#create--find--find-or-create)
+
 Object handling strategy for each entity block.
+
 [`Attribute = jsonField [ KEY ]`](#attribute--jsonfield--key-)
+
 Maps the JSON field `jsonField` to entity attribute `Attribute`. `KEY` marks this attribute for FIND lookups.
+
 [`AssociationName/module.ChildEntity = nestedKey`](#associationnamemodulechildentity--nestedkey)
+
 Maps a nested JSON object or array element to a child entity via the named association.
+
 ## [Examples](#examples-61)
 
 ### [Simple flat mapping](#simple-flat-mapping)
@@ -26810,19 +26961,43 @@ If `OR MODIFY` is specified and the mapping already exists, it is updated in pla
 ## [Parameters](#parameters-53)
 
 [`module.Name`](#modulename-25)
+
 The qualified name of the export mapping.
+
 [`FOLDER 'folder_path'`](#folder-folder_path-4)
+
 Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
+
 [`WITH JSON STRUCTURE module.JsonStructure`](#with-json-structure-modulejsonstructure-1)
+
 Associates the mapping with the named JSON structure.
+
 [`WITH XML SCHEMA module.XmlSchema`](#with-xml-schema-modulexmlschema-1)
+
 Associates the mapping with the named XML schema.
+
+The reference is **resolved** against the project: a name that matches no XML
+schema is refused by `mxcli check -p` and by `exec`, naming the schemas that
+exist. mxbuild otherwise reports it as CE1613 “The selected XML schema ‘X’ no
+longer exists” at the end of a build.
+
+A project holding **no** XML schemas disables the check rather than refusing
+every mapping — there is no `CREATE XML SCHEMA` in MDL, so an XML schema is
+only ever something imported into the project by hand, and having none is the
+ordinary case. The same resolution applies to `WITH JSON STRUCTURE`.
+
 [`NULL VALUES LeaveOutElement | SendAsNil`](#null-values-leaveoutelement--sendasnil)
+
 Controls null serialisation. Defaults to `LeaveOutElement`.
+
 [`jsonField = Attribute`](#jsonfield--attribute)
+
 Maps entity attribute `Attribute` to the JSON key `jsonField`.
+
 [`Assoc/module.ChildEntity AS alias`](#assocmodulechildentity-as-alias)
+
 Maps associated objects to a nested JSON object or array using the named alias.
+
 ## [Examples](#examples-62)
 
 ### [Simple flat mapping](#simple-flat-mapping-1)
@@ -31183,7 +31358,7 @@ mxcli widget extract --mpk widgets/MyWidget.mpk
 mxcli -p test.mpr -c "CREATE PAGE Test.TestPage ... MYWIDGET ..."
 
 # Check for errors (should have no CE0463)
-~/.mxcli/mxbuild/*/modeler/mx check test.mpr
+mxcli docker check -p test.mpr
 
 # Compare BSON structure if issues persist
 mxcli bson dump -p test.mpr --type page --object "Test.TestPage" --format ndsl
@@ -35103,7 +35278,7 @@ The `mx` validation tool must match the project’s Mendix version:
 mxcli setup mxbuild -p app.mpr
 
 # Check the project
-~/.mxcli/mxbuild/*/modeler/mx check app.mpr
+mxcli docker check -p app.mpr
 
 ```
 
