@@ -1,3 +1,7 @@
+## 2026-09-02 -- mxcli v0.20.0 @ 8982492
+- +34 / -0 lines
+- Sections changed: [mxcli Check Errors](#mxcli-check-errors), [mxcli Execution Errors](#mxcli-execution-errors)
+
 ## 2026-08-28 -- mxcli v0.20.0 @ 9bb6338
 - +184 / -9 lines
 - Sections changed: Check for errors (should have no CE0463), Check the project, Create a fresh project, Find the mx binary, Validate, [Test Annotations](#test-annotations), [ALTER SETTINGS](#alter-settings), [Description](#description-49) (+6 more)
