@@ -1,3 +1,7 @@
+## 2026-09-04 -- mxcli v0.20.0 @ 191a0c9
+- +871 / -239 lines
+- Sections changed: [ALTER LAYOUT](#alter-layout), [Page Statements](#page-statements), [Project Brain](#project-brain), change the qualified name to your own module, then:, from a dev container, after: mxcli -p app.mpr -c "refresh catalog full", [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled), [Anchors](#anchors), [CREATE OR REPLACE NAVIGATION](#create-or-replace-navigation) (+213 more)
+
 ## 2026-09-02 -- mxcli v0.20.0 @ 8982492
 - +34 / -0 lines
 - Sections changed: [mxcli Check Errors](#mxcli-check-errors), [mxcli Execution Errors](#mxcli-execution-errors)
