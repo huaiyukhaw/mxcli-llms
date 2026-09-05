@@ -1,3 +1,7 @@
+## 2026-09-05 -- mxcli v0.20.0 @ 41c55d0
+- +167 / -17 lines
+- Sections changed: What have I changed in this module since installing it?, [Domain Model Layout](#domain-model-layout), [Project Brain](#project-brain), [Commands](#commands-2), [Flags](#flags), [Flags](#flags-1), [Flags](#flags-2), [It replaces positions you set by hand](#it-replaces-positions-you-set-by-hand) (+12 more)
+
 ## 2026-09-04 -- mxcli v0.20.0 @ 191a0c9
 - +871 / -239 lines
 - Sections changed: [ALTER LAYOUT](#alter-layout), [Page Statements](#page-statements), [Project Brain](#project-brain), change the qualified name to your own module, then:, from a dev container, after: mxcli -p app.mpr -c "refresh catalog full", [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled), [Anchors](#anchors), [CREATE OR REPLACE NAVIGATION](#create-or-replace-navigation) (+213 more)

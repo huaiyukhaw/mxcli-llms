@@ -4,6 +4,8 @@
 
 - **Decisions** — why a pattern was chosen here, which marketplace version broke
   what, what a recurring mxbuild error means in *this* app.
+- **Open questions** — what is not decided yet, recorded so it is not silently
+  forgotten and rediscovered expensively later.
 - **The plan** — the requirements being built from, grouped into slices, when the
   source is a specification document, a prototype or a conversation.
 
