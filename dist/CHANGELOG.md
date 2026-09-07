@@ -1,3 +1,7 @@
+## 2026-09-07 -- mxcli v0.21.0 @ e6a83b5
+- +146 / -9 lines
+- Sections changed: [Widget Types](#widget-types), [Any installed widget](#any-installed-widget), [DESCRIBE Statements](#describe-statements), [Full Refresh Tables](#full-refresh-tables), [Querying Examples](#querying-examples), [See Also](#see-also-13), [mxcli Check Errors](#mxcli-check-errors)
+
 ## 2026-09-05 -- mxcli v0.20.0 @ 41c55d0
 - +167 / -17 lines
 - Sections changed: What have I changed in this module since installing it?, [Domain Model Layout](#domain-model-layout), [Project Brain](#project-brain), [Commands](#commands-2), [Flags](#flags), [Flags](#flags-1), [Flags](#flags-2), [It replaces positions you set by hand](#it-replaces-positions-you-set-by-hand) (+12 more)

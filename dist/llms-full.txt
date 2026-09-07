@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.20.0 @ 41c55d0
-Generated: 2026-09-05T06:36:34Z
+Version:   mxcli v0.21.0 @ e6a83b5
+Generated: 2026-09-07T06:55:21Z
 
 ---
 
@@ -9678,12 +9678,15 @@ Nested folders use `/` separators: `Folder: 'Pages/Customers/Detail'`. Missing f
 
 # [Widget Types](#widget-types)
 
-MDL supports a comprehensive set of widget types for building Mendix pages. Each widget is declared with a type keyword, a unique name, properties in parentheses, and optional child widgets in braces.
+A widget is declared with a type keyword, a unique name, properties in parentheses, and optional child widgets in braces.
 
 ```
 WIDGET_TYPE widgetName (Property: value, ...) [{ children }]
 
 ```
+
+**The list below is not the boundary.** The built-in Mendix widgets are documented here because they have fixed, hand-written property sets. Every **pluggable or custom widget** installed in the project is also written by its own name, with a body derived from the widget’s definition — see [Any installed widget](#any-installed-widget) below. If a widget is in `widgets/`, MDL can name it.
+
 ## [Widget Categories](#widget-categories)
 
 | Category | Widgets |
@@ -10132,6 +10135,77 @@ NAVIGATIONLIST navMain {
 }
 
 ```
+## [Any installed widget](#any-installed-widget)
+
+Everything above is a **built-in** widget: its keyword and properties are fixed
+by Mendix and by mxcli. A **pluggable or custom widget** — DataGrid 2, Combo box,
+Gallery, HTML Element, the charts, anything from the Marketplace, anything your
+team built — is named the same way, by its own MDL name:
+
+```
+htmlelement frame (tagName: 'div', tagContentMode: 'container') {
+  attribute a1 (attributeName: 'data-testid', attributeValueType: 'expression')
+  tagcontentcontainer body {
+    dynamictext caption (Content: 'Inside the element')
+  }
+}
+
+```
+
+Three things there come from the widget’s own definition rather than from any
+list in mxcli:
+
+- **The keyword** `htmlelement` — the widget’s MDL name, which is the last
+  segment of its widget id.
+- **The properties** `tagName`, `tagContentMode` — written with the widget’s own
+  spelling, exactly as `DESCRIBE WIDGET` reports them.
+- **The body containers** `attribute` (an object list, one entry per repetition)
+  and `tagcontentcontainer` (a child slot, holding widgets).
+
+### [Finding the names](#finding-the-names)
+
+Ask the widget:
+
+```
+DESCRIBE WIDGET htmlelement;
+
+```
+
+It lists every property with its type, default and enumeration members, every
+body container and whether MDL can express it, and a complete example that
+parses and checks as written. See
+[DESCRIBE WIDGET](reference/query/describe-widget.html).
+
+### [The explicit form](#the-explicit-form)
+
+A widget can also be named by its full id. This is the fallback, not the norm —
+use it when two installed packages ship the same MDL name, or when you have the
+id in hand and not the name:
+
+```
+pluggablewidget 'com.mendix.widget.web.htmlelement.HTMLElement' frame (
+  tagName: 'div'
+)
+
+```
+
+`DESCRIBE PAGE` emits the short form wherever it round-trips, and falls back to
+the id form when the name would be ambiguous.
+
+### [When a widget is not found](#when-a-widget-is-not-found)
+
+A name that resolves to no installed definition is an error, not a silently
+accepted widget — MDL-WIDGET25, with the nearest known names suggested. A
+container keyword the parent widget does not declare is MDL-WIDGET26. Both need
+a project open (`-p`), since without one mxcli knows only its embedded widgets.
+
+If a widget you have installed is not found, its definition has not been
+extracted yet:
+
+```
+mxcli widget init -p app.mpr     # extract definitions for every widget in widgets/
+
+```
 ## [Common Widget Properties](#common-widget-properties)
 
 These properties are shared across many widget types:
@@ -10151,6 +10225,8 @@ These properties are shared across many widget types:
 - [Page Structure](#page-structure) – layout selection and data sources
 - [Data Binding](#data-binding) – connecting widgets to attributes
 - [ALTER PAGE](#alter-page--alter-snippet) – modifying widgets in existing pages
+- [DESCRIBE WIDGET](reference/query/describe-widget.html) – inspect any installed widget’s properties and body containers
+- [Pluggable Widgets Across Versions](#pluggable-widgets-across-mendix-versions) – how mxcli keeps widget definitions version-correct
 
 # [Data Binding](#data-binding)
 
@@ -22473,6 +22549,7 @@ Statements for browsing and inspecting project elements. Query statements are re
 | [DESCRIBE ENUMERATION](#describe-enumeration-1) | Show enumeration values and documentation |
 | [DESCRIBE MICROFLOW](#describe-microflow--describe-nanoflow) | Show complete MDL source for a microflow or nanoflow |
 | [DESCRIBE PAGE](#describe-page--describe-snippet) | Show complete MDL source for a page or snippet |
+| [DESCRIBE WIDGET](reference/query/describe-widget.html) | Show a widget’s properties, body containers and a working MDL example |
 
 ## [Search](#search-1)
 
@@ -33561,19 +33638,69 @@ CREATE TABLE WIDGETS (
 ```
 ### [REFS](#refs)
 
+The reference graph: one row per edge. Populated by `refresh catalog full`.
+
 ```
 CREATE TABLE REFS (
-    SourceName  TEXT,           -- Referencing document
-    SourceKind  TEXT,           -- "Microflow", "Page", etc.
-    TargetName  TEXT,           -- Referenced element
-    TargetKind  TEXT,           -- "Entity", "Microflow", etc.
-    RefKind     TEXT            -- "Call", "DataSource", "Association", etc.
+    Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    SourceType  TEXT NOT NULL,  -- "MICROFLOW", "PAGE", "ENTITY", ...
+    SourceId    TEXT NOT NULL,  -- element $ID, or '' where the builder has no id
+    SourceName  TEXT NOT NULL,  -- referencing document, module-qualified
+    TargetType  TEXT NOT NULL,  -- "ENTITY", "MICROFLOW", "WIDGET", ...
+    TargetId    TEXT,           -- element $ID, or the widget ID for a WIDGET target
+    TargetName  TEXT NOT NULL,  -- referenced element
+    RefKind     TEXT NOT NULL,  -- see the vocabulary below
+    ModuleName  TEXT,
+    ProjectId   TEXT,
+    SnapshotId  TEXT
 );
 
-CREATE INDEX idx_refs_source ON REFS(SourceName);
-CREATE INDEX idx_refs_target ON REFS(TargetName);
+CREATE INDEX idx_refs_source ON refs(SourceType, SourceName);
+CREATE INDEX idx_refs_target ON refs(TargetType, TargetName);
+CREATE INDEX idx_refs_kind   ON refs(RefKind);
 
 ```
+
+`RefKind` values are lower-case, and the current vocabulary is whatever
+`CATALOG.GRAPH_REFKIND_DISTRIBUTION` reports for your project — query that
+rather than trusting a list here:
+
+| RefKind | Edge |
+| --- | --- |
+| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation |
+| `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
+| `return` | flow returns an entity type |
+| `parameter` | page or flow parameter entity type |
+| `generalize` | entity extends entity |
+| `associate` | association targets entity |
+| `layout` | page uses a layout |
+| `datasource` | page or widget reads an entity |
+| `action` | widget calls a microflow / nanoflow |
+| `show_page` | flow or widget action opens a page |
+| `home_page` / `login_page` / `menu_item` | navigation profile references a page |
+| `calculate` | calculated attribute uses a microflow |
+| `schedule` | scheduled event runs a microflow |
+| `validate` | attribute validation rule uses a regular expression |
+| `widget` | page or snippet uses a pluggable / custom widget |
+
+#### [WIDGET targets](#widget-targets)
+
+A `widget` edge is the odd one out and is worth knowing about before you join
+against it:
+
+- `TargetName` is the widget’s **MDL name** (`COMBOBOX`), not its dotted widget
+  ID. The ID is in `TargetId`. A dotted target would be mis-read as a module by
+  `GRAPH_MODULE_COUPLING` and friends, which take everything before the first
+  dot as the module name.
+- It is therefore the only `TargetName` that is not module-qualified — a widget
+  definition belongs to no Mendix module. `GRAPH_GOD_NODES` excludes `WIDGET`
+  targets from its asset list for that reason, while still counting a page’s
+  out-degree towards the widgets it uses.
+- Only widgets with a definition get an edge. A built-in Mendix widget
+  (`Forms$DynamicText`) has none, so it produces no row; use `CATALOG.WIDGETS`
+  for those.
+- One edge per page x widget, not per widget instance.
+
 ### [PERMISSIONS](#permissions)
 
 ```
@@ -33639,6 +33766,16 @@ WHERE AttributeCount > 20 ORDER BY AttributeCount DESC;
 -- Find all references to an entity
 SELECT SourceName, RefKind FROM CATALOG.REFS
 WHERE TargetName = 'Sales.Customer';
+
+-- Which pages use a given pluggable widget?
+SELECT SourceType, SourceName FROM CATALOG.REFS
+WHERE RefKind = 'widget' AND TargetName = 'COMBOBOX';
+
+-- Which installed widget packages does nothing use?
+-- (MDL's SELECT has no NOT EXISTS / NOT IN — use an anti-join.)
+SELECT d.MdlName, d.WidgetId FROM CATALOG.WIDGET_DEFINITIONS d
+LEFT JOIN CATALOG.REFS r ON r.TargetId = d.WidgetId AND r.RefKind = 'widget'
+WHERE r.Id IS NULL;
 
 -- Full-text search
 SELECT name, kind, snippet(STRINGS, 2, '<b>', '</b>', '...', 20)
@@ -36328,7 +36465,7 @@ page MyModule.OrderList: widget `cb1` (combobox) has no property
 
 **Solution:**
 
-1. Compare the key against the widget’s known properties — `mxcli describe widget <Name>` lists them.
+1. Compare the key against the widget’s known properties — `mxcli widget describe <name>` lists them (or `describe widget <name>;` in MDL).
 2. Use the suggested replacement if one is offered (Levenshtein-nearest match).
 3. If the property genuinely doesn’t exist on this widget version, check that `.mxcli/widgets/` has the latest schema: `mxcli refresh catalog -p app.mpr` re-extracts any `.mpk` whose mtime changed.
 4. If the property was just added by a `.mpk` upgrade, make sure `mxcli init` or `widget init` was run after the upgrade.
