@@ -1,3 +1,7 @@
+## 2026-09-08 -- mxcli v0.21.0 @ 3ea0a5d
+- +93 / -4 lines
+- Sections changed: [Starlark Rules](#starlark-rules), [Bundled Starlark Rules](#bundled-starlark-rules), [Linting for deeper analysis](#linting-for-deeper-analysis), [Rule Categories](#rule-categories)
+
 ## 2026-09-07 -- mxcli v0.21.0 @ e6a83b5
 - +146 / -9 lines
 - Sections changed: [Widget Types](#widget-types), [Any installed widget](#any-installed-widget), [DESCRIBE Statements](#describe-statements), [Full Refresh Tables](#full-refresh-tables), [Querying Examples](#querying-examples), [See Also](#see-also-13), [mxcli Check Errors](#mxcli-check-errors)
