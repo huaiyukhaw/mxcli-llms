@@ -1,3 +1,7 @@
+## 2026-09-09 -- mxcli v0.21.0 @ ca9b90e
+- +195 / -7 lines
+- Sections changed: [Commands](#commands-2), [Description](#description-44), [Layout](#layout), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation), [Offline Synchronization](#offline-synchronization), [Parameters](#parameters-46), [Profile Types](#profile-types), [Related Statements](#related-statements) (+3 more)
+
 ## 2026-09-08 -- mxcli v0.21.0 @ 3ea0a5d
 - +93 / -4 lines
 - Sections changed: [Starlark Rules](#starlark-rules), [Bundled Starlark Rules](#bundled-starlark-rules), [Linting for deeper analysis](#linting-for-deeper-analysis), [Rule Categories](#rule-categories)
