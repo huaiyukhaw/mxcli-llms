@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.21.0 @ ca9b90e
-Generated: 2026-09-09T06:59:45Z
+Version:   mxcli v0.21.0 @ 2f2d7b3
+Generated: 2026-09-12T06:47:35Z
 
 ---
 
@@ -11409,6 +11409,41 @@ Restrict read and write to specific attributes:
 GRANT Shop.User ON Shop.Customer (READ (Name, Email, Status), WRITE (Email));
 
 ```
+### [Members Added Later](#members-added-later)
+
+A rule also carries a **default for members added after it was written**, and MDL
+derives that default from the grant rather than stating it: `WRITE *` gives
+ReadWrite, `READ *` gives ReadOnly, and a grant written **purely as member
+lists** leaves it at **None**.
+
+So an attribute added later is granted None on a member-listed rule. The model
+is complete and correct — every rule gets an entry for the new member, and the
+build reports no errors — but the attribute renders blank for that role:
+
+```
+GRANT Shop.User ON Shop.Customer (READ (Name, Email));
+-- later:
+--   alter entity Shop.Customer add attribute Phone: String;
+-- Phone is granted None to Shop.User. Nothing is broken; it is simply not visible.
+
+```
+
+`alter entity … add attribute` reports this and prints the GRANT that fixes it:
+
+```
+Added attribute 'Phone' to entity Shop.Customer
+Warning: Shop.Customer.Phone is not readable by Shop.User
+  ...
+    grant Shop.User on Shop.Customer (read (Phone));
+
+```
+
+What decides this is the rule’s **default**, not how narrow its member list is. A
+rule granted `READ *, WRITE (Email)` is narrower than `READ *, WRITE *` and still
+sees new members, because `READ *` set its default to ReadOnly. If you want a
+role to pick up future members automatically, give its rule a `READ *` or
+`WRITE *` and narrow from there with [REVOKE](#revoke-on-entities).
+
 ### [XPath Constraints](#xpath-constraints)
 
 Limit which objects a role can see or modify using an XPath expression in the `WHERE` clause:
@@ -12089,7 +12124,7 @@ The words are the values Mendix stores, not Studio Pro’s captions — its
 “All Objects” is `all` and its “By XPath” is `where`. Copying a caption gives a
 parse error rather than a broken document.
 
-See [ALTER NAVIGATION](#offline-synchronization-1)
+See [ALTER NAVIGATION](#offline-synchronization-2)
 for the full reference.
 
 ## [DESCRIBE NAVIGATION](#describe-navigation)
@@ -13662,6 +13697,22 @@ seeds one by declaring them. That is the whole contract — anywhere in a `.css`
 
 ```
 
+Seeding also updates what the new theme **says about itself**, because a value
+inherited from the base describes a palette that is no longer there:
+
+- the **colorway** `theme list` shows is derived from the seeded
+  brand/info/success/warning/danger/ink-muted, falling back to the base’s for
+  any the design did not declare (a partial seed is normal);
+- the **summary** names the design file it came from, rather than keeping the
+  base’s description of its own colours. Pass `--summary` for a real one.
+
+And if the seeded fonts no longer name a family the base theme vendors, that
+family’s `@font-face` rules **and its `.woff2` files** are dropped together —
+per family, so a theme that changes its body font and keeps IBM Plex Mono for
+code ships only the mono weights. A design that says nothing about fonts keeps
+them all, which is the right default: dropping a font nobody asked to change
+would break the scaffold’s own rendering.
+
 Declarations inside a dark block (`prefers-color-scheme: dark`, `.theme-dark`,
 `[data-theme="dark"]`) seed the dark palette; everything else seeds the light
 one. Tokens the design does not name keep the base theme’s value, so a
@@ -14816,6 +14867,43 @@ not assume it parses as an integer.
 select QualifiedName, Parallelism, ClusterWide from CATALOG.QUEUES;
 
 ```
+### [Offline synchronization](#offline-synchronization-1)
+
+`CATALOG.OFFLINE_ENTITY_CONFIGS` — one row per entity an offline navigation
+profile synchronizes.
+
+```
+select ProfileName, EntityQualifiedName, SyncMode, XPathConstraint
+  from CATALOG.OFFLINE_ENTITY_CONFIGS
+ where SyncMode = 'All';
+
+```
+
+`CATALOG.NAVIGATION_PROFILES.OfflineEntityCount` says how many and nothing
+else; this table is what makes “which entities does this profile sync, and
+how?” answerable — the first question anyone auditing an offline app asks.
+
+`SyncMode` is the value Mendix stores, not the caption Studio Pro shows: `All`,
+`Constrained`, `Never`, `None`, `NoneAndPreserveData`, `Online`. Its dialog’s
+“All Objects” is `All` and “By XPath” is `Constrained`.
+
+`CompatibilityMode` is indexed although MDL cannot author it. The catalog
+reports what is stored, and a flag invisible to every query is one nobody
+discovers until it matters.
+
+A configured entity also produces a `sync` row in `CATALOG.REFS`, so
+`show references to Sales.Order` names the profiles that download it:
+
+```
+select SourceName, TargetName from CATALOG.REFS where RefKind = 'sync';
+
+```
+
+**Every mode gets an edge, including the ones that download nothing.** A
+profile with `sync Sales.Audit never` still *names* that entity, so renaming or
+dropping it leaves the configuration dangling — which is precisely what a
+reference edge exists to reveal.
+
 ## [Graph-Analysis Tables](#graph-analysis-tables)
 
 The dependency graph (`CATALOG.REFS`, full refresh) is analysed by a family of
@@ -18780,6 +18868,61 @@ not just headless checks.
   re-bundles **only when the edit touched client source**: a microflow/entity edit
   skips the bundle and just hot-reloads.
 
+**Mendix 11.14+ bundles the client itself**, so there is no rollup step to run and
+no bundler to keep hot — `run --local` prints a line saying so and skips it. Both
+paths work; the bundle is mxbuild’s rather than mxcli’s.
+
+### [`--watch` on Mendix 11.14](#--watch-on-mendix-1114)
+
+**`--watch` is not usable on 11.14 yet.** It starts and the app boots, but every
+*rebuild* fails inside mxbuild:
+
+```
+Could not find a part of the path '…/deployment/web/pages/MyModule.Home_Web.js'
+
+```
+
+or, when the change did not touch any page:
+
+```
+Compilation of the app bundle failed.
+Cannot find module '…/deployment/web/rollup.config.mjs'
+  imported from …/modeler/tools/node/rollup-runner.mjs
+
+```
+
+The first build in an `mxbuild --serve` process does not leave the deployment in a
+state its own incremental build can continue from — neither the bundler’s config
+file nor `web/pages/`/`web/layouts/` survive it — so the first build succeeds and
+every later one fails. Measured against mxbuild 11.14.0 over its own HTTP API with
+no mxcli involved: the same `/build` request POSTed twice, model untouched between
+them, goes Success then Failure.
+
+No remedy from outside the process works, and three were measured:
+
+| Attempt | Result |
+| --- | --- |
+| Switch *App > Settings > Runtime > App bundler* to Rspack | Identical failure, naming `rspack.config.mjs` |
+| Delete `deployment/` and start over | Next second build fails the same way |
+| Restore the config (it exists for ~1.5s mid-build) | Rebuilds fine **while the model is unchanged**; fails as soon as a page changes |
+
+That last one is the interesting near-miss: the config carries nothing
+model-specific, so it can be captured and put back — but doing so only rescues the
+case a warm loop never needs. There are two regressions here, and the second one
+(the per-document client export) has no external fix. `run --local` prints an
+explanation when it sees either, so the failure does not read as a corrupt
+`deployment/`.
+
+For contrast, a one-shot `mxbuild --target=deploy` run twice into the same
+deployment directory succeeds both times — it is the serve process, not the 11.14
+deployment shape.
+
+Until mxbuild closes this, use a restart per change:
+
+```
+mxcli run --local --screenshot -p app.mpr
+
+```
 ## [Pixel-perfect page loop](#pixel-perfect-page-loop)
 
 Pass `--screenshot` and each applied change is captured to a PNG (default
@@ -25411,7 +25554,9 @@ The `DataSource` property determines how a data widget obtains its data:
 
 ### [Action Types](#action-types)
 
-The `Action` property on buttons determines what happens when clicked:
+The `Action` property determines what happens when the widget is clicked. It is
+not a button-only property: a `CONTAINER` is clickable too and takes the same
+values, including the argument list.
 
 | Action | Syntax | Description |
 | --- | --- | --- |
@@ -25422,6 +25567,27 @@ The `Action` property on buttons determines what happens when clicked:
 | Page | `Action: PAGE Module.PageName` | Opens a page |
 | Close | `Action: CLOSE_PAGE` | Closes the current page |
 | Delete | `Action: DELETE` | Deletes the context object |
+
+A microflow or nanoflow action is a **call**: every parameter the flow declares
+needs an argument, or Mendix rejects the page with **CE1571**. An enclosing data
+container of the parameter’s type supplies it without one — but a data grid’s
+**control bar** does not, because it is not row-scoped. Pass the grid’s selection
+there, addressed by the widget’s own name:
+
+```
+DATAGRID dgOrders (DataSource: DATABASE FROM Sales.Order, Selection: Single) {
+  COLUMN colNr (Attribute: Number, Caption: 'Order #')
+  CONTROLBAR cb {
+    CONTAINER cShip (Class: 'command',
+      Action: NANOFLOW Sales.ACT_Ship($Order = $dgOrders)) {
+      ACTIONBUTTON btnShip (Caption: 'Ship')
+    }
+  }
+}
+
+```
+
+`mxcli check -p <app.mpr>` reports a missing argument before mxbuild does.
 
 ### [ButtonStyle Values](#buttonstyle-values)
 
@@ -26451,6 +26617,7 @@ Mendix security operates at two levels. **Module roles** define permissions with
 | [GRANT](#grant-1) | Grant entity, microflow, page, or nanoflow access to roles |
 | [REVOKE](#revoke-1) | Remove previously granted access |
 | [CREATE DEMO USER](#create-demo-user-1) | Create a demo user for development and testing |
+| [UPDATE SECURITY](#update-security) | Re-sync entity access rules with the domain model (CE0066) |
 
 ## [Related Statements](#related-statements)
 
@@ -26926,6 +27093,103 @@ CREATE DEMO USER 'viewer' PASSWORD '1' ENTITY Administration.Account (AppViewer)
 
 [CREATE USER ROLE](#create-user-role-1), [GRANT](#grant-1)
 
+# [UPDATE SECURITY](#update-security)
+
+Bring entity access rules back into sync with their domain model — the headless
+equivalent of Studio Pro’s **Update security** button in the domain model editor.
+
+## [Syntax](#syntax-11)
+
+```
+UPDATE SECURITY;
+UPDATE SECURITY <module>;
+UPDATE SECURITY IN <module>;
+
+```
+
+With no module, every module in the project is reconciled. The two scoped forms
+are the same thing; `IN` is optional.
+
+## [What it does](#what-it-does-5)
+
+An access rule names the members it governs. When the entity gains an attribute
+or an association, every rule on it needs an entry for the new member — and when
+a member goes, its entries have to go with it. A rule that has fallen behind is
+what Mendix reports as:
+
+```
+[error] [CE0066] "Entity access is out of date. Please update security by
+        clicking the 'Update security' button in the domain model editor."
+        at Domain model of module 'MyModule'
+
+```
+
+`UPDATE SECURITY` adds what is missing, removes what is stale, and downgrades
+write rights on calculated attributes. It reports what it changed:
+
+```
+Reconciled 3 access rule(s) in module Administration
+
+```
+
+A project whose rules already cover their entities is **not written to** — the
+command says `All entity access rules are up to date` and leaves the model alone.
+
+`System` is skipped: its entities are the platform’s and its access rules are
+not the project’s to rewrite. Naming it explicitly is an error rather than a
+silent no-op.
+
+## [When you need it](#when-you-need-it)
+
+Rarely, for models mxcli writes. Every mxcli write path reconciles as it writes —
+`GRANT`, `ALTER ENTITY`, `CREATE ASSOCIATION`, and the finalize step after any
+script — so an MDL script leaves the rules correct.
+
+It is for a model that arrived from somewhere else:
+
+- a module imported or updated **outside Studio Pro**, whose author never pressed
+  Update security, so the package ships rules that do not cover every member;
+- a hand-edited or merged `.mpr`;
+- a project last touched by a Mendix version whose conversion added members.
+
+`mxcli marketplace install` and `mxcli marketplace update` run this for the module
+they copy in, and report the count — a transplant copies the incoming units
+verbatim, so without it the package’s rules reach the project unchecked
+(mendixlabs/mxcli#1085).
+
+## [Examples](#examples-56)
+
+```
+-- After a headless module install or update
+UPDATE SECURITY UserCommons;
+
+-- Every module in the project
+UPDATE SECURITY;
+
+```
+
+From the shell, without writing a script:
+
+```
+mxcli -p app.mpr -c "update security UserCommons"
+
+```
+## [Notes](#notes-10)
+
+- Reconciling a marketplace module’s rules changes that module, so it shows up in
+  `mxcli diff-local` and `mxcli marketplace diff` reads it as a local edit. That
+  is unavoidable — it is the same change Studio Pro’s button makes — and it only
+  happens when the rules were genuinely incomplete.
+- The rules of an entity whose generalization lives in **another module** cannot
+  be fully checked here: those inherited members are neither added nor removed,
+  but existing entries for them are preserved rather than pruned.
+
+## [See also](#see-also-81)
+
+- [GRANT](#grant-1) — author entity access rules
+- [REVOKE](#revoke-1) — remove them
+- [Error messages](#error-messages-reference) — CE0066
+
 # [Navigation Statements](#navigation-statements)
 
 Statements for configuring application navigation profiles, home pages, login pages, and menu structures.
@@ -26959,6 +27223,7 @@ CREATE OR REPLACE NAVIGATION profile
     [ MENU (
         menu_items
     ) ]
+    [ ON SYNC ERROR { THROW | CONTINUE } ]
     [ SYNC (
         sync_rules
     ) ]
@@ -26986,7 +27251,7 @@ Mendix supports the following navigation profile types:
 
 The web kinds are a closed set, and the profile is **created** if the project
 does not have it yet. The three offline kinds are the online names plus
-`Offline`, and each one needs a [`SYNC` block](#offline-synchronization-1) to
+`Offline`, and each one needs a [`SYNC` block](#offline-synchronization-2) to
 download anything.
 
 ### [Menu Items](#menu-items-1)
@@ -27033,7 +27298,7 @@ A leaf menu item that navigates to a page.
 
 A submenu containing nested menu items and/or further submenus.
 
-### [Offline Synchronization](#offline-synchronization-1)
+### [Offline Synchronization](#offline-synchronization-2)
 
 `SYNC ( ... )` configures which entities an offline profile downloads. **An
 offline profile downloads nothing without it** — the app builds, routes and
@@ -27072,11 +27337,18 @@ quoted `WHERE 'xpath'` still parses, but every quote inside it must be doubled.
 The block replaces the stored list, the way `MENU` replaces the menu. Omitting
 it leaves the stored configuration alone.
 
+`ON SYNC ERROR THROW | CONTINUE` is Studio Pro’s *“Throw error when server
+rejects objects during synchronization”*, and defaults to `THROW`. It reuses the
+phrase MDL already has for failure handling — a microflow’s `ON ERROR CONTINUE`
+— rather than introducing a keyword of its own. Omitting the clause leaves the
+stored value alone, and `DESCRIBE NAVIGATION` emits it only when it is not the
+default.
+
 An entity’s *compatibility mode* flag has no MDL syntax. It is read, preserved
 across a rewrite, and reported by `DESCRIBE NAVIGATION` — never silently
 dropped.
 
-## [Examples](#examples-56)
+## [Examples](#examples-57)
 
 Minimal navigation with just a home page:
 
@@ -27117,7 +27389,7 @@ CREATE OR REPLACE NAVIGATION NativePhone
     );
 
 ```
-## [See Also](#see-also-81)
+## [See Also](#see-also-82)
 
 [SHOW NAVIGATION](#show-navigation)
 
@@ -27158,7 +27430,7 @@ Outputs the full MDL representation of one or all navigation profiles. The outpu
 
 [`profile`](#profile-1)
 Optional. One of: `Responsive`, `Tablet`, `Phone`, `NativePhone`. When omitted, all profiles are shown.
-## [Examples](#examples-57)
+## [Examples](#examples-58)
 
 Show a summary of all profiles:
 
@@ -27187,7 +27459,7 @@ Export the responsive profile as MDL:
 DESCRIBE NAVIGATION Responsive;
 
 ```
-## [See Also](#see-also-82)
+## [See Also](#see-also-83)
 
 [ALTER NAVIGATION](#alter-navigation)
 
@@ -27251,7 +27523,7 @@ sub-items.
 [`ICON`](#icon)
 Optional icon, given as a qualified name into an icon collection — not a string.
 Hyphenated segments are double-quoted: `Atlas_Core.Atlas."layout-2"`.
-## [Examples](#examples-58)
+## [Examples](#examples-59)
 
 Create a menu with a nested sub-menu:
 
@@ -27297,7 +27569,7 @@ From the command line:
 mxcli describe menu Atlas_Core.Phone_Menu -p app.mpr
 
 ```
-## [Notes](#notes-10)
+## [Notes](#notes-11)
 
 **A menu item cannot open a page that takes a required parameter.** There is nowhere
 to supply the argument, and Mendix rejects the model with **CE1571** (“No argument
@@ -27321,7 +27593,7 @@ Re-running such output therefore loses that icon — visibly, not silently.
 create/modify/drop refuse rather than writing a differently-shaped document. Reading
 (`DESCRIBE MENU`) works on both engines.
 
-## [See Also](#see-also-83)
+## [See Also](#see-also-84)
 
 - [ALTER NAVIGATION](#alter-navigation) — the menu inside a navigation profile
 - [SHOW NAVIGATION](#show-navigation) — read profile menus and home pages
@@ -27465,7 +27737,7 @@ Optional overview page displayed when viewing workflow instances.
 Optional display name shown in the workflow overview.
 [`DESCRIPTION 'text'`](#description-text-1)
 Optional description of the workflow’s purpose.
-## [Examples](#examples-59)
+## [Examples](#examples-60)
 
 Simple approval workflow:
 
@@ -27524,7 +27796,7 @@ BEGIN
 END WORKFLOW;
 
 ```
-## [See Also](#see-also-84)
+## [See Also](#see-also-85)
 
 [DROP WORKFLOW](#drop-workflow-1)
 
@@ -27546,13 +27818,13 @@ Any references to the dropped workflow (e.g., CALL WORKFLOW activities in other 
 
 [`module.Name`](#modulename-22)
 The qualified name of the workflow to drop (`Module.WorkflowName`).
-## [Examples](#examples-60)
+## [Examples](#examples-61)
 
 ```
 DROP WORKFLOW HR.ApprovalFlow;
 
 ```
-## [See Also](#see-also-85)
+## [See Also](#see-also-86)
 
 [CREATE WORKFLOW](#create-workflow-1)
 
@@ -27727,7 +27999,7 @@ Optional. A description for the JSON structure document.
 A representative JSON document. Must be a valid JSON string. The sample defines field names and types. Multi-line snippets can use `$$...$$` quoting.
 [`CUSTOM_NAME_MAP ( 'jsonKey' AS 'AttributeName' )`](#custom_name_map--jsonkey-as-attributename-)
 Optional. Renames individual JSON keys to the specified attribute names. Useful for keys that are reserved words or contain special characters.
-## [Examples](#examples-61)
+## [Examples](#examples-62)
 
 ### [Flat JSON object](#flat-json-object)
 
@@ -27801,7 +28073,7 @@ CREATE OR REPLACE JSON STRUCTURE MyModule.JSON_Pet
     SNIPPET '{"id": 1, "name": "Fido", "status": "available", "tags": []}';
 
 ```
-## [See Also](#see-also-86)
+## [See Also](#see-also-87)
 
 [CREATE IMPORT MAPPING](#create-import-mapping), [CREATE EXPORT MAPPING](#create-export-mapping)
 
@@ -27920,7 +28192,7 @@ Maps the JSON field `jsonField` to entity attribute `Attribute`. `KEY` marks thi
 
 Maps a nested JSON object or array element to a child entity via the named association.
 
-## [Examples](#examples-62)
+## [Examples](#examples-63)
 
 ### [Simple flat mapping](#simple-flat-mapping)
 
@@ -27985,7 +28257,7 @@ CREATE OR MODIFY IMPORT MAPPING MyModule.IMM_Pet
 };
 
 ```
-## [Notes](#notes-11)
+## [Notes](#notes-12)
 
 - The child entity must own the FK (`FROM child TO parent`). Using the wrong association direction causes validation errors at runtime.
 - Arrays in the JSON sample map directly to child entity objects — there is no intermediate container entity (unlike export mappings).
@@ -28018,7 +28290,7 @@ Referencing an inherited attribute against the entity being mapped rather than i
 declaring entity is Mendix **CE1613** *“The selected attribute … no longer
 exists”*, and Studio Pro shows the field unmapped.
 
-## [See Also](#see-also-87)
+## [See Also](#see-also-88)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE EXPORT MAPPING](#create-export-mapping)
 
@@ -28114,7 +28386,7 @@ Maps entity attribute `Attribute` to the JSON key `jsonField`.
 
 Maps associated objects to a nested JSON object or array using the named alias.
 
-## [Examples](#examples-63)
+## [Examples](#examples-64)
 
 ### [Simple flat mapping](#simple-flat-mapping-1)
 
@@ -28185,12 +28457,12 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 };
 
 ```
-## [Notes](#notes-12)
+## [Notes](#notes-13)
 
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
 
-## [See Also](#see-also-88)
+## [See Also](#see-also-89)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
@@ -28243,7 +28515,7 @@ A representative XML input document.
 A JSLT transformation expression applied to the current input.
 [`XSLT 'transformation'`](#xslt-transformation)
 An XSLT stylesheet applied to the current input.
-## [Examples](#examples-64)
+## [Examples](#examples-65)
 
 ### [Single-step JSON flattening](#single-step-json-flattening)
 
@@ -28289,7 +28561,7 @@ CREATE OR MODIFY DATA TRANSFORMER MyModule.WeatherTransform
 };
 
 ```
-## [See Also](#see-also-89)
+## [See Also](#see-also-90)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
@@ -28390,7 +28662,7 @@ Optional. The display name shown in Studio Pro. Populated by Studio Pro after ke
 Optional. The Portal key name. Populated by Studio Pro after key validation.
 [`Environment: 'environment'`](#environment-environment)
 Optional. The deployment environment. Populated by Studio Pro after key validation.
-## [Examples](#examples-65)
+## [Examples](#examples-66)
 
 ### [Minimal model](#minimal-model)
 
@@ -28438,7 +28710,7 @@ DROP MODEL MyModule.GPT4Model;
 /
 
 ```
-## [See Also](#see-also-90)
+## [See Also](#see-also-91)
 
 [CREATE AGENT](#create-agent), [CREATE KNOWLEDGE BASE](#create-knowledge-base)
 
@@ -28474,7 +28746,7 @@ The qualified name of the knowledge base document.
 The provider. `MxCloudGenAI` is the only supported value.
 [`key: module.KeyConstant`](#key-modulekeyconstant-1)
 A qualified reference to a String constant that holds the Portal resource key for the knowledge base.
-## [Examples](#examples-66)
+## [Examples](#examples-67)
 
 ### [Create a knowledge base](#create-a-knowledge-base)
 
@@ -28501,7 +28773,7 @@ CREATE OR MODIFY KNOWLEDGE BASE MyModule."ProductDocs" (
 /
 
 ```
-## [See Also](#see-also-91)
+## [See Also](#see-also-92)
 
 [CREATE AGENT](#create-agent), [CREATE MODEL](#create-model)
 
@@ -28543,7 +28815,7 @@ The service version as a quoted string.
 Optional. Connection timeout in seconds. Defaults to 30.
 [`documentation: 'description'`](#documentation-description)
 Optional. A human-readable description of the MCP service.
-## [Examples](#examples-67)
+## [Examples](#examples-68)
 
 ### [Register an MCP service](#register-an-mcp-service)
 
@@ -28569,7 +28841,7 @@ CREATE OR MODIFY CONSUMED MCP SERVICE MyModule."WebSearch" (
 /
 
 ```
-## [See Also](#see-also-92)
+## [See Also](#see-also-93)
 
 [CREATE AGENT](#create-agent), [CREATE MODEL](#create-model)
 
@@ -28666,7 +28938,7 @@ Optional maximum number of tokens in the response.
 Optional sampling temperature (0.0–1.0). Higher values produce more creative output.
 [`ToolChoice`](#toolchoice)
 Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
-## [Examples](#examples-68)
+## [Examples](#examples-69)
 
 ### [Simple task agent](#simple-task-agent)
 
@@ -28756,13 +29028,13 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 /
 
 ```
-## [Notes](#notes-13)
+## [Notes](#notes-14)
 
 - Agents must be dropped before their referenced models, knowledge bases, and MCP services.
 - The model and knowledge base documents must exist before the agent is created.
 - Dollar-quoted prompts (`$$...$$`) preserve all whitespace including newlines.
 
-## [See Also](#see-also-93)
+## [See Also](#see-also-94)
 
 [CREATE MODEL](#create-model), [CREATE KNOWLEDGE BASE](#create-knowledge-base), [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)
 
@@ -28853,7 +29125,7 @@ This application publishes (sends) this message type.
 This application subscribes to (receives) this message type.
 [`ENTITY module.Entity`](#entity-moduleentity-1)
 Optional entity linked to the message for data mapping.
-## [Examples](#examples-69)
+## [Examples](#examples-70)
 
 Create a service that publishes order events:
 
@@ -28901,7 +29173,7 @@ CREATE OR REPLACE BUSINESS EVENT SERVICE Shop.OrderEvents
 };
 
 ```
-## [See Also](#see-also-94)
+## [See Also](#see-also-95)
 
 [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
@@ -28923,13 +29195,13 @@ Dropping a service removes all its message definitions and operation implementat
 
 [`module.Name`](#modulename-32)
 The qualified name of the business event service to drop (`Module.ServiceName`).
-## [Examples](#examples-70)
+## [Examples](#examples-71)
 
 ```
 DROP BUSINESS EVENT SERVICE Shop.OrderEvents;
 
 ```
-## [See Also](#see-also-95)
+## [See Also](#see-also-96)
 
 [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
@@ -28971,7 +29243,7 @@ Controls visibility from other modules. `'Hidden'` (default) restricts access to
 Documentation text for the collection.
 [**IMAGE ‘name’ FROM FILE ‘path’**](#image-name-from-file-path)
 Loads an image from a file on disk. The path is relative to the current working directory. Supported formats: PNG, SVG, GIF, JPEG, BMP, WebP.
-## [Examples](#examples-71)
+## [Examples](#examples-72)
 
 ### [Empty collection](#empty-collection)
 
@@ -29008,7 +29280,7 @@ CREATE IMAGE COLLECTION MyModule.BrandAssets
 );
 
 ```
-## [See Also](#see-also-96)
+## [See Also](#see-also-97)
 
 [DROP IMAGE COLLECTION](#drop-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#show--describe-image-collection)
 
@@ -29028,7 +29300,7 @@ Removes an image collection and all its embedded images from the module.
 
 [**module.name**](#modulename-34)
 The qualified name of the collection to drop (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-72)
+## [Examples](#examples-73)
 
 ```
 DROP IMAGE COLLECTION MyModule.StatusIcons;
@@ -29041,7 +29313,7 @@ SHOW REFERENCES TO MyModule.AppIcons;
 DROP IMAGE COLLECTION MyModule.AppIcons;
 
 ```
-## [See Also](#see-also-97)
+## [See Also](#see-also-98)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#show--describe-image-collection)
 
@@ -29067,7 +29339,7 @@ In the TUI, images are rendered inline when the terminal supports it (Kitty, iTe
 Filters the listing to a single module.
 [**module.name**](#modulename-35)
 The qualified name of the collection to describe (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-73)
+## [Examples](#examples-74)
 
 ### [List all image collections](#list-all-image-collections)
 
@@ -29090,7 +29362,7 @@ DESCRIBE IMAGE COLLECTION MyModule.AppIcons;
 
 The output includes the complete `CREATE` statement with all `IMAGE ... FROM FILE` entries, which can be copied and re-executed.
 
-## [See Also](#see-also-98)
+## [See Also](#see-also-99)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
@@ -29132,7 +29404,7 @@ The catalog is cached between sessions. If the project has not changed, repeated
 Include cross-references, widgets, strings, source text, and permissions in the catalog. Required for callers/callees analysis and full-text search.
 [**FORCE**](#force)
 Bypass the catalog cache and force a complete rebuild regardless of whether the project appears unchanged.
-## [Examples](#examples-74)
+## [Examples](#examples-75)
 
 ### [Basic catalog refresh](#basic-catalog-refresh)
 
@@ -29161,7 +29433,7 @@ REFRESH CATALOG FULL FORCE;
 -- mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 ```
-## [See Also](#see-also-99)
+## [See Also](#see-also-100)
 
 [SELECT FROM CATALOG](#select-from-catalog), [SHOW CATALOG TABLES](#show-catalog-tables), [SHOW CALLERS / CALLEES](#show-callers--callees-1)
 
@@ -29217,7 +29489,7 @@ A SQL WHERE clause for filtering rows. Supports standard operators (`=`, `LIKE`,
 Column to sort by. Append `ASC` (default) or `DESC` for sort direction.
 [**n**](#n)
 Maximum number of rows to return.
-## [Examples](#examples-75)
+## [Examples](#examples-76)
 
 ### [List all entities](#list-all-entities)
 
@@ -29275,7 +29547,7 @@ WHERE p.Id NOT IN (
 SELECT Name FROM CATALOG.MICROFLOWS LIMIT 10;
 
 ```
-## [See Also](#see-also-100)
+## [See Also](#see-also-101)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SHOW CATALOG TABLES](#show-catalog-tables), [SEARCH](#show-references--impact--context)
 
@@ -29303,7 +29575,7 @@ By default, only direct (one-hop) relationships are shown. With the `TRANSITIVE`
 The fully qualified name of the element to analyze (e.g., `Module.MicroflowName`, `Module.EntityName`). Works with microflows, nanoflows, pages, snippets, entities, and other referenceable elements.
 [**TRANSITIVE**](#transitive)
 Follow the call chain recursively. For `SHOW CALLERS`, this finds everything that directly or indirectly leads to the target. For `SHOW CALLEES`, this finds everything the target directly or indirectly depends on.
-## [Examples](#examples-76)
+## [Examples](#examples-77)
 
 ### [Find direct callers of a microflow](#find-direct-callers-of-a-microflow)
 
@@ -29339,7 +29611,7 @@ SHOW CALLEES OF Sales.ACT_ProcessOrder TRANSITIVE;
 -- mxcli callees -p app.mpr Sales.ACT_ProcessOrder
 
 ```
-## [See Also](#see-also-101)
+## [See Also](#see-also-102)
 
 [SHOW REFERENCES / IMPACT / CONTEXT](#show-references--impact--context), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -29371,7 +29643,7 @@ These commands provide different views of cross-reference information for a give
 The fully qualified name of the element to analyze (e.g., `Module.EntityName`, `Module.MicroflowName`).
 [**n** (CONTEXT only)](#n-context-only)
 The number of levels of related elements to include. Defaults to 1 if not specified. Higher values include more surrounding context but produce more output.
-## [Examples](#examples-77)
+## [Examples](#examples-78)
 
 ### [Find all references to an entity](#find-all-references-to-an-entity)
 
@@ -29414,7 +29686,7 @@ MOVE PAGE Sales.CustomerEdit TO NewModule;
 -- mxcli context -p app.mpr Sales.ACT_CreateOrder --depth 3
 
 ```
-## [See Also](#see-also-102)
+## [See Also](#see-also-103)
 
 [SHOW CALLERS / CALLEES](#show-callers--callees-1), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -29436,7 +29708,7 @@ The output includes both basic tables (populated by `REFRESH CATALOG`) and exten
 
 This statement takes no parameters.
 
-## [Examples](#examples-78)
+## [Examples](#examples-79)
 
 ### [List all catalog tables](#list-all-catalog-tables)
 
@@ -29452,7 +29724,7 @@ SHOW CATALOG TABLES;
 SELECT * FROM CATALOG.ENTITIES LIMIT 5;
 
 ```
-## [See Also](#see-also-103)
+## [See Also](#see-also-104)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -29500,7 +29772,7 @@ The database driver to use. One of `postgres` (or `pg`, `postgresql`), `oracle` 
 The data source name (connection string) enclosed in single quotes. The format depends on the driver. The DSN is stored in memory only and never appears in session output or logs.
 [**alias**](#alias)
 A short identifier for this connection. Used in all subsequent `SQL alias ...` commands. Must be unique among active connections.
-## [Examples](#examples-79)
+## [Examples](#examples-80)
 
 ### [Connect to PostgreSQL](#connect-to-postgresql)
 
@@ -29533,7 +29805,7 @@ SQL CONNECT pg 'postgres://user:pass@localhost:5432/mydb' AS src;
 SQL CONNECT mssql 'sqlserver://sa:Pass@host:1433?database=db' AS dst;
 
 ```
-## [See Also](#see-also-104)
+## [See Also](#see-also-105)
 
 [SQL DISCONNECT](#sql-disconnect), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -29555,7 +29827,7 @@ Use `SQL CONNECTIONS` to see which connections are currently active before disco
 
 [**alias**](#alias-1)
 The alias of the connection to close. Must match an active connection established with `SQL CONNECT`.
-## [Examples](#examples-80)
+## [Examples](#examples-81)
 
 ### [Disconnect a connection](#disconnect-a-connection)
 
@@ -29572,7 +29844,7 @@ SQL source SELECT COUNT(*) FROM users;
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-105)
+## [See Also](#see-also-106)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query)
 
@@ -29614,7 +29886,7 @@ The connection alias established with `SQL CONNECT`.
 Any valid SQL for the target database. Sent as-is to the database engine.
 [**table\_name** (DESCRIBE only)](#table_name-describe-only)
 The name of the table or view to describe.
-## [Examples](#examples-81)
+## [Examples](#examples-82)
 
 ### [Query data](#query-data)
 
@@ -29662,7 +29934,7 @@ SQL source SELECT department, COUNT(*) AS headcount
 -- mxcli sql --driver postgres --dsn 'postgres://...' "SELECT * FROM users"
 
 ```
-## [See Also](#see-also-106)
+## [See Also](#see-also-107)
 
 [SQL CONNECT](#sql-connect-1), [SQL DISCONNECT](#sql-disconnect), [SQL GENERATE CONNECTOR](#sql-generate-connector), [IMPORT FROM](#import-from-1)
 
@@ -29696,7 +29968,7 @@ One or more table names to include. If omitted, all user tables are included.
 One or more view names to include. If omitted, no views are included unless `TABLES` is also omitted (in which case all tables are included by default).
 [**EXEC**](#exec)
 Execute the generated MDL immediately instead of printing it. Requires an open Mendix project.
-## [Examples](#examples-82)
+## [Examples](#examples-83)
 
 ### [Preview generated MDL for all tables](#preview-generated-mdl-for-all-tables)
 
@@ -29732,7 +30004,7 @@ SQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-107)
+## [See Also](#see-also-108)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [IMPORT FROM](#import-from-1)
 
@@ -29781,7 +30053,7 @@ The attribute on the associated entity used to look up the target object for lin
 Number of rows per insert batch. Defaults to a reasonable batch size if not specified.
 [**count** (LIMIT only)](#count-limit-only)
 Maximum number of rows to import from the query result.
-## [Examples](#examples-83)
+## [Examples](#examples-84)
 
 ### [Basic import](#basic-import-1)
 
@@ -29826,7 +30098,7 @@ IMPORT FROM source QUERY 'SELECT name, email FROM employees WHERE active = true'
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-108)
+## [See Also](#see-also-109)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -29869,7 +30141,7 @@ The available settings categories are:
 
 [**category** (DESCRIBE only)](#category-describe-only)
 One of `MODEL`, `CONFIGURATION`, `CONSTANT`, `LANGUAGE`, or `WORKFLOWS`. If omitted, all categories are shown.
-## [Examples](#examples-84)
+## [Examples](#examples-85)
 
 ### [Show settings overview](#show-settings-overview)
 
@@ -29901,7 +30173,7 @@ DESCRIBE SETTINGS CONFIGURATION;
 DESCRIBE SETTINGS WORKFLOWS;
 
 ```
-## [See Also](#see-also-109)
+## [See Also](#see-also-110)
 
 [ALTER SETTINGS](#alter-settings-1), [SHOW CONSTANT VALUES](#show-constants)
 
@@ -29955,7 +30227,7 @@ The new value for the setting. String values must be enclosed in single quotes.
 The name of the configuration or constant, enclosed in single quotes.
 [**config** (CONSTANT only)](#config-constant-only)
 The name of the runtime configuration where the constant override applies, enclosed in single quotes.
-## [Examples](#examples-85)
+## [Examples](#examples-86)
 
 ### [Set the after-startup microflow](#set-the-after-startup-microflow)
 
@@ -30070,7 +30342,7 @@ Studio Pro’s defaults: `Hsqldb`, runtime port 8080, admin port 8090.
 DROP CONFIGURATION 'Staging';
 
 ```
-## [See Also](#see-also-110)
+## [See Also](#see-also-111)
 
 [SHOW / DESCRIBE SETTINGS](#show--describe-settings)
 
@@ -30102,7 +30374,7 @@ Creates a new module in the Mendix project. Modules are the top-level organizati
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
-## [Examples](#examples-86)
+## [Examples](#examples-87)
 
 ### [Create a module](#create-a-module)
 
@@ -30118,7 +30390,7 @@ CREATE MODULE Inventory;
 CREATE MODULE Reporting;
 
 ```
-## [See Also](#see-also-111)
+## [See Also](#see-also-112)
 
 [CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
 
@@ -30142,7 +30414,7 @@ Note: Folders can also be created implicitly by specifying a `FOLDER` clause whe
 The name of the module in which to create the folder.
 [**folder\_path**](#folder_path)
 The path of the folder to create within the module. Use `/` to create nested folders (e.g., `Orders/Processing`).
-## [Examples](#examples-87)
+## [Examples](#examples-88)
 
 ### [Create a simple folder](#create-a-simple-folder)
 
@@ -30180,7 +30452,7 @@ CREATE PAGE MyModule.Order_Edit
 }
 
 ```
-## [See Also](#see-also-112)
+## [See Also](#see-also-113)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -30204,7 +30476,7 @@ Nested folder paths use the `/` separator. Only the leaf folder is deleted; pare
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
 [**module\_name**](#module_name-2)
 The name of the module containing the folder.
-## [Examples](#examples-88)
+## [Examples](#examples-89)
 
 ### [Drop a simple folder](#drop-a-simple-folder)
 
@@ -30237,7 +30509,7 @@ DROP FOLDER 'Processing' IN MyModule;
 | `folder not found: 'path' in Module` | No folder exists at the given path in the module |
 | `module not found: Module` | The specified module does not exist |
 
-## [See Also](#see-also-113)
+## [See Also](#see-also-114)
 
 [CREATE FOLDER](#create-folder), [CREATE MODULE](#create-module), [MOVE](#move), [MOVE FOLDER](#move-folder)
 
@@ -30288,7 +30560,7 @@ The current `Module.Name` of the document to move.
 The target module. When specified without `FOLDER`, moves the document to the module root.
 [**folder\_path**](#folder_path-2)
 The target folder path within the module. Use `/` for nested paths (e.g., `'Orders/Processing'`). Enclosed in single quotes.
-## [Examples](#examples-89)
+## [Examples](#examples-90)
 
 ### [Move a page to a folder in the same module](#move-a-page-to-a-folder-in-the-same-module)
 
@@ -30366,7 +30638,7 @@ SHOW IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
-## [See Also](#see-also-114)
+## [See Also](#see-also-115)
 
 [CREATE MODULE](#create-module), [CREATE FOLDER](#create-folder)
 
@@ -30396,7 +30668,7 @@ The source folder in `Module.FolderName` format. Use double quotes for paths wit
 The target folder path. Use `/` for nested folders.
 [**module\_name**](#module_name-4)
 The target module name (for cross-module moves).
-## [Examples](#examples-90)
+## [Examples](#examples-91)
 
 ### [Move a folder into another folder](#move-a-folder-into-another-folder)
 
@@ -30422,7 +30694,7 @@ MOVE FOLDER MyModule.SharedWidgets TO CommonModule;
 MOVE FOLDER MyModule.Templates TO FOLDER 'Shared/Templates' IN CommonModule;
 
 ```
-## [See Also](#see-also-115)
+## [See Also](#see-also-116)
 
 [CREATE FOLDER](#create-folder), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -30486,7 +30758,7 @@ The three components of a Maven coordinate. All three are required for `ADD`.
 [**included**](#included)
 When `false`, the dependency is declared but excluded from the classpath
 at build time. Defaults to `true`.
-## [Examples](#examples-91)
+## [Examples](#examples-92)
 
 ### [Add a new dependency](#add-a-new-dependency)
 
@@ -30555,13 +30827,13 @@ ALTER MODULE MyModule
   );
 
 ```
-## [Notes](#notes-14)
+## [Notes](#notes-15)
 
 Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
 when the project is opened in Studio Pro or built with `mxcli docker build`.
 
-## [See Also](#see-also-116)
+## [See Also](#see-also-117)
 
 [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
@@ -30591,7 +30863,7 @@ The module name containing the dependency (for `DESCRIBE`).
 [**‘group:artifact’**](#groupartifact-1)
 The Maven coordinate identifying the dependency, in `groupId:artifactId`
 format (no version). Example: `'org.duckdb:duckdb_jdbc'`.
-## [Examples](#examples-92)
+## [Examples](#examples-93)
 
 ### [List all JAR dependencies](#list-all-jar-dependencies)
 
@@ -30636,7 +30908,7 @@ alter module MyModule
 
 The output is suitable for copying into a script and re-executing.
 
-## [See Also](#see-also-117)
+## [See Also](#see-also-118)
 
 [ALTER MODULE JAR DEPENDENCY](#alter-module--jar-dependency)
 
@@ -30675,7 +30947,7 @@ The value to assign. Can be a string (in single quotes), a boolean (`TRUE` or `F
 | `verbose` | `TRUE`, `FALSE` | Enable verbose output for debugging |
 | `AUTOCOMMIT` | `TRUE`, `FALSE` | Automatically save changes after each mutation |
 
-## [Examples](#examples-93)
+## [Examples](#examples-94)
 
 ### [Set output format to JSON](#set-output-format-to-json)
 
@@ -30695,7 +30967,7 @@ SET verbose = TRUE;
 SET AUTOCOMMIT = TRUE;
 
 ```
-## [See Also](#see-also-118)
+## [See Also](#see-also-119)
 
 [SHOW STATUS](#show-status), [OPEN PROJECT](#open-project)
 
@@ -30715,7 +30987,7 @@ Displays the current session status including the connection state, the open pro
 
 This statement takes no parameters.
 
-## [Examples](#examples-94)
+## [Examples](#examples-95)
 
 ### [Check session status](#check-session-status)
 
@@ -30741,7 +31013,7 @@ STATUS;
 SHOW MODULES;
 
 ```
-## [See Also](#see-also-119)
+## [See Also](#see-also-120)
 
 [OPEN PROJECT](#open-project), [CLOSE PROJECT](#close-project), [SET](#set-1)
 
@@ -34448,7 +34720,7 @@ authoring this is the difference between one cheap turn and dozens of expensive
 ones — and it is why, even though a script “costs” ~60 tool calls, running it
 *through mxcli* keeps that cost out of the model’s context.
 
-## [See also](#see-also-120)
+## [See also](#see-also-121)
 
 - [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp) — how to set up
   the connection and run scripts against a live model.
@@ -35262,6 +35534,21 @@ mxcli diff-local -p app.mpr
 
 A headless install or update leaves two repairs for Mendix’s own tools: **CE0463** (the project’s stored widget instances are older than the widget packages beside them) and **CE6087** (a module references design properties an older Atlas spelled differently). Both are expected, not faults in the install. See [`mxcli fix`](#repairing-the-model-mxcli-fix) below.
 
+A third repair is **not** left to you: **CE0066** (“Entity access is out of date”). A transplant copies the incoming module’s units in verbatim, so a package whose access rules do not cover every member of their entities would land that error in your project with nothing said about it (mendixlabs/mxcli#1085). Install and update now reconcile the module’s rules for themselves and report the count:
+
+```
+  3 entity access rule(s) reconciled — the package's rules did not cover every
+  member of their entities, which Mendix reports as CE0066.
+
+```
+
+Nothing is written when the rules already match, so a well-formed package comes through untouched. When the line does appear, the module’s domain model differs from the package — the same change Studio Pro’s **Update security** button makes — and `mxcli marketplace diff` will read it as a local edit. To run the repair by hand, or on a project updated by an older mxcli, use [`UPDATE SECURITY`](#update-security):
+
+```
+mxcli -p app.mpr -c "update security UserCommons"
+
+```
+
 Measured: Administration 4.3.2 → 4.5.0 and DataWidgets 3.5.0 → 3.11.3 both reach **0 errors** afterwards.
 
 ## [Bundled widgets and install order](#bundled-widgets-and-install-order)
@@ -35398,7 +35685,7 @@ An untouched module reports how much was actually checked, not just a verdict:
   No local modifications: 21 of 21 elements verified unchanged.
 
 ```
-### [What it does](#what-it-does-5)
+### [What it does](#what-it-does-6)
 
 1. Reads which marketplace version each module in the project records. The project stores the marketplace **version UUID** per module, so the module and the exact release it came from are both identified without guessing — the listing name does not help here (content 23513 is listed as “Administration module” and installs a module called `Administration`; “Data Widgets” installs `DataWidgets`).
 2. Downloads that version’s `.mpk` and imports it into a throwaway reference project built **at the project’s own Mendix version**, so the package goes through the same conversion the installed copy did.
@@ -36711,9 +36998,31 @@ CE0066: Entity access for 'MyModule.Customer' is out of date.
 
 ```
 
-**Cause:** Association MemberAccess entries were added to the wrong entity. In Mendix, association access rules must only be on the **FROM** entity (the one stored in `ParentPointer`), not the TO entity.
+**Cause (1): the rules no longer cover the entity’s members.** An access rule
+names the members it governs, so an entity that has gained an attribute or an
+association — or lost one — leaves every rule on it out of date. This is the
+usual cause for a model that arrived from somewhere else: a module imported or
+updated outside Studio Pro whose author never pressed **Update security**, a
+hand-edited `.mpr`, a merge.
 
-**Solution:** Ensure `MemberAccess` entries for associations are added only to the entity that owns the foreign key (the FROM side of the association). Remove any association MemberAccess entries from the TO entity.
+**Solution:** run the headless equivalent of that button:
+
+```
+mxcli -p app.mpr -c "update security MyModule"
+
+```
+
+It reports what it changed (`Reconciled 3 access rule(s) in module MyModule`) and
+writes nothing when the rules already match. See
+[UPDATE SECURITY](#update-security). `mxcli marketplace install` and `mxcli marketplace update` run it for the module they copy in.
+
+**Cause (2): association MemberAccess entries on the wrong entity.** In Mendix,
+association access rules must only be on the **FROM** entity (the one stored in
+`ParentPointer`), not the TO entity.
+
+**Solution:** Ensure `MemberAccess` entries for associations are added only to the
+entity that owns the foreign key (the FROM side of the association). Remove any
+association MemberAccess entries from the TO entity.
 
 ### [System.ArgumentNullException (ValidationRule)](#systemargumentnullexception-validationrule)
 

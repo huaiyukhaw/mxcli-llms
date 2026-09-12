@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.21.0 @ ca9b90e | Generated: 2026-09-09T06:59:45Z
+Version: mxcli v0.21.0 @ 2f2d7b3 | Generated: 2026-09-12T06:47:35Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -248,6 +248,8 @@ live in the javadoc comment above a test’s…
 - [GRANT](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/security/grant.md)
 - [REVOKE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/security/revoke.md)
 - [CREATE DEMO USER](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/security/create-demo-user.md)
+- [UPDATE SECURITY](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/security/update-security.md): Bring entity access rules back into sync with their domain model — the headless
+equivalent of Studio Pro’s Update security button…
 - [Navigation Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/index.md): Statements for configuring application navigation profiles, home pages, login pages, and menu structures.
 - [ALTER NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/alter-navigation.md)
 - [SHOW NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/show-navigation.md)

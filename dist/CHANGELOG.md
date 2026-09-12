@@ -1,3 +1,7 @@
+## 2026-09-12 -- mxcli v0.21.0 @ 2f2d7b3
+- +400 / -91 lines
+- Sections changed: Park those edits as re-executable MDL, then update over them, What have I changed in this module since installing it?, [UPDATE SECURITY](#update-security), [A theme this project owns](#a-theme-this-project-owns), [Core Tables](#core-tables), [Description](#description-33), [Description](#description-44), [Examples](#examples-3) (+98 more)
+
 ## 2026-09-09 -- mxcli v0.21.0 @ ca9b90e
 - +195 / -7 lines
 - Sections changed: [Commands](#commands-2), [Description](#description-44), [Layout](#layout), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation), [Offline Synchronization](#offline-synchronization), [Parameters](#parameters-46), [Profile Types](#profile-types), [Related Statements](#related-statements) (+3 more)
