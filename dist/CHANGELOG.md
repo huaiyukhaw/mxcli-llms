@@ -1,3 +1,7 @@
+## 2026-09-14 -- mxcli v0.21.0 @ 9905dd7
+- +90 / -5 lines
+- Sections changed: [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Enforce your own architecture (Starlark)](#enforce-your-own-architecture-starlark), [Graph-Analysis Tables](#graph-analysis-tables), [Two refactoring journeys](#two-refactoring-journeys)
+
 ## 2026-09-12 -- mxcli v0.21.0 @ 2f2d7b3
 - +400 / -91 lines
 - Sections changed: Park those edits as re-executable MDL, then update over them, What have I changed in this module since installing it?, [UPDATE SECURITY](#update-security), [A theme this project owns](#a-theme-this-project-owns), [Core Tables](#core-tables), [Description](#description-33), [Description](#description-44), [Examples](#examples-3) (+98 more)
