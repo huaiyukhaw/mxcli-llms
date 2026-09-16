@@ -1,3 +1,7 @@
+## 2026-09-16 -- mxcli v0.22.0 @ 05d8536
+- +182 / -11 lines
+- Sections changed: [AI Agent Task](#ai-agent-task), [CREATE WORKFLOW](#create-workflow), [Description](#description-47), [Event Sub-Processes](#event-sub-processes), [Full Example](#full-example-1), [Multi-User Task](#multi-user-task), [Notes](#notes-11), [Notes](#notes-8) (+5 more)
+
 ## 2026-09-14 -- mxcli v0.21.0 @ 9905dd7
 - +90 / -5 lines
 - Sections changed: [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Enforce your own architecture (Starlark)](#enforce-your-own-architecture-starlark), [Graph-Analysis Tables](#graph-analysis-tables), [Two refactoring journeys](#two-refactoring-journeys)
