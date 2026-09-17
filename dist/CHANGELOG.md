@@ -1,3 +1,7 @@
+## 2026-09-17 -- mxcli v0.22.0 @ 240f0b1
+- +31 / -0 lines
+- Sections changed: [mxcli Parser Errors](#mxcli-parser-errors)
+
 ## 2026-09-16 -- mxcli v0.22.0 @ 05d8536
 - +182 / -11 lines
 - Sections changed: [AI Agent Task](#ai-agent-task), [CREATE WORKFLOW](#create-workflow), [Description](#description-47), [Event Sub-Processes](#event-sub-processes), [Full Example](#full-example-1), [Multi-User Task](#multi-user-task), [Notes](#notes-11), [Notes](#notes-8) (+5 more)
