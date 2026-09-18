@@ -1,3 +1,7 @@
+## 2026-09-18 -- mxcli v0.22.0 @ 0185a39
+- +151 / -9 lines
+- Sections changed: [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop), [BSON Differences Across Versions](#bson-differences-across-versions), [CREATE EXTERNAL ENTITIES](#create-external-entities), [Core Tables](#core-tables), [Feature Availability Matrix](#feature-availability-matrix), [Flags](#flags-2), [Full Refresh Tables](#full-refresh-tables), [Known Limitations](#known-limitations) (+4 more)
+
 ## 2026-09-17 -- mxcli v0.22.0 @ 240f0b1
 - +31 / -0 lines
 - Sections changed: [mxcli Parser Errors](#mxcli-parser-errors)

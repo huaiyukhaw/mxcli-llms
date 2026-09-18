@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.22.0 @ 240f0b1
-Generated: 2026-09-17T07:04:47Z
+Version:   mxcli v0.22.0 @ 0185a39
+Generated: 2026-09-18T06:58:18Z
 
 ---
 
@@ -15162,6 +15162,48 @@ profile with `sync Sales.Audit never` still *names* that entity, so renaming or
 dropping it leaves the configuration dangling — which is precisely what a
 reference edge exists to reveal.
 
+### [Entity event handlers](#entity-event-handlers-1)
+
+`CATALOG.ENTITY_EVENT_HANDLERS` — one row per entity event handler: which
+moment, which event, and which microflow runs.
+
+```
+select EntityQualifiedName, Moment, Event, Microflow
+  from CATALOG.ENTITY_EVENT_HANDLERS
+ where Moment = 'Before' and Event = 'Commit';
+
+```
+
+`CATALOG.ENTITIES.HasEventHandlers` says some exist and nothing else — the same
+shape `NavigationProfile.OfflineEntityCount` had. The distinction the flag loses
+is the one that matters: a `Before` handler with `RaiseErrorOnFalse` can **veto**
+the commit, an `After` handler cannot.
+
+`Moment` is `Before` or `After`. `Event` is the value Mendix stores, not the
+caption Studio Pro shows: `Create`, `Commit`, `Delete`, `RollBack` — note the
+**capital B**, which `generated/metamodel` confirms
+(`DomainModelsEventRollBack = "RollBack"`) and which disagrees with every
+neighbouring enum in that file, where the same word is `Rollback`. A query
+spelling it the expected way returns zero rows rather than an error.
+
+A handler also produces an `event` row in `CATALOG.REFS`, so a microflow that
+runs only as a handler has callers:
+
+```
+select SourceName, TargetName from CATALOG.REFS where RefKind = 'event';
+
+```
+
+Without that edge the handler microflow was reported dead from three directions
+at once — `show callers` said `(no callers found)`, `CATALOG.GRAPH_DEAD_ASSETS`
+listed it, and `mxcli lint` emitted **QUAL004** “is not called from anywhere”
+with the suggestion *Remove if unused* — on code that runs on every commit
+([mendixlabs/mxcli#1127](https://github.com/mendixlabs/mxcli/issues/1127)).
+
+The edge carries neither the moment nor the event; `refs` has no column for
+them, and a kind per combination would put eight kinds into every consumer’s
+list to say one thing. Which moment and which event is this table’s question.
+
 ## [Graph-Analysis Tables](#graph-analysis-tables)
 
 The dependency graph (`CATALOG.REFS`, full refresh) is analysed by a family of
@@ -18832,6 +18874,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
 | `--serve-port` | 6543 | `mxbuild --serve` port |
+| `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux) |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
 | `--db-user` / `--db-password` | mendix / mendix | Database credentials |
@@ -19141,6 +19184,16 @@ not just headless checks.
 no bundler to keep hot — `run --local` prints a line saying so and skips it. Both
 paths work; the bundle is mxbuild’s rather than mxcli’s.
 
+**Classic-client apps need no bundling at all.** With **Web UI Settings >
+OptimizedClient = No**, mxbuild puts Mendix’s classic (Dojo) client in
+`deployment/web/` — loaded from `mxclientsystem` and served as-is — and parks the
+React client in `deployment/react-web/`. (With `Yes` it is the other way round:
+React in `web/`, Dojo in `dojo-web/`.) There is no rollup step and no `web/dist`,
+so `run --local` says so and skips it, under `--watch` too. mxcli reads this from
+the deployment’s own `web/index.html` rather than from the model setting, since
+the deployment is what gets served and the two disagree right after the setting
+is changed.
+
 ### [`--watch` on Mendix 11.14](#--watch-on-mendix-1114)
 
 **`--watch` is not usable on 11.14 yet.** It starts and the app boots, but every
@@ -19322,8 +19375,21 @@ a longer prompt.
    is no status column to maintain.
 5. **Commits, then boots and verifies** — HTTP 200 at `http://localhost:8080/`, plus
    an optional `run --hub` preview URL.
-6. **Proposes the model in MDL and waits** — module, entities, roles, pages — before
-   building anything.
+6. **Takes the quality baseline** — `mxcli lint` and the scored `mxcli report` on the
+   blank app, recorded in `FINDINGS.md`. This is the only moment those numbers mean
+   “what the template ships with”; afterwards every figure is yours plus the
+   template’s, with nothing to subtract. See [mxcli report](#mxcli-report) for how to
+   read the six category scores.
+7. **Proposes the model in MDL and waits** — module, entities, roles, pages — before
+   building anything. Two of those choices it makes deliberately rather than by
+   default: a process with steps someone has to act on becomes a **workflow** (state
+   machine, user-task inbox, timers, a definition the business can read) rather than
+   a status attribute and some microflows, and a total or count across records
+   becomes a **view entity** — OQL the database executes — rather than a microflow
+   that retrieves every row to produce one number. Both are cheap to choose at the
+   proposal and expensive to retrofit, because the pages, security rules and tests
+   bind to whichever was picked. The same two rules are in the project’s generated
+   `CLAUDE.md`, so later sessions apply them without being asked.
 
 For a solution repo it also covers the parts that bite: per-app ports, a hostname per
 app so the two apps do not share one cookie jar, the root SessionStart hook that
@@ -19389,7 +19455,7 @@ keep straight.
 
 ## [Two rules that make this robust](#two-rules-that-make-this-robust)
 
-- **Committing the config is mandatory** (the skill’s provisioning step 6). The prompt
+- **Committing the config is mandatory** (the skill’s provisioning step 7). The prompt
   is a *one-time seed*. Its output — `.mpr` + `.devcontainer/` + `.claude/` with the
   SessionStart hook and `bootstrap-mxcli.sh` — must be committed so the steady state is
   file-driven and deterministic. After that, every new session runs the hook
@@ -19410,6 +19476,35 @@ keep straight.
 ./mxcli exec change.mdl -p <AppName>.mpr                     # edit the model; the loop hot-applies
 
 ```
+### [The gates](#the-gates)
+
+`mxcli init` writes this list into the project’s `CLAUDE.md`, so an agent has it in
+context in every session without being asked — it is the **definition of done**, not a
+menu. The same list is in the `bootstrap-app` skill, and the three are held together
+by a test, because a gate that is named in two of the three places is a gate that only
+runs when someone remembers to ask for it.
+
+```
+./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)
+./mxcli exec change.mdl -p <AppName>.mpr                 # apply
+./mxcli lint -p <AppName>.mpr                            # rules (~3s)
+./mxcli report -p <AppName>.mpr                          # scored quality report
+./mxcli docker check -p <AppName>.mpr                    # mxbuild, the slow one (~25s)
+./mxcli test tests/ -p <AppName>.mpr --local             # microflow tests (~30s cold, ~2s warm)
+./mxcli run --local --watch -p <AppName>.mpr             # the app, hot-reloading
+
+```
+
+Each buys something the one above it cannot: [`lint`](#mxcli-lint) and
+[`report`](#mxcli-report) score the model that `check` only proved was well-formed,
+[`test`](#testing) proves behaviour that a clean build does not, and the running app
+is the only thing that proves how a page renders. `report`’s six category scores are
+comparable against the baseline taken at bootstrap — a score that fell is a finding.
+
+Writing the first test with the first microflow, rather than later, is what keeps
+`test` from being permanently skipped: after the code is written the expected values
+have stopped being obvious. `--local` needs no Docker daemon, so it works in a web
+session.
 
 In a solution, run one loop per app from its own folder, with the second app on the
 alternate ports, and start the producer first so the consumer’s external entities
@@ -28148,6 +28243,40 @@ CREATE EXTERNAL ENTITIES FROM Module.Service ENTITIES (Customer, Order);
 CREATE OR MODIFY EXTERNAL ENTITIES FROM Module.Service;
 
 ```
+### [Complex types are flattened](#complex-types-are-flattened)
+
+The Mendix domain model has no complex types. A property typed as an OData
+`ComplexType` is imported as one attribute per leaf — the same thing Studio Pro
+does — named `<property>_<leaf>` and read over the OData path `<property>/<leaf>`:
+
+| $metadata | Mendix attribute | Remote name |
+| --- | --- | --- |
+| `MaxQty` of type `Shared.Uom.Quantity` { `UoMNId`, `QuantityValue` } | `MaxQty_UoMNId`, `MaxQty_QuantityValue` | `MaxQty/UoMNId`, `MaxQty/QuantityValue` |
+
+The complex type may live in any `Schema` in the document — it is resolved by
+qualified name, so two namespaces may each declare a `Quantity`.
+
+Three properties of a complex type are **not** importable. Each is reported by
+name and reason rather than dropped, so an import that loses something says so:
+
+- **Inherited properties.** Only a complex type’s own properties are imported.
+  Where `AirportLocation` derives from `Location`, the inherited `Address` is not
+  reachable through it (`CE6615`) — though the same `Address` is imported
+  normally through a property typed `Location` directly.
+- **Leaves Mendix cannot represent**, such as `Edm.GeographyPoint` (`CE6622`).
+- **A complex type nested in a complex type** — flattening is one level deep.
+
+Two more consequences:
+
+- **Flattened attributes are read-only.** Mendix treats an external entity that
+  contains them as readable and deletable only, whatever the entity set’s
+  `InsertRestrictions` / `UpdateRestrictions` say. Marking them creatable or
+  updatable is `CE6630`.
+- **They are filterable and sortable only where their entity is** — that is, on
+  an entity backed by an entity set. On a derived or contained type they are
+  neither. `CE6630` fires in both directions here, so this follows the contract
+  rather than a fixed answer.
+
 ## [Contract Browsing Statements](#contract-browsing-statements)
 
 Browse available assets from cached service contracts without network access.
@@ -34502,8 +34631,20 @@ rather than trusting a list here:
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
+| `publish` | published REST operation runs a microflow |
+| `event` | entity event handler runs a microflow |
+| `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
+| `sync` | offline navigation profile synchronizes an entity |
 | `validate` | attribute validation rule uses a regular expression |
 | `widget` | page or snippet uses a pluggable / custom widget |
+
+`schedule`, `publish`, `event` and `settings` are **entry points**: something
+outside the call graph runs the microflow, so nothing in the model calls it.
+They are what stops `GRAPH_DEAD_ASSETS`, `SHOW CALLERS OF` and lint rule QUAL004
+from reporting a live scheduled job, API handler or event handler as unused.
+`sync` is not one — it names an entity a profile downloads, which is a use of a
+type, so `SHOW CALLERS` excludes it for the same reason it excludes
+`datasource`.
 
 #### [WIDGET targets](#widget-targets)
 
@@ -35054,7 +35195,7 @@ Everything mxcli can do, organized by use case.
 | Retrieve | `RETRIEVE ... FROM ... WHERE` | Database/association queries |
 | Control flow | `IF/THEN/ELSE`, `LOOP`, `WHILE` | Including nested |
 | Call flows | `CALL MICROFLOW`, `CALL NANOFLOW` | With parameters |
-| Show page | `LIST PAGE Module.Page(...)` | With page parameters (11.0+) |
+| Show page | `LIST PAGE Module.Page(...)` | With page parameters (9.7+) |
 | REST requests | `SEND REST REQUEST` | GET/POST/PUT/DELETE |
 | Database queries | `EXECUTE DATABASE QUERY` | External databases |
 | Log messages | `LOG INFO|WARNING|ERROR` | With templates |
@@ -35146,7 +35287,6 @@ Everything mxcli can do, organized by use case.
 
 | Area | Limitation | Workaround |
 | --- | --- | --- |
-| Page parameters | Requires Mendix 11.0+ | Use non-persistent entity pattern on 10.x |
 | Design properties (Atlas v3) | Requires Mendix 11.0+ | Use CSS classes on 10.x |
 | REST query parameters | Requires Mendix 11.0+ | Build query string manually on 10.x |
 | Pluggable widget ImageUrl mode | Cannot set imageUrl from MDL | Configure in Studio Pro |
@@ -36893,9 +37033,9 @@ The tables below show exactly which features are available on each Mendix versio
 | Conditional visibility | `Visible: [xpath]` | – | – | – | Yes |
 | Conditional editability | `Editable: [xpath]` | – | – | – | Yes |
 | Responsive column widths | `TabletWidth: 6, PhoneWidth: 12` | – | – | – | Yes |
-| Page parameters (entity) | `Params: { $Item: Module.Entity }` | – | – | – | Yes |
+| Page parameters (entity) | `Params: { $Item: Module.Entity }` | 9.4+ | Yes | Yes | Yes |
 | Page parameters (primitive) | `Params: { $Qty: Integer }` | – | – | – | 11.6+ |
-| Page variables | `Variables: { ... }` | – | – | – | Yes |
+| Page variables | `Variables: { ... }` | – | 10.20+ | 10.20+ | Yes |
 | Design properties (Atlas v3) | `DesignProperties: [...]` | – | – | – | Yes |
 
 [::: tip Widget Templates
@@ -36962,9 +37102,11 @@ The Mendix metamodel evolves across versions. The reflection data shows ~42% typ
 
 View entities exist in both 10.18+ and 11.x, but the BSON structure differs. In Mendix 10.x, the `OqlViewEntitySource` object has an `Oql` field that stores the OQL query inline (in addition to the separate `ViewEntitySourceDocument`). Mendix 11.0 removed the inline `Oql` field. The writer detects the project version and includes the inline field for 10.x projects.
 
-### [Page Parameters (10.x vs 11.x)](#page-parameters-10x-vs-11x)
+### [Page Parameters (9.4+, with an 11.5 tail)](#page-parameters-94-with-an-115-tail)
 
-Mendix 11.0 changed how page parameters are stored in BSON. The `Variable` property in page parameter mappings uses a different structure. Writing 11.x-style page parameters to a 10.x project causes an `InvalidOperationException`.
+Page parameters are not an 11.x feature. `Pages$PageParameter` and `Page.parameters` were introduced in **9.4.0**, and `Pages$PageSettings.parameterMappings` — the arguments a `SHOW PAGE` passes — in **9.7.0** (measured from the Mendix Model SDK’s `StructureVersionInfo` records). mxcli refused them on 10.x until [mendixlabs/mxcli#1121](https://github.com/mendixlabs/mxcli/issues/1121); the 11.0 floor in the version registry came from an illustrative sample table in a proposal, not from a measurement.
+
+What *is* version-specific is the optional/default-value half: `PageParameter.IsRequired` and `PageParameter.DefaultValue` arrived in **11.5.0**. MDL cannot express either — every parameter it writes is required with no default — so the writer omits both below 11.5. Emitting them anyway is the “never invent a key” failure: mxbuild accepts unknown properties, and Studio Pro throws `InvalidOperationException` at `MprProperty.cs`.
 
 ### [Design Properties (Atlas v2 vs v3)](#design-properties-atlas-v2-vs-v3)
 
