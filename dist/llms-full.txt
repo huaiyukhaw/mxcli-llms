@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.22.0 @ 756fa00
-Generated: 2026-09-19T06:57:04Z
+Version:   mxcli v0.22.0 @ 31eee45
+Generated: 2026-09-21T07:32:38Z
 
 ---
 
@@ -7574,6 +7574,65 @@ BEGIN
 END;
 
 ```
+### [Document properties](#document-properties)
+
+Four microflow properties live in the header, between the signature and `begin`:
+
+```
+CREATE OR MODIFY MICROFLOW Shop.ACT_ShowOrder ($Order: Shop.Order, $Tab: String)
+URL 'order/{Order}'
+URL SEARCH PARAMETERS ($Tab)
+EXPORT LEVEL API
+DISALLOW CONCURRENT EXECUTION ERROR MESSAGE 'This order is already being processed'
+BEGIN
+  -- ...
+END;
+
+```
+
+| Clause | Sets | Clear with |
+| --- | --- | --- |
+| `URL 'order/{Order}'` | the deep link (Mendix 10.6+) | `DROP URL` |
+| `URL SEARCH PARAMETERS ($Tab)` | parameters passed as query arguments | `DROP URL` |
+| `EXPORT LEVEL API` | the module’s public surface on export | `EXPORT LEVEL HIDDEN` |
+| `DISALLOW CONCURRENT EXECUTION ERROR MESSAGE '…'` | what a second caller gets | `ALLOW CONCURRENT EXECUTION` |
+
+`ERROR MICROFLOW Module.Name` is the other form of the last one.
+
+**An omitted clause preserves what is stored.** A rewrite that only changes the
+body leaves every one of them alone — the same rule as `@excluded` and
+`@applyentityaccess`. Clearing is always explicit.
+
+Studio Pro’s **Mark as used** has no clause; it is carried across a rewrite and
+cannot be set from MDL.
+
+#### [Rules checked before the write](#rules-checked-before-the-write)
+
+These are Mendix constraints that otherwise surface only when you build:
+
+- Every `{Name}` must name a parameter of this microflow (**MDL-MF01**). A
+  segment may hold an attribute path — `{Customer/Name}` binds the **Customer**
+  parameter — so the leading identifier is what matches.
+- A parameter used in the **path** may not also be a **search parameter**
+  (**MDL-MF02**, mxbuild’s CE5612). The two sets are disjoint.
+- `DISALLOW CONCURRENT EXECUTION` needs a message or a microflow
+  (**MDL-MF03**, CE4899).
+- Two microflows may not share a URL (CE0570). Needs `-p`, since a script alone
+  cannot see the other microflows.
+
+#### [Copying a microflow](#copying-a-microflow)
+
+`DESCRIBE` emits all four clauses, so **describe → rename → exec copies them
+faithfully** — that is what the clauses are for. Give the copy a different `URL`,
+or the build fails with CE0570.
+
+`DROP` followed by `CREATE` is a new document and keeps nothing unless the script
+restates it.
+
+An error message is translatable and MDL states one language. Rewriting the same
+microflow keeps the others; a **copy** gets only the one shown, and `DESCRIBE`
+says so on the line.
+
 ## [Folder Organization](#folder-organization)
 
 Place microflows and nanoflows into folders for project organization:
@@ -10621,7 +10680,13 @@ ALTER PAGE Module.EditPage {
 ### [SET – Page-Level Properties](#set--page-level-properties)
 
 Omit the `ON` clause to set page-level properties. These names are case-sensitive:
-`Title`, `Class`, `Style`, `PopupWidth`, `PopupHeight`, `PopupResizable`.
+`Title`, `Documentation`, `Class`, `Style`, `PopupWidth`, `PopupHeight`,
+`PopupResizable`.
+
+`Documentation` is the same property the `/** … */` doc comment on `CREATE PAGE`
+writes. Before it was settable here, documenting an existing page meant re-running
+its create — which for a real page means re-emitting its whole widget tree. Setting
+it to `''` clears it.
 
 ```
 ALTER PAGE Module.EditPage {
@@ -22548,21 +22613,17 @@ package main
 
 import (
     "github.com/mendixlabs/mxcli/api"
-    "github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
-    writer, err := mpr.OpenForWriting("/path/to/MyApp.mpr")
+    modelAPI, err := api.Open("/path/to/MyApp.mpr")
     if err != nil {
         panic(err)
     }
-    defer writer.Close()
-
-    // Create the high-level API
-    modelAPI := api.New(writer)
+    defer modelAPI.Close()
 
     // Set the current module context
-    module, _ := modelAPI.Modules.GetModule("MyModule")
+    module, _ := modelAPI.Modules.Get("MyModule")
     modelAPI.SetModule(module)
 }
 
@@ -22623,7 +22684,7 @@ customer, err := modelAPI.DomainModels.CreateEntity("Customer").
     WithStringAttribute("Email", 254).
     WithIntegerAttribute("Age").
     WithBooleanAttribute("IsActive").
-    WithDateTimeAttribute("CreatedDate", true).
+    WithDateTimeAttribute("CreatedDate").
     Build()
 
 ```
@@ -22665,19 +22726,16 @@ package main
 
 import (
     "github.com/mendixlabs/mxcli/api"
-    "github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
-    writer, err := mpr.OpenForWriting("/path/to/MyApp.mpr")
+    modelAPI, err := api.Open("/path/to/MyApp.mpr")
     if err != nil {
         panic(err)
     }
-    defer writer.Close()
+    defer modelAPI.Close()
 
-    modelAPI := api.New(writer)
-
-    module, _ := modelAPI.Modules.GetModule("MyModule")
+    module, _ := modelAPI.Modules.Get("MyModule")
     modelAPI.SetModule(module)
 
     // Create entity with fluent builder
@@ -22687,14 +22745,14 @@ func main() {
         WithStringAttribute("Email", 254).
         WithIntegerAttribute("Age").
         WithBooleanAttribute("IsActive").
-        WithDateTimeAttribute("CreatedDate", true).
+        WithDateTimeAttribute("CreatedDate").
         Build()
 
     // Create another entity
     order, _ := modelAPI.DomainModels.CreateEntity("Order").
         Persistent().
         WithDecimalAttribute("TotalAmount").
-        WithDateTimeAttribute("OrderDate", true).
+        WithDateTimeAttribute("OrderDate").
         Build()
 
     // Create association between entities
@@ -22741,13 +22799,13 @@ The `api` package provides a high-level fluent API inspired by the Mendix Web Ex
 ```
 import (
     "github.com/mendixlabs/mxcli/api"
-    "github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
-writer, _ := mpr.OpenForWriting("/path/to/MyApp.mpr")
-defer writer.Close()
-
-modelAPI := api.New(writer)
+modelAPI, err := api.Open("/path/to/MyApp.mpr")
+if err != nil {
+    panic(err)
+}
+defer modelAPI.Close()
 
 ```
 ## [Setting the Module Context](#setting-the-module-context)
@@ -22755,7 +22813,7 @@ modelAPI := api.New(writer)
 Most operations require a module context. Set it before calling builders:
 
 ```
-module, _ := modelAPI.Modules.GetModule("MyModule")
+module, _ := modelAPI.Modules.Get("MyModule")
 modelAPI.SetModule(module)
 
 ```
@@ -22826,7 +22884,7 @@ page, _ := modelAPI.Pages.CreatePage("CustomerOverview").
 modules, _ := modelAPI.Modules.ListModules()
 
 // Get a specific module
-module, _ := modelAPI.Modules.GetModule("MyModule")
+module, _ := modelAPI.Modules.Get("MyModule")
 
 ```
 ## [MDL to Fluent API Mapping](#mdl-to-fluent-api-mapping)
@@ -22864,7 +22922,7 @@ entity, err := modelAPI.DomainModels.CreateEntity("Customer").
     WithStringAttribute("Email", 254).
     WithIntegerAttribute("Age").
     WithBooleanAttribute("IsActive").
-    WithDateTimeAttribute("CreatedDate", true).
+    WithDateTimeAttribute("CreatedDate").
     WithDecimalAttribute("Revenue").
     WithEnumerationAttribute("Status", "MyModule.CustomerStatus").
     Build()
@@ -22881,7 +22939,7 @@ entity, err := modelAPI.DomainModels.CreateEntity("Customer").
 | `WithLongAttribute(name)` | Add a long attribute |
 | `WithDecimalAttribute(name)` | Add a decimal attribute |
 | `WithBooleanAttribute(name)` | Add a boolean attribute |
-| `WithDateTimeAttribute(name, localize)` | Add a datetime attribute |
+| `WithDateTimeAttribute(name)` | Add a datetime attribute |
 | `WithAutoNumberAttribute(name)` | Add an auto-number attribute |
 | `WithEnumerationAttribute(name, enumRef)` | Add an enumeration attribute |
 | `Build()` | Create the entity and write it to the project |
@@ -23000,18 +23058,16 @@ package main
 import (
     "log"
     "github.com/mendixlabs/mxcli/api"
-    "github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
-    writer, err := mpr.OpenForWriting("/path/to/MyApp.mpr")
+    modelAPI, err := api.Open("/path/to/MyApp.mpr")
     if err != nil {
         log.Fatal(err)
     }
-    defer writer.Close()
+    defer modelAPI.Close()
 
-    modelAPI := api.New(writer)
-    module, _ := modelAPI.Modules.GetModule("Sales")
+    module, _ := modelAPI.Modules.Get("Sales")
     modelAPI.SetModule(module)
 
     // ... examples below
@@ -23028,14 +23084,14 @@ customer, _ := modelAPI.DomainModels.CreateEntity("Customer").
     WithStringAttribute("Email", 254).
     WithIntegerAttribute("Age").
     WithBooleanAttribute("IsActive").
-    WithDateTimeAttribute("CreatedDate", true).
+    WithDateTimeAttribute("CreatedDate").
     Build()
 
 // Create another entity
 order, _ := modelAPI.DomainModels.CreateEntity("Order").
     Persistent().
     WithDecimalAttribute("TotalAmount").
-    WithDateTimeAttribute("OrderDate", true).
+    WithDateTimeAttribute("OrderDate").
     Build()
 
 // Create an enumeration
@@ -23082,18 +23138,16 @@ package main
 import (
     "log"
     "github.com/mendixlabs/mxcli/api"
-    "github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
-    writer, err := mpr.OpenForWriting("/path/to/MyApp.mpr")
+    modelAPI, err := api.Open("/path/to/MyApp.mpr")
     if err != nil {
         log.Fatal(err)
     }
-    defer writer.Close()
+    defer modelAPI.Close()
 
-    modelAPI := api.New(writer)
-    module, _ := modelAPI.Modules.GetModule("ProductCatalog")
+    module, _ := modelAPI.Modules.Get("ProductCatalog")
     modelAPI.SetModule(module)
 
     // Enumeration
@@ -27031,6 +27085,7 @@ Mendix security operates at two levels. **Module roles** define permissions with
 | Show security matrix | `SHOW SECURITY MATRIX [IN module]` |
 | Alter project security level | `ALTER PROJECT SECURITY LEVEL OFF|PROTOTYPE|PRODUCTION` |
 | Toggle demo users | `ALTER PROJECT SECURITY DEMO USERS ON|OFF` |
+| Toggle strict mode | `ALTER PROJECT SECURITY STRICT MODE ON|OFF` |
 | Toggle guest access | `ALTER PROJECT SECURITY GUEST ACCESS ON [ROLE UserRole]|OFF` |
 | Drop module role | `DROP MODULE ROLE module.Role` |
 | Drop user role | `DROP USER ROLE [IF EXISTS] Name` |
@@ -31732,20 +31787,24 @@ classDiagram
 
 | Package | Purpose |
 | --- | --- |
-| `sdk/mpr/` | MPR file format handling (~18k lines across reader, writer, parser files split by domain) |
+| `modelsdk/` | The MPR engine: file format, BSON codec, canonical form |
+| `mdl/backend/modelsdk/` | Backend implementation — reads and writes documents through the codec |
 | `sdk/domainmodel` | Entity, Attribute, Association types |
 | `sdk/microflows` | Microflow, Activity types (60+ types) |
 | `sdk/pages` | Page, Widget types (50+ types) |
 | `sdk/widgets` | Embedded widget templates for pluggable widgets |
 
-The `sdk/mpr/` package is split by domain for maintainability:
+The engine is split across `modelsdk/`, with the per-document-type mapping in
+`mdl/backend/modelsdk/`:
 
-| File Pattern | Purpose |
+| Package / pattern | Purpose |
 | --- | --- |
-| `reader.go`, `reader_*.go` | Read-only MPR access, split by element type |
-| `writer.go`, `writer_*.go` | Read-write MPR modification (domainmodel, microflow, security, widgets, etc.) |
-| `parser.go`, `parser_*.go` | BSON parsing and deserialization (domainmodel, microflow, etc.) |
-| `utils.go` | UUID generation utilities |
+| `modelsdk/mpr/` | MPR file access: reader, writer, raw units, the write choke point |
+| `modelsdk/codec/` | Document ↔ BSON (`encoder.go`, `decoder.go`, type defaults, list markers) |
+| `modelsdk/canon/` | Canonical form, identity transplant, write elision ([ADR-0008](../../docs/13-decisions/0008-identity-and-idempotence.html)) |
+| `modelsdk/gen/` | Vendored metamodel types |
+| `mdl/backend/modelsdk/*_write.go` | Semantic model → gen → BSON, per document type |
+| `mdl/backend/modelsdk/*_read.go` | BSON → gen → semantic model |
 
 ## [5. Model Layer (`model/`)](#5-model-layer-model)
 
@@ -32065,7 +32124,11 @@ github.com/mendixlabs/mxcli/
 | `sdk/microflows/` | Yes | Microflow, Nanoflow, 60+ activity types |
 | `sdk/pages/` | Yes | Page, Layout, 50+ widget types |
 | `sdk/widgets/` | Yes | Widget template loading and cloning |
-| `sdk/mpr/` | Yes | MPR reader, writer, BSON parser |
+| `modelsdk/mpr/` | Yes | MPR file format: reader, writer, raw unit access |
+| `modelsdk/codec/` | Yes | Document ↔ BSON encode/decode |
+| `modelsdk/canon/` | Yes | Canonical form, identity transplant, write elision |
+| `modelsdk/gen/` | Yes | Vendored metamodel types |
+| `mdl/backend/modelsdk/` | No | Backend implementation: semantic model ↔ gen/BSON |
 | `mdl/grammar/` | Yes | ANTLR4 generated lexer/parser |
 | `mdl/ast/` | Yes | AST node types for all MDL statements |
 | `mdl/visitor/` | Yes | Parse tree to AST conversion |
@@ -32804,10 +32867,12 @@ There is no deduplication within a page. A page with 4 ComboBox widgets requires
 
 | File | Purpose |
 | --- | --- |
-| `sdk/mpr/writer_widgets.go` | Widget serialization to BSON |
-| `sdk/mpr/writer_pages.go` | Page serialization |
-| `sdk/mpr/reader_widgets.go` | Widget template extraction and cloning |
-| `sdk/mpr/parser_page.go` | Page deserialization |
+| `mdl/backend/modelsdk/widget_write.go` | Widget serialization to BSON |
+| `mdl/backend/modelsdk/page_write.go` | Page serialization |
+| `mdl/backend/modelsdk/widget_pluggable_write.go` | Pluggable widget templates |
+| `mdl/backend/modelsdk/page.go` | Page deserialization |
+| `modelsdk/codec/encoder.go` | Document → BSON |
+| `modelsdk/codec/decoder.go` | BSON → document (polymorphic types) |
 | `sdk/widgets/loader.go` | Embedded template loading |
 | `sdk/widgets/templates/mendix-11.6/*.json` | Embedded widget templates |
 | `reference/mendixmodellib/reflection-data/*.json` | Type definitions |
@@ -32869,7 +32934,7 @@ When adding new types, always verify the storage name by:
 
 1. **Examining existing MPR files** with the `mx` tool or an SQLite browser
 2. **Checking the reflection data** in `reference/mendixmodellib/reflection-data/`
-3. **Looking at the parser cases** in `sdk/mpr/parser_microflow.go`
+3. **Looking at the read cases** in `mdl/backend/modelsdk/microflow_read_actions.go`
 
 ### [Querying Reflection Data](#querying-reflection-data)
 
@@ -37346,7 +37411,7 @@ When adding new types, always verify the storage name by:
 
 1. Examining existing MPR files with the `mx` tool or SQLite browser
 2. Checking the reflection data in the `reference/mendixmodellib/reflection-data/` directory
-3. Looking at the parser cases in `sdk/mpr/parser_microflow.go`
+3. Looking at the read cases in `mdl/backend/modelsdk/microflow_read_actions.go`
 
 ## [Mendix Expression String Escaping](#mendix-expression-string-escaping)
 
