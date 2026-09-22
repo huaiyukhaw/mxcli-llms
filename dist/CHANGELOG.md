@@ -1,3 +1,7 @@
+## 2026-09-22 -- mxcli v0.23.0 @ a909abc
+- +23 / -0 lines
+- Sections changed: [Install into a project](#install-into-a-project)
+
 ## 2026-09-21 -- mxcli v0.22.0 @ 31eee45
 - +117 / -52 lines
 - Sections changed: [4. SDK Layer (`sdk/`)](#4-sdk-layer-sdk), [BSON Storage Names vs Qualified Names](#bson-storage-names-vs-qualified-names), [Complete Example](#complete-example-8), [Complete Module Setup](#complete-module-setup), [Create a Domain Model](#create-a-domain-model), [Creating Entities](#creating-entities), [Creating the ModelAPI](#creating-the-modelapi), [EntityBuilder](#entitybuilder) (+10 more)
