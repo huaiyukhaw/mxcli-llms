@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.23.0 @ 1ec3333
-Generated: 2026-09-23T07:12:45Z
+Version:   mxcli v0.24.0 @ f18c307
+Generated: 2026-09-24T07:04:50Z
 
 ---
 
@@ -17629,6 +17629,18 @@ mxcli test tests/ -p app.mpr --attach            # terminal 2
 
 ```
 
+`--local` builds with the same mxbuild `run --local` resolves: Studio Pro’s
+bundled one on macOS and Windows, the cached CDN download on Linux (the CDN
+publishes Linux binaries only). To point it somewhere else — a Studio Pro
+installed outside `Program Files`, say — pass `--mxbuild-path`, or set
+`MXCLI_MXBUILD_PATH` for a wrapper or CI step that cannot add a flag. The flag
+wins when both are set.
+
+```
+mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.11.0\modeler\mxbuild.exe"
+
+```
+
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
@@ -19019,7 +19031,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
 | `--serve-port` | 6543 | `mxbuild --serve` port |
-| `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux) |
+| `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
 | `--db-user` / `--db-password` | mendix / mendix | Database credentials |
