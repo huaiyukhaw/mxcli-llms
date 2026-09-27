@@ -1,3 +1,7 @@
+## 2026-09-27 -- mxcli v0.24.0 @ 9509176
+- +115 / -9 lines
+- Sections changed: What have I changed in this module since installing it?, [Microflow and Nanoflow Layout](#microflow-and-nanoflow-layout), [Annotations](#annotations-1), [Common Widget Properties](#common-widget-properties), [Description](#description-33), [Flags](#flags-1), [Flags](#flags-2), [Flags](#flags-3) (+9 more)
+
 ## 2026-09-23 -- mxcli v0.23.0 @ 1ec3333
 - +409 / -60 lines
 - Sections changed: [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop), [Annotations](#annotations-1), [Any installed widget](#any-installed-widget), [CLI Commands](#cli-commands-1), [Comparison](#comparison-1), [Default position for an entity with no `@Position`](#default-position-for-an-entity-with-no-position), [Description](#description-73), [Examples](#examples-85) (+13 more)

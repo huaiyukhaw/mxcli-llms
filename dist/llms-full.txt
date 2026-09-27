@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.24.0 @ 86d395e
-Generated: 2026-09-26T06:59:26Z
+Version:   mxcli v0.24.0 @ 9509176
+Generated: 2026-09-27T07:29:44Z
 
 ---
 
@@ -2705,6 +2705,15 @@ This catches everything Level 1 catches, plus:
 - A plain `create` whose name already exists in the project
 
 This is the check you should run before executing a script. It’s fast (reads the project but doesn’t modify it) and catches most mistakes.
+
+References inside an **excluded** document (`@excluded`, or a page or snippet
+that stays excluded because its stored namesake is) are reported as
+`Reference warnings` rather than errors, because Mendix does not validate
+excluded documents. A missing *data-source flow* is a warning too, but only when
+every binding inside that container is qualified (`Module.Entity.Attribute`) —
+`describe page` writes them that way there. The widgets bind against the entity
+the flow returns, so with the flow missing a bare binding cannot be resolved and
+the check fails, naming the widget. A missing entity still fails the check.
 
 ### [Name conflicts with the project](#name-conflicts-with-the-project)
 
@@ -7839,6 +7848,11 @@ cross. A statement that carries `@position` is never moved, and becomes the star
 the row for the statements after it — so either place everything or nothing: a few
 hand-placed statements are not measured against what is laid out around them.
 
+To re-arrange a flow that already exists — one drawn in Studio Pro, or one whose
+positions no longer fit after edits — run `mxcli layout flows`. It applies this
+same layout to the stored flow and changes nothing but coordinates; see
+[Microflow and Nanoflow Layout](#microflow-and-nanoflow-layout).
+
 ### [Start event](#start-event)
 
 The start event has no statement of its own, so `@start` goes on the **first**
@@ -9535,6 +9549,20 @@ TEXTBOX txtName (Label: 'Name', Attribute: Name, Visible: [IsActive])
 
 Static values also work: `Visible: false` hides the widget unconditionally.
 
+Studio Pro’s **“based on attribute value”** form lists the values of a Boolean or
+enumeration attribute (of the enclosing data container’s entity) that show the
+widget; `empty` is Studio Pro’s “(empty)” choice:
+
+```
+CONTAINER cntRunning (Visible: Status in (Running, empty)) { ... }
+TEXTBOX txtPassword (Label: 'Password', Attribute: Password, Visible: IsLocalUser in (true))
+
+```
+
+mxcli writes one condition per value of the attribute, as Studio Pro does, so a
+value not listed hides the widget. `describe page` emits this form for widgets
+set up that way in Studio Pro.
+
 ### [Conditional Editability](#conditional-editability)
 
 Input widgets can be conditionally editable:
@@ -9874,7 +9902,7 @@ CONTAINER cCard (Class: 'card mx-spacing-top-large') {
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card p-3'` |
 | `Style` | Inline CSS styles | `Style: 'padding: 16px;'` |
-| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: if $currentObject/IsActive then 'is-active' else ''` |
 | `DesignProperties` | Design property values | `DesignProperties: ['Spacing top': 'Large']` |
 
 ### [CUSTOMCONTAINER](#customcontainer)
@@ -10382,7 +10410,7 @@ These properties are shared across many widget types:
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card p-3'` |
 | `Style` | Inline CSS styles | `Style: 'margin-top: 8px;'` |
-| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: if $currentObject/IsActive then 'is-active' else ''` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ['Spacing top': 'Large', 'Full width': ON]` |
 | `Visible` | Visibility expression | `Visible: '$showSection'` |
 | `Editable` | Editability mode | `Editable: ReadOnly` |
@@ -10720,7 +10748,7 @@ ALTER PAGE Module.EditPage {
 | `ButtonStyle` | Button visual style | `SET ButtonStyle = Danger ON btnDelete` |
 | `Class` | CSS class names | `SET Class = 'card p-3' ON cMain` |
 | `Style` | Inline CSS | `SET Style = 'margin: 8px;' ON cBox` |
-| `DynamicClasses` | Runtime-computed CSS classes | `SET DynamicClasses = 'if $currentObject/IsActive then ''is-active'' else ''''' ON cMain` |
+| `DynamicClasses` | Runtime-computed CSS classes | `SET DynamicClasses = if $currentObject/IsActive then 'is-active' else '' ON cMain` |
 | `Editable` | Editability mode | `SET Editable = ReadOnly ON txtEmail` |
 | `Visible` | Visibility expression | `SET Visible = '$showField' ON txtPhone` |
 | `Name` | Widget name | `SET Name = 'txtFullName' ON txtName` |
@@ -14239,6 +14267,83 @@ Two things to know if you place entities yourself:
 
 A wrapping grid (`mdl/dmlayout`), not the single 6,000px row it used to be.
 
+# [Microflow and Nanoflow Layout](#microflow-and-nanoflow-layout)
+
+`mxcli layout flows` re-arranges existing microflows and nanoflows on their
+canvas. It is the flow counterpart of [`mxcli layout`](#domain-model-layout),
+and it is how you “reset the layout” of a flow: there is no clause on
+`CREATE MICROFLOW` for that, because layout is not part of what a flow *does*.
+
+```
+mxcli layout flows -p app.mpr Sales.ACT_Order_Submit        # one flow
+mxcli layout flows -p app.mpr --module Sales --dry-run      # list what would move
+mxcli layout flows -p app.mpr --module Sales                # every flow in a module
+
+```
+## [The same layout as `CREATE`](#the-same-layout-as-create)
+
+There is one layout engine for flows, and this command uses it. A flow laid out
+here ends up exactly where the same flow would be if you created it from MDL
+with no `@position`: main path left to right, guard branches in the lane below,
+long rows wrapped, loops sized to their bodies. See
+[Microflow Structure](#position-1) for the rules.
+
+The flow is described to MDL, every layout annotation (`@position`, `@anchor`,
+`@curve`, `@merge`, `@start`, and the placement of `@annotation` notes) is
+dropped, and it is built again as `CREATE` would build it. Only the geometry of
+that build is kept.
+
+## [Only positions change](#only-positions-change)
+
+The result is patched onto the stored flow rather than written in its place, so
+nothing but layout changes:
+
+- positions and sizes of activities, events, splits, merges and loops;
+- positions of parameters and notes (a note keeps its size);
+- the connection sides and curves of sequence flows.
+
+Element IDs, captions, expressions and every property MDL cannot express are
+left exactly as stored. That is also why this works on flows drawn in Studio
+Pro.
+
+## [Flows it will not touch](#flows-it-will-not-touch)
+
+The rebuilt flow has to match the stored one object for object. If it does
+not — the flow uses something MDL cannot yet express the same way, such as
+several branches sharing one merge — the flow is skipped with the reason, and
+the rest of the batch carries on:
+
+```
+FeedbackModule.VAL_Feedback: skipped — its ExclusiveMerge came back as a
+ValidationFeedbackAction activity after a rebuild, so it does not round-trip
+through MDL
+
+```
+
+A merge with one flow in and one flow out joins nothing, so it is not a reason
+to skip: it is placed on the edge it sits on.
+
+## [It replaces positions you set by hand](#it-replaces-positions-you-set-by-hand-1)
+
+Every flow it touches is re-arranged, including any you arranged yourself. Use
+`--dry-run` first. Marketplace modules and `System` are never touched unless
+you pass `--include-marketplace`, whether you name a module or a single flow.
+
+Running it again changes nothing: a second run reports `already laid out` and
+writes nothing.
+
+## [Flags](#flags-1)
+
+| Flag | Meaning |
+| --- | --- |
+| `Module.Flow ...` | Lay out these microflows or nanoflows. |
+| `--module <name>` | Lay out every microflow and nanoflow in this module (repeatable). |
+| `--dry-run` | Report what would move, write nothing. |
+| `--include-marketplace` | Also lay out flows in Marketplace modules. A module update replaces them, so this is normally pointless. |
+
+Either name flows or pass `--module`; laying out every flow in a project is too
+broad to do by default.
+
 # [Code Navigation](#code-navigation)
 
 mxcli provides a suite of cross-reference navigation commands that let you explore relationships between elements in a Mendix project. These commands answer questions like “what calls this microflow?”, “what would break if I change this entity?”, and “what does this element depend on?”
@@ -16738,7 +16843,7 @@ The TUI opens in full-screen alternate screen mode with mouse support enabled.
 
 The TUI delegates all heavy lifting to existing mxcli logic. The project tree is built by calling `buildProjectTree()` directly, while commands like describe, callers, check, and exec run mxcli as a subprocess. Diagrams open in the system browser via `xdg-open` or `open`.
 
-## [Flags](#flags-1)
+## [Flags](#flags-2)
 
 | Flag | Description |
 | --- | --- |
@@ -19017,7 +19122,7 @@ so structural changes need a restart; behavioural changes do not.
     
     ```
 
-## [Flags](#flags-2)
+## [Flags](#flags-3)
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
@@ -26036,6 +26141,7 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 | Widget | Description | Key Properties |
 | --- | --- | --- |
 | `DYNAMICTEXT` | Display-only text bound to an attribute | `Attribute` |
+| `LABEL` | Studio Pro’s Label widget (`Forms$Label`): a fixed, translatable caption. `describe` emits it for existing labels; prefer `DYNAMICTEXT` for new text | `Content` |
 | `IMAGE` | Generic image | `Width`, `Height` |
 | `STATICIMAGE` | Fixed image from project resources | `Width`, `Height` |
 | `DYNAMICIMAGE` | Image from an entity attribute | `Width`, `Height` |
@@ -26148,7 +26254,7 @@ These properties are available on most widget types:
 | --- | --- | --- |
 | `Class` | CSS class names | `Class: 'card mx-spacing-top-large'` |
 | `Style` | Inline CSS | `Style: 'padding: 16px;'` |
-| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else '''''` |
+| `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: if $currentObject/IsActive then 'is-active' else ''` |
 | `Editable` | Edit control | `Editable: NEVER` or `Editable: ALWAYS` |
 | `Visible` | Visibility expression | `Visible: '$showField'` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ['Spacing top': 'Large']` |
@@ -36651,7 +36757,7 @@ Read **both** `locallyModified` and `verified`. `verified: false` means at least
   this is not a clean bill of health.
 
 ```
-### [Flags](#flags-3)
+### [Flags](#flags-4)
 
 | Flag | Purpose |
 | --- | --- |
@@ -37031,7 +37137,7 @@ MDL uses explicit property declarations for pages:
 | Selection binding | `DataSource: SELECTION widget` | `DATAVIEW dv (DataSource: SELECTION galleryList)` |
 | CSS class | `Class: 'classes'` | `CONTAINER c (Class: 'card mx-spacing-top-large')` |
 | Inline style | `Style: 'css'` | `CONTAINER c (Style: 'padding: 16px;')` |
-| Dynamic classes | `DynamicClasses: 'expr'` | `CONTAINER c (DynamicClasses: 'if $currentObject/IsActive then ''is-active'' else ''''')` — runtime-computed; stacks on `Class` |
+| Dynamic classes | `DynamicClasses: 'expr'` | `CONTAINER c (DynamicClasses: if $currentObject/IsActive then 'is-active' else '')` — runtime-computed; stacks on `Class` |
 | Design properties | `DesignProperties: [...]` | `CONTAINER c (DesignProperties: ['Spacing top': 'Large', 'Full width': ON])` |
 | Width (pixels) | `Width: integer` | `IMAGE img (Width: 200)` |
 | Height (pixels) | `Height: integer` | `IMAGE img (Height: 150)` |
@@ -37055,7 +37161,7 @@ MDL uses explicit property declarations for pages:
 | `ColumnWidth` | `autoFill`, `autoFit`, `manual` | `autoFill` | `ColumnWidth: manual` |
 | `Size` | integer (px) | `1` | `Size: 200` |
 | `Visible` | expression string | `true` | `Visible: '$showColumn'` (page variable, not $currentObject) |
-| `DynamicCellClass` | expression string | (empty) | `DynamicCellClass: 'if(...) then ... else ...'` |
+| `DynamicCellClass` | expression string | (empty) | `DynamicCellClass: if(...) then ... else ...` |
 | `Tooltip` | text string | (empty) | `Tooltip: 'Price in USD'` |
 
 **Page Example:**

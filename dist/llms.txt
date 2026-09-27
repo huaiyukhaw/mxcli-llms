@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.24.0 @ 86d395e | Generated: 2026-09-26T06:59:26Z
+Version: mxcli v0.24.0 @ 9509176 | Generated: 2026-09-27T07:29:44Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -118,6 +118,8 @@ and easy to confuse:
 - [Default Styling](https://www.mxcli.org/tools/theme.html)
 - [Domain Model Layout](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/domain-model-layout.md): A domain model generated from an MDL script has to be placed somewhere, and
 MDL says nothing about placement unless you write…
+- [Microflow and Nanoflow Layout](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/flow-layout.md): mxcli layout flows re-arranges existing microflows and nanoflows on their
+canvas. It is the flow counterpart of mxcli layout…
 - [Code Navigation](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/code-navigation.md): mxcli provides a suite of cross-reference navigation commands that let you explore relationships between elements in a Mendix…
 - [SHOW CALLERS / CALLEES](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/callers-callees.md): These commands trace the call graph of your Mendix project, showing what calls a given element and what that element calls.
 - [SHOW REFERENCES / IMPACT](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/references-impact.md): These commands provide broader reference tracking and impact analysis, helping you understand how changes propagate through a…
