@@ -4,5 +4,5 @@ Statements for viewing and modifying Mendix project settings. Settings are organ
 
 | Statement | Description |
 | --- | --- |
-| [SHOW / DESCRIBE SETTINGS](#show--describe-settings) | View current project settings |
+| [SHOW / DESCRIBE SETTINGS](#list--describe-settings) | View current project settings |
 | [ALTER SETTINGS](#alter-settings-1) | Modify project settings by category |

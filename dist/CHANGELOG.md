@@ -1,3 +1,7 @@
+## 2026-10-01 -- mxcli v0.24.0 @ 6469fa3
+- +2040 / -1464 lines
+- Sections changed: CLI one-liner, Count entities per module, Detailed view of one module, Final validation before opening in Studio Pro, Find all microflows with "Save" in the name, Full project including system modules, JSON output, JSON output for programmatic use (+524 more)
+
 ## 2026-09-27 -- mxcli v0.24.0 @ 9509176
 - +115 / -9 lines
 - Sections changed: What have I changed in this module since installing it?, [Microflow and Nanoflow Layout](#microflow-and-nanoflow-layout), [Annotations](#annotations-1), [Common Widget Properties](#common-widget-properties), [Description](#description-33), [Flags](#flags-1), [Flags](#flags-2), [Flags](#flags-3) (+9 more)

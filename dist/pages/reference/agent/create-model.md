@@ -1,1 +1,1 @@
-# [CREATE MODEL](#create-model)
+# [CREATE AI MODEL](#create-ai-model)

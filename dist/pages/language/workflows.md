@@ -6,12 +6,13 @@
 | Describe workflow | `DESCRIBE WORKFLOW Module.Name;` | Full MDL output |
 | Create workflow | `CREATE [OR MODIFY] WORKFLOW Module.Name PARAMETER $Ctx: Module.Entity BEGIN ... END WORKFLOW;` | See activity types below |
 | Drop workflow | `DROP WORKFLOW Module.Name;` |  |
+| Alter workflow | `ALTER WORKFLOW Module.Name { SET (Key: value, ...) [ON <activity>]; INSERT BEFORE|AFTER <activity> { ... } INSERT INTO <activity> { OUTCOMES ... | PATH { ... } | BOUNDARY EVENT ... } REPLACE <activity> WITH { ... } DROP <activity> [OUTCOME '<x>' | PATH <n> | BOUNDARY EVENT]; };` | An activity is its name or `'caption'`, `@n` for one of several matches; the old per-action form warns MDL-DEPR140–149 |
 
 **Workflow Activity Types:**
 
 - `USER TASK <name> '<caption>' [PAGE Mod.Page] [TARGETING MICROFLOW Mod.MF] [OUTCOMES '<out>' { } ...];`
-- `CALL MICROFLOW Mod.MF [COMMENT '<text>'] [OUTCOMES '<out>' { } ...];`
-- `CALL WORKFLOW Mod.WF [COMMENT '<text>'];`
+- `CALL MICROFLOW Mod.MF [CAPTION '<text>'] [OUTCOMES '<out>' { } ...];`
+- `CALL WORKFLOW Mod.WF [CAPTION '<text>'];`
 - `DECISION ['<caption>'] OUTCOMES '<out>' { } ...;`
 - `PARALLEL SPLIT PATH 1 { } PATH 2 { };`
 - `JUMP TO <activity-name>;`

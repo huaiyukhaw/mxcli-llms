@@ -21,6 +21,6 @@ Modules: 5
 
 ```
 STATUS;
-SHOW MODULES;
+LIST MODULES;
 
 ```

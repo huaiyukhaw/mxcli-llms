@@ -3,7 +3,7 @@
 ### [GRANT](#grant)
 
 ```
-GRANT <Module>.<Role> ON <Module>.<Entity> (<rights>) [WHERE '<xpath>'];
+GRANT <rights> ON ENTITY <Module>.<Entity> TO <Module>.<Role> [, ...] [WHERE [<xpath>]];
 
 ```
 
@@ -24,20 +24,20 @@ Examples:
 
 ```
 -- Full access
-GRANT Shop.Admin ON Shop.Customer (CREATE, DELETE, READ *, WRITE *);
+GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Shop.Customer TO Shop.Admin;
 
 -- Read-only
-GRANT Shop.Viewer ON Shop.Customer (READ *);
+GRANT READ * ON ENTITY Shop.Customer TO Shop.Viewer;
 
 -- Selective members
-GRANT Shop.User ON Shop.Customer (READ (Name, Email), WRITE (Email));
+GRANT READ (Name, Email), WRITE (Email) ON ENTITY Shop.Customer TO Shop.User;
 
 -- With XPath constraint (doubled single quotes for string literals)
-GRANT Shop.User ON Shop.Order (READ *, WRITE *)
-  WHERE '[Status = ''Open'']';
+GRANT READ *, WRITE * ON ENTITY Shop.Order TO Shop.User
+  WHERE [Status = 'Open'];
 
 -- Additive: adds Notes to existing read access without removing Name, Email
-GRANT Shop.User ON Shop.Customer (READ (Notes));
+GRANT READ (Notes) ON ENTITY Shop.Customer TO Shop.User;
 
 ```
 ### [REVOKE](#revoke)
@@ -59,15 +59,15 @@ Examples:
 
 ```
 -- Remove all access
-REVOKE Shop.Viewer ON Shop.Customer;
+REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Viewer;
 
 -- Remove read access on a specific member
-REVOKE Shop.User ON Shop.Customer (READ (Notes));
+REVOKE READ (Notes) ON ENTITY Shop.Customer FROM Shop.User;
 
 -- Downgrade write to read-only
-REVOKE Shop.User ON Shop.Customer (WRITE (Email));
+REVOKE WRITE (Email) ON ENTITY Shop.Customer FROM Shop.User;
 
 -- Remove delete permission only
-REVOKE Shop.User ON Shop.Customer (DELETE);
+REVOKE DELETE ON ENTITY Shop.Customer FROM Shop.User;
 
 ```
