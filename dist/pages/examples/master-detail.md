@@ -8,12 +8,12 @@ CREATE PAGE CRM.Customer_MasterDetail (
   Layout: Atlas_Core.Atlas_Default
 ) {
   LAYOUTGRID mainGrid {
-    ROW row1 {
+    ROW {
       -- Master list (left panel)
-      COLUMN colMaster (DesktopWidth: 4) {
+      COLUMN (DesktopWidth: 4) {
         DYNAMICTEXT heading (Content: 'Customers', RenderMode: H3)
         GALLERY customerList (DataSource: DATABASE CRM.Customer, Selection: Single) {
-          TEMPLATE template1 {
+          TEMPLATE {
             DYNAMICTEXT name (
               Content: '{1}',
               ContentParams: ({1} = Name),
@@ -28,14 +28,14 @@ CREATE PAGE CRM.Customer_MasterDetail (
       }
 
       -- Detail form (right panel, bound to gallery selection)
-      COLUMN colDetail (DesktopWidth: 8) {
+      COLUMN (DesktopWidth: 8) {
         DYNAMICTEXT detailHeading (Content: 'Details', RenderMode: H3)
         DATAVIEW customerDetail (DataSource: SELECTION customerList) {
           TEXTBOX txtName (Label: 'Name', Attribute: Name)
           TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
           TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
           TEXTAREA txtNotes (Label: 'Notes', Attribute: Notes)
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
               Action: SAVE CHANGES,
@@ -48,7 +48,6 @@ CREATE PAGE CRM.Customer_MasterDetail (
     }
   }
 };
-/
 
 ```
 

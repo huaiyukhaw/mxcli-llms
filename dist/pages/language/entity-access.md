@@ -23,6 +23,7 @@ GRANT is **additive**: if the role already has an access rule on the entity, new
 Examples:
 
 ```
+mdl 1;
 -- Full access
 GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Shop.Customer TO Shop.Admin;
 
@@ -58,6 +59,7 @@ For partial revoke, `REVOKE READ (x)` sets member x access to None. `REVOKE WRIT
 Examples:
 
 ```
+mdl 1;
 -- Remove all access
 REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Viewer;
 

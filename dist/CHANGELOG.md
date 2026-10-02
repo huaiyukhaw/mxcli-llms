@@ -1,3 +1,7 @@
+## 2026-10-02 -- mxcli v0.24.0 @ 4ba1495
+- +973 / -486 lines
+- Sections changed: MDL sources in the alpha language (mdl 0) instead of mdl 1, Or use Cursor's Composer, Continue.dev's sidebar, etc., [Language Versions and Migration](#language-versions-and-migration), [Master-Detail Page](#master-detail-page), [Session Statements](#session-statements), [A run of grants is compared as a whole](#a-run-of-grants-is-compared-as-a-whole), [ADD Attributes](#add-attributes), [ADD/DROP EVENT HANDLER](#adddrop-event-handler) (+216 more)
+
 ## 2026-10-01 -- mxcli v0.24.0 @ 6469fa3
 - +2040 / -1464 lines
 - Sections changed: CLI one-liner, Count entities per module, Detailed view of one module, Final validation before opening in Studio Pro, Find all microflows with "Save" in the name, Full project including system modules, JSON output, JSON output for programmatic use (+524 more)

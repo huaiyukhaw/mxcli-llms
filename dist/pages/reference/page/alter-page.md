@@ -21,6 +21,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 **Example:**
 
 ```
+mdl 1;
 ALTER PAGE Module.EditPage {
   SET (Caption: 'Save & Close', ButtonStyle: Success) ON btnSave;
   DROP txtUnused;

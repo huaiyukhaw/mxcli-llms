@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.24.0 @ 6469fa3 | Generated: 2026-10-01T08:12:01Z
+Version: mxcli v0.24.0 @ 4ba1495 | Generated: 2026-10-02T07:51:48Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -64,6 +64,8 @@ no Studio Pro, no machine setup. Claude Code on the…
 - [Qualified Names](https://huaiyukhaw.github.io/mxcli-llms/pages/language/qualified-names.md): MDL uses dot-separated qualified names to reference elements within a Mendix project. This naming convention ensures elements are…
 - [Comments and Documentation](https://huaiyukhaw.github.io/mxcli-llms/pages/language/comments.md): MDL supports three comment styles for annotating scripts and attaching documentation to model elements.
 - [Script Files](https://huaiyukhaw.github.io/mxcli-llms/pages/language/script-files.md): MDL statements can be saved in .mdl files and executed as scripts. This is the primary way to automate Mendix model changes.
+- [Language Versions and Migration](https://huaiyukhaw.github.io/mxcli-llms/pages/language/versions.md): An MDL script is written in one language version , declared by its first
+statement:
 - [Data Types](https://huaiyukhaw.github.io/mxcli-llms/pages/language/data-types.md): MDL has a type system that maps to the Mendix metamodel attribute types. Every attribute in an entity definition has a type that…
 - [Primitive Types](https://huaiyukhaw.github.io/mxcli-llms/pages/language/primitive-types.md): This page documents each primitive type available for entity attributes in MDL.
 - [Constraints](https://huaiyukhaw.github.io/mxcli-llms/pages/language/constraints.md): Constraints must appear in this order:

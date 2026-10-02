@@ -24,7 +24,7 @@ BEGIN
   IF $IsValid THEN
     RETRIEVE $Existing FROM Sales.Customer
       WHERE Email = $Customer/Email
-      LIMIT 1;
+      FIRST;
     IF $Existing != empty THEN
       VALIDATION FEEDBACK $Customer/Email MESSAGE 'A customer with this email already exists';
       SET $IsValid = false;

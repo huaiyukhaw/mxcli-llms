@@ -16,6 +16,7 @@ Modifies an existing entity without full replacement.
 **Example:**
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Notes: String(unlimited);
 

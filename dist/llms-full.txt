@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.24.0 @ 6469fa3
-Generated: 2026-10-01T08:12:01Z
+Version:   mxcli v0.24.0 @ 4ba1495
+Generated: 2026-10-02T07:51:48Z
 
 ---
 
@@ -450,11 +450,11 @@ CREATE PAGE Sales.CustomerOverview
 )
 {
     DATAGRID dgCustomers (DataSource: DATABASE Sales.Customer) {
-        COLUMN colName (Attribute: Name, Caption: 'Name')
-        COLUMN colEmail (Attribute: Email, Caption: 'Email')
-        COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+        COLUMN (Attribute: Name, Caption: 'Name')
+        COLUMN (Attribute: Email, Caption: 'Email')
+        COLUMN (Attribute: IsActive, Caption: 'Active')
     }
-}
+};
 
 ```
 ### [Snippets](#snippets)
@@ -744,7 +744,7 @@ mxcli setup mxbuild -p your-app.mpr
 
 **“CGO not available”** – mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you’re using the official pre-built binary or a `make build` from source.
 
-**Project won’t open in Studio Pro after changes** – Close Studio Pro before running mxcli write commands, then reopen. See [F4 sync support](#mendix-version-compatibility) for details.
+**“refusing to write …: Studio Pro has this project open”** – Close the project in Studio Pro before running mxcli write commands, then reopen it. Studio Pro does not reload the model from disk, so its next save would silently discard mxcli’s changes. If Studio Pro is not running, the `.mpr.lock` was left behind by a crash: delete it, or pass `--force` to `exec`.
 
 # [Setting Up](#setting-up)
 
@@ -949,6 +949,8 @@ mxcli -p /path/to/app.mpr -c "LIST MODULES"
 ```
 
 This opens the project in read-only mode, runs the command, and exits. The `-p` flag works with all mxcli subcommands.
+
+`-c` takes several statements separated by `;`. Like `mxcli exec`, it stops at the first statement that fails, prints `statement 2 of 3: …` and how many later statements were not run, and exits non-zero; add `--continue-on-error` to run every statement and report each failure. An empty `-c ""` is an error: it never opens the interactive REPL, so a script that generates an empty command list cannot hang waiting on input.
 
 ## [Opening in the REPL](#opening-in-the-repl)
 
@@ -1616,6 +1618,7 @@ DESCRIBE ENTITY MyFirstModule.Order;
 
 ```
 ```
+mdl 1;
 CREATE PERSISTENT ENTITY MyFirstModule.Order (
   OrderNumber: AutoNumber,
   OrderDate: DateTime,
@@ -1680,7 +1683,7 @@ CREATE PAGE MyFirstModule.Customer_Edit
     TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
     TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
 
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
@@ -2508,11 +2511,11 @@ CREATE PAGE MyModule.ProductOverview
 )
 {
     DATAGRID dgProducts (DataSource: DATABASE MyModule.Product) {
-        COLUMN colName (Attribute: Name, Caption: 'Name')
-        COLUMN colPrice (Attribute: Price, Caption: 'Price')
-        COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+        COLUMN (Attribute: Name, Caption: 'Name')
+        COLUMN (Attribute: Price, Caption: 'Price')
+        COLUMN (Attribute: IsActive, Caption: 'Active')
     }
-}
+};
 
 ```
 
@@ -2566,7 +2569,7 @@ CREATE PAGE MyModule.Product_Edit
         TEXTBOX txtPrice (Label: 'Price', Attribute: Price)
         CHECKBOX cbActive (Label: 'Active', Attribute: IsActive)
 
-        FOOTER footer1 {
+        FOOTER {
             ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
             ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
         }
@@ -2616,7 +2619,7 @@ DYNAMICTEXT dynName (Attribute: Name)
 ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
 ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
 ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
-ACTIONBUTTON btnProcess (Caption: 'Process', Action: MICROFLOW MyModule.ACT_ProcessProduct(Product = $Product))
+ACTIONBUTTON btnProcess (Caption: 'Process', Action: CALL MICROFLOW MyModule.ACT_ProcessProduct(Product = $Product))
 
 ```
 ### [Layout widgets](#layout-widgets)
@@ -2835,7 +2838,7 @@ mxcli diff -p app.mpr changes.mdl
 
 ```
 
-This compares the script against the current project state and shows what would be created, modified, or left unchanged. It does not modify the project.
+This runs the script with exec’s own code on a scratch copy of the project and shows every document exec would create, modify or remove, each as its `describe` before and after. It does not modify the project.
 
 ## [What mxcli check catches automatically](#what-mxcli-check-catches-automatically)
 
@@ -3097,6 +3100,7 @@ Here is a typical conversation with Claude Code:
 **Claude** (reads skills, writes MDL, validates, and executes):
 
 ```
+mdl 1;
 /** Customer contact information */
 @Position(100, 100)
 CREATE PERSISTENT ENTITY Sales.Customer (
@@ -3115,20 +3119,20 @@ CREATE PAGE Sales.Customer_Overview
 )
 {
   LAYOUTGRID mainGrid {
-    ROW row1 {
-      COLUMN col1 (DesktopWidth: 12) {
+    ROW {
+      COLUMN (DesktopWidth: 12) {
         DATAGRID dgCustomers (
           DataSource: DATABASE FROM Sales.Customer SORT BY Name ASC
         ) {
-          COLUMN colName (Attribute: Name, Caption: 'Name')
-          COLUMN colEmail (Attribute: Email, Caption: 'Email')
-          COLUMN colPhone (Attribute: Phone, Caption: 'Phone')
-          COLUMN colActive (Attribute: IsActive, Caption: 'Active')
+          COLUMN (Attribute: Name, Caption: 'Name')
+          COLUMN (Attribute: Email, Caption: 'Email')
+          COLUMN (Attribute: Phone, Caption: 'Phone')
+          COLUMN (Attribute: IsActive, Caption: 'Active')
         }
       }
     }
   }
-}
+};
 
 ```
 
@@ -3660,9 +3664,9 @@ CREATE PAGE Sales.Customer_Overview
   DATAGRID dgCustomers (
     DataSource: DATABASE FROM Sales.Customer SORT BY Name ASC
   ) {
-    COLUMN colName (Attribute: Name, Caption: 'Name')
+    COLUMN (Attribute: Name, Caption: 'Name')
   }
-}
+};
 
 ```
 ### [3. Common mistakes](#3-common-mistakes)
@@ -3842,6 +3846,7 @@ This exploration step is important. The AI needs to know what entities, associat
 Guided by the skill files and its exploration, the AI writes an MDL script:
 
 ```
+mdl 1;
 /** Product catalog item */
 @Position(300, 100)
 CREATE PERSISTENT ENTITY Sales.Product (
@@ -3977,6 +3982,7 @@ A complete customer management feature: domain model, validation, CRUD pages, an
 ## [Domain Model](#domain-model-1)
 
 ```
+mdl 1;
 -- Enumerations first (referenced by entities)
 CREATE ENUMERATION CRM.CustomerStatus (
   Active 'Active',
@@ -4013,7 +4019,6 @@ CREATE PERSISTENT ENTITY CRM.Customer (
 )
 INDEX (Name)
 INDEX (Email);
-/
 
 /** Record of a customer interaction */
 @Position(400, 100)
@@ -4027,13 +4032,11 @@ CREATE PERSISTENT ENTITY CRM.ContactLog (
   /** Follow-up needed? */
   FollowUpRequired: Boolean DEFAULT FALSE
 );
-/
 
 -- Associations
 CREATE ASSOCIATION CRM.ContactLog_Customer
   FROM CRM.ContactLog TO CRM.Customer
   TYPE Reference OWNER Default;
-/
 
 ```
 ## [Validation Microflow](#validation-microflow)
@@ -4083,23 +4086,23 @@ END;
 ## [Pages](#pages-1)
 
 ```
+mdl 1;
 -- Overview page with data grid
 CREATE PAGE CRM.Customer_Overview (
   Title: 'Customers',
   Layout: Atlas_Core.Atlas_Default
 ) {
   DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
-    COLUMN colName (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
-    COLUMN colEmail (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
-    COLUMN colPhone (Attribute: Phone, Caption: 'Phone')
-    COLUMN colStatus (Attribute: Status, Caption: 'Status')
-    COLUMN colActive (Attribute: IsActive, Caption: 'Active')
-    CONTROLBAR cb1 {
+    COLUMN (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
+    COLUMN (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
+    COLUMN (Attribute: Phone, Caption: 'Phone')
+    COLUMN (Attribute: Status, Caption: 'Status')
+    COLUMN (Attribute: IsActive, Caption: 'Active')
+    CONTROLBAR {
       ACTIONBUTTON btnNew (Caption: 'New', Action: SHOW PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
     }
   }
 };
-/
 
 -- NewEdit page with validation
 CREATE PAGE CRM.Customer_NewEdit (
@@ -4108,14 +4111,14 @@ CREATE PAGE CRM.Customer_NewEdit (
   Layout: Atlas_Core.PopupLayout
 ) {
   LAYOUTGRID mainGrid {
-    ROW row1 {
-      COLUMN col1 (DesktopWidth: AutoFill) {
+    ROW {
+      COLUMN (DesktopWidth: AutoFill) {
         DATAVIEW dataView1 (DataSource: $Customer) {
           TEXTBOX txtName (Label: 'Name', Attribute: Name)
           TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
           TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
           TEXTAREA txtNotes (Label: 'Notes', Attribute: Notes)
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
               Action: CALL MICROFLOW CRM.ACT_Customer_Save,
@@ -4128,12 +4131,12 @@ CREATE PAGE CRM.Customer_NewEdit (
     }
   }
 };
-/
 
 ```
 ## [Security](#security-1)
 
 ```
+mdl 1;
 -- Module roles
 CREATE MODULE ROLE CRM.User;
 CREATE MODULE ROLE CRM.Admin DESCRIPTION 'Full customer management access';
@@ -4177,7 +4180,6 @@ BEGIN
     RETURNS String;
   RETURN $Content;
 END;
-/
 
 ```
 ## [GET with URL Parameters](#get-with-url-parameters)
@@ -4198,7 +4200,6 @@ BEGIN
     RETURNS String;
   RETURN $Response;
 END;
-/
 
 ```
 ## [POST with JSON Body](#post-with-json-body)
@@ -4220,7 +4221,6 @@ BEGIN
     RETURNS String;
   RETURN $Response;
 END;
-/
 
 ```
 ## [POST a Binary Body (File Upload)](#post-a-binary-body-file-upload)
@@ -4244,7 +4244,6 @@ BEGIN
   SET $Ok = $Response/StatusCode = 200;
   RETURN $Ok;
 END;
-/
 
 ```
 
@@ -4275,7 +4274,6 @@ BEGIN
     RETURNS String;
   RETURN $Response;
 END;
-/
 
 ```
 ## [Error Handling](#error-handling-1)
@@ -4302,7 +4300,6 @@ BEGIN
   SET $Success = true;
   RETURN $Success;
 END;
-/
 
 ```
 ## [JSON Structure + Import Mapping](#json-structure--import-mapping)
@@ -4310,6 +4307,7 @@ END;
 Map a JSON response to Mendix entities using a JSON structure and import mapping.
 
 ```
+mdl 1;
 -- Step 1: Define the JSON structure
 CREATE JSON STRUCTURE Integration.JSON_Pet
   SAMPLE '{"id": 1, "name": "Fido", "status": "available"}';
@@ -4320,7 +4318,6 @@ CREATE NON-PERSISTENT ENTITY Integration.PetResponse (
   Name: String,
   Status: String
 );
-/
 
 -- Step 3: Create the import mapping
 CREATE IMPORT MAPPING Integration.IMM_Pet
@@ -4386,6 +4383,7 @@ CREATE IMPORT MAPPING Integration.IMM_Order
 If the API has an OpenAPI 3.0 spec (JSON or YAML), generate the REST client in one command:
 
 ```
+mdl 1;
 -- From a local file (relative to the .mpr file)
 CREATE OR MODIFY CONSUMED REST SERVICE CapitalModule.CapitalAPI (
   OpenAPI: 'specs/capital.json'
@@ -4493,8 +4491,38 @@ CREATE PUBLISHED REST SERVICE Module.OrderAPI (
 
 ```
 
-**Operation paths:** Use empty string `''` for the root, `'{paramName}'` for path parameters. Do NOT start or end with `/`. Path parameters must match a microflow parameter name exactly (case-sensitive) — e.g., `'{id}'` requires the microflow to declare `$id: String`.
+**Operation paths:** Use empty string `''` for the root, `'{paramName}'` for path parameters. Do NOT start or end with `/`. Path parameters must match a microflow parameter name exactly (case-sensitive) — `'{id}'` binds the microflow’s `$id`, whatever its type.
 
+**Operation parameters** come from the microflow, the way Studio Pro derives them. Create the microflow before the service:
+
+| Microflow parameter | Operation parameter |
+| --- | --- |
+| named in the path (`'{id}'`) | a path parameter |
+| an object or a list | the body |
+| `System.HttpRequest`, `System.HttpResponse` | none — they are the request and the response |
+| anything else | a query parameter |
+
+Each gets the microflow parameter’s type. A header parameter, a renamed parameter or a description set in Studio Pro has no MDL spelling: `describe` notes it in a comment, and `CREATE OR MODIFY` / `ALTER` on that project keep it.
+
+**Mappings and commit:** a body that is not a file document needs an import mapping, and a microflow returning an object or a list needs an export mapping:
+
+```
+mdl 1;
+CREATE OR MODIFY PUBLISHED REST SERVICE Module.OrderAPI (
+  Path: 'rest/orders/v1',
+  Version: '1.0.0',
+  ServiceName: 'Order API'
+)
+{
+  RESOURCE 'orders' {
+    -- COMMIT: Yes (the default without the clause) | YesWithoutEvents | No
+    POST '' MICROFLOW Module.PRS_CreateOrder
+      IMPORT MAPPING Module.IMM_Order EXPORT MAPPING Module.EMM_Order
+      COMMIT YesWithoutEvents;
+  }
+};
+
+```
 ### [Multiple Resources](#multiple-resources)
 
 ```
@@ -4535,6 +4563,7 @@ DROP PUBLISHED REST SERVICE Module.OrderAPI;
 Data Transformers apply transformation steps (JSLT or XSLT) to JSON or XML payloads. Useful for reshaping API responses before import mapping, or normalising data from third-party sources. Requires Mendix 11.9+.
 
 ```
+mdl 1;
 -- Create a transformer that extracts key fields from a weather API response.
 -- The SOURCE JSON defines a sample payload used for schema inference and testing.
 CREATE DATA TRANSFORMER Integration.WeatherTransform
@@ -4651,6 +4680,7 @@ SQL legacy GENERATE CONNECTOR INTO Integration
 Once a database connection is defined, microflows can execute queries at runtime:
 
 ```
+mdl 1;
 -- Non-persistent entity for query results
 CREATE NON-PERSISTENT ENTITY Integration.Customer (
   /** Customer name from external system */
@@ -4660,7 +4690,6 @@ CREATE NON-PERSISTENT ENTITY Integration.Customer (
   /** Account balance */
   Balance: Decimal
 );
-/
 
 -- Database connection with parameterized query
 CREATE DATABASE CONNECTION Integration.LegacyDatabase (
@@ -4676,7 +4705,6 @@ CREATE DATABASE CONNECTION Integration.LegacyDatabase (
     Map: (Name = name, Email = email, Balance = balance)
   )
 };
-/
 
 -- Microflow that executes the query
 CREATE MICROFLOW Integration.SearchLegacyCustomers ($SearchTerm: String)
@@ -4686,7 +4714,6 @@ BEGIN
     (search = '%' + $SearchTerm + '%');
   RETURN $Results;
 END;
-/
 
 ```
 # [Master-Detail Page](#master-detail-page)
@@ -4699,12 +4726,12 @@ CREATE PAGE CRM.Customer_MasterDetail (
   Layout: Atlas_Core.Atlas_Default
 ) {
   LAYOUTGRID mainGrid {
-    ROW row1 {
+    ROW {
       -- Master list (left panel)
-      COLUMN colMaster (DesktopWidth: 4) {
+      COLUMN (DesktopWidth: 4) {
         DYNAMICTEXT heading (Content: 'Customers', RenderMode: H3)
         GALLERY customerList (DataSource: DATABASE CRM.Customer, Selection: Single) {
-          TEMPLATE template1 {
+          TEMPLATE {
             DYNAMICTEXT name (
               Content: '{1}',
               ContentParams: ({1} = Name),
@@ -4719,14 +4746,14 @@ CREATE PAGE CRM.Customer_MasterDetail (
       }
 
       -- Detail form (right panel, bound to gallery selection)
-      COLUMN colDetail (DesktopWidth: 8) {
+      COLUMN (DesktopWidth: 8) {
         DYNAMICTEXT detailHeading (Content: 'Details', RenderMode: H3)
         DATAVIEW customerDetail (DataSource: SELECTION customerList) {
           TEXTBOX txtName (Label: 'Name', Attribute: Name)
           TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
           TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
           TEXTAREA txtNotes (Label: 'Notes', Attribute: Notes)
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
               Action: SAVE CHANGES,
@@ -4739,7 +4766,6 @@ CREATE PAGE CRM.Customer_MasterDetail (
     }
   }
 };
-/
 
 ```
 
@@ -4791,8 +4817,8 @@ ALTER PAGE CRM.Customer_Edit {
 
 ```
 ALTER PAGE CRM.Customer_Edit {
-  REPLACE footer1 WITH {
-    FOOTER newFooter {
+  REPLACE dvMain.footer WITH {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Success)
       ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
@@ -4847,6 +4873,7 @@ ALTER PAGE CRM.Customer_Edit {
 Target columns using dotted notation `gridName.columnName`:
 
 ```
+mdl 1;
 -- Add a column
 ALTER PAGE CRM.Customer_List {
   INSERT AFTER dgCustomers.Email {
@@ -4927,7 +4954,6 @@ BEGIN
 
   RETURN $IsValid;
 END;
-/
 
 ```
 ## [The Action Microflow](#the-action-microflow)
@@ -4947,7 +4973,6 @@ BEGIN
 
   RETURN $IsValid;
 END;
-/
 
 ```
 ## [Wiring It Up](#wiring-it-up)
@@ -4961,14 +4986,14 @@ CREATE PAGE Sales.Order_Edit (
   Layout: Atlas_Core.PopupLayout
 ) {
   LAYOUTGRID mainGrid {
-    ROW row1 {
-      COLUMN col1 (DesktopWidth: AutoFill) {
+    ROW {
+      COLUMN (DesktopWidth: AutoFill) {
         DATAVIEW dv (DataSource: $Order) {
           TEXTBOX txtOrderNumber (Label: 'Order Number', Attribute: OrderNumber)
           DATEPICKER dpDelivery (Label: 'Delivery Date', Attribute: DeliveryDate)
           TEXTBOX txtQuantity (Label: 'Quantity', Attribute: Quantity)
           TEXTBOX txtDiscount (Label: 'Discount %', Attribute: DiscountPercent)
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnSave (
               Caption: 'Save',
               Action: CALL MICROFLOW Sales.ACT_Order_Save,
@@ -4981,7 +5006,6 @@ CREATE PAGE Sales.Order_Edit (
     }
   }
 };
-/
 
 ```
 # [Role-Based Security](#role-based-security)
@@ -4993,6 +5017,7 @@ A complete security setup: module roles, entity access with XPath row-level cons
 Module roles define what actions are available within a module:
 
 ```
+mdl 1;
 CREATE MODULE ROLE Sales.Viewer DESCRIPTION 'Read-only access to sales data';
 CREATE MODULE ROLE Sales.User DESCRIPTION 'Can create and edit orders';
 CREATE MODULE ROLE Sales.Admin DESCRIPTION 'Full access including delete';
@@ -5003,6 +5028,7 @@ CREATE MODULE ROLE Sales.Admin DESCRIPTION 'Full access including delete';
 GRANT controls which CRUD operations a role can perform. XPath constraints in `WHERE` filter which rows are visible:
 
 ```
+mdl 1;
 -- Admin: full access to all customers
 GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Sales.Customer TO Sales.Admin;
 
@@ -5025,6 +5051,7 @@ GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Sales.Order TO Sales.Admin;
 ## [Microflow and Page Access](#microflow-and-page-access)
 
 ```
+mdl 1;
 -- Microflow access
 GRANT EXECUTE ON MICROFLOW Sales.ACT_Order_Save TO Sales.User;
 GRANT EXECUTE ON MICROFLOW Sales.ACT_Order_Delete TO Sales.Admin;
@@ -5041,6 +5068,7 @@ GRANT VIEW ON PAGE Sales.Admin_Dashboard TO Sales.Admin;
 User roles combine module roles from different modules into a single assignable role:
 
 ```
+mdl 1;
 CREATE OR MODIFY USER ROLE SalesViewer ( ModuleRoles: (System.User, Sales.Viewer) );
 CREATE OR MODIFY USER ROLE SalesRep ( ModuleRoles: (System.User, Sales.User) );
 CREATE OR MODIFY USER ROLE SalesManager ( ModuleRoles: (System.User, Sales.Admin), ManageAllRoles: true );
@@ -5051,6 +5079,7 @@ CREATE OR MODIFY USER ROLE SalesManager ( ModuleRoles: (System.User, Sales.Admin
 Demo users are created for testing and development:
 
 ```
+mdl 1;
 CREATE OR MODIFY DEMO USER 'viewer' ( Password: 'Password1!', UserRoles: (SalesViewer) );
 CREATE OR MODIFY DEMO USER 'sales_rep' ( Password: 'Password1!', UserRoles: (SalesRep) );
 CREATE OR MODIFY DEMO USER 'manager' ( Password: 'Password1!', UserRoles: (SalesManager) );
@@ -5072,6 +5101,7 @@ GRANT READ (Phone) ON ENTITY Sales.Customer TO Sales.Viewer;
 ## [Revoking Access](#revoking-access)
 
 ```
+mdl 1;
 -- Remove all access for a role
 REVOKE ALL ON ENTITY Sales.Customer FROM Sales.Viewer;
 
@@ -5092,12 +5122,12 @@ View entities are backed by an OQL query. They appear in the domain model but ha
 ## [Sales Summary by Category](#sales-summary-by-category)
 
 ```
+mdl 1;
 -- Source entities
 CREATE PERSISTENT ENTITY Reports.ProductCategory (
   /** Category display name */
   CategoryName: String(200) NOT NULL
 );
-/
 
 CREATE PERSISTENT ENTITY Reports.SaleTransaction (
   /** Transaction amount */
@@ -5105,12 +5135,10 @@ CREATE PERSISTENT ENTITY Reports.SaleTransaction (
   /** Date of the sale */
   SaleDate: DateTime NOT NULL
 );
-/
 
 CREATE ASSOCIATION Reports.SaleTransaction_ProductCategory
   FROM Reports.ProductCategory TO Reports.SaleTransaction
   TYPE Reference OWNER Default;
-/
 
 -- View entity: aggregates sales by category
 CREATE VIEW ENTITY Reports.SalesTotalByCategory (
@@ -5126,7 +5154,6 @@ CREATE VIEW ENTITY Reports.SalesTotalByCategory (
   INNER JOIN s/Reports.SaleTransaction_ProductCategory/Reports.ProductCategory AS c
   GROUP BY c.CategoryName
 );
-/
 
 ```
 ## [Querying a View Entity in a Microflow](#querying-a-view-entity-in-a-microflow)
@@ -5143,7 +5170,7 @@ BEGIN
 
   RETRIEVE $Summary FROM Reports.SalesTotalByCategory
     WHERE CategoryName = $Category/CategoryName
-    LIMIT 1;
+    FIRST;
 
   IF $Summary != empty THEN
     SET $TotalAmount = $Summary/TotalAmount;
@@ -5151,7 +5178,6 @@ BEGIN
 
   RETURN $TotalAmount;
 END;
-/
 
 ```
 ## [Displaying in a Page](#displaying-in-a-page)
@@ -5164,12 +5190,11 @@ CREATE PAGE Reports.SalesByCategory_Overview (
   Layout: Atlas_Core.Atlas_Default
 ) {
   DATAGRID dgSales (DataSource: DATABASE Reports.SalesTotalByCategory) {
-    COLUMN colCategory (Attribute: CategoryName, Caption: 'Category')
-    COLUMN colTotal (Attribute: TotalAmount, Caption: 'Total Sales')
-    COLUMN colCount (Attribute: TransactionCount, Caption: 'Transactions')
+    COLUMN (Attribute: CategoryName, Caption: 'Category')
+    COLUMN (Attribute: TotalAmount, Caption: 'Total Sales')
+    COLUMN (Attribute: TransactionCount, Caption: 'Transactions')
   }
 };
-/
 
 ```
 # [Migration Guide](#migration-guide)
@@ -5343,6 +5368,7 @@ mxcli -p app.mpr
 ## [Example: Domain Model](#example-domain-model)
 
 ```
+mdl 1;
 -- Enumerations first (referenced by entities)
 CREATE ENUMERATION Sales.OrderStatus (
   Draft 'Draft',
@@ -5364,7 +5390,6 @@ CREATE PERSISTENT ENTITY CRM.Customer (
 )
 INDEX (Name)
 INDEX (Email);
-/
 
 /** Sales order */
 @Position(300, 100)
@@ -5376,13 +5401,11 @@ CREATE PERSISTENT ENTITY Sales.Order (
 )
 INDEX (OrderNumber)
 INDEX (OrderDate DESC);
-/
 
 -- Associations
 CREATE ASSOCIATION Sales.Order_Customer
   FROM Sales.Order TO CRM.Customer
   TYPE Reference OWNER Default;
-/
 
 ```
 ## [Example: Microflow](#example-microflow)
@@ -5412,16 +5435,15 @@ CREATE PAGE CRM.Customer_Overview (
   Layout: Atlas_Core.Atlas_Default
 ) {
   DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
-    COLUMN colName (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
-    COLUMN colEmail (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
-    COLUMN colPhone (Attribute: Phone, Caption: 'Phone')
-    COLUMN colActive (Attribute: IsActive, Caption: 'Active')
-    CONTROLBAR cb1 {
+    COLUMN (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
+    COLUMN (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
+    COLUMN (Attribute: Phone, Caption: 'Phone')
+    COLUMN (Attribute: IsActive, Caption: 'Active')
+    CONTROLBAR {
       ACTIONBUTTON btnNew (Caption: 'New', Action: SHOW PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
     }
   }
 };
-/
 
 ```
 ## [Validation Between Steps](#validation-between-steps)
@@ -5655,6 +5677,7 @@ INDEX (Name);
 Every statement ends with a semicolon (`;`):
 
 ```
+mdl 1;
 CREATE MODULE OrderManagement;
 
 CREATE PERSISTENT ENTITY Sales.Order (
@@ -5665,7 +5688,7 @@ INDEX (OrderDate DESC);
 
 ```
 
-Under `mdl 1;` a missing `;` is an error, and so is the Oracle SQL\*Plus-style `/` on its own line. A script without the header still accepts both, and `check` warns `MDL-V1-SEMI` / `MDL-V1-SLASH` for each one. At the REPL, where there is no header, a single command such as `LIST ENTITIES` still needs no terminator.
+A missing `;` is an error, and so is the Oracle SQL\*Plus-style `/` on its own line. At the REPL and in `mxcli -c "…"` the end of the input ends the last statement, so a single command such as `list entities` needs no terminator there.
 
 ## [Trailing Commas](#trailing-commas)
 
@@ -5677,51 +5700,25 @@ Keywords are case-insensitive, and lowercase is canonical: `describe` writes the
 
 ## [One Spelling per Keyword](#one-spelling-per-keyword)
 
-Each keyword has one spelling, and a page action uses the words a microflow uses. The older spellings still parse with the same meaning, warn with the code shown, and are rewritten by `mxcli fmt --upgrade`:
-
-| Canonical | Deprecated | Code |
-| --- | --- | --- |
-| `show page`, `save changes`, `cancel changes`, `close page`, `create object`, `delete`, `open link`, `sign out`, `complete task`, `call microflow M.F`, `call nanoflow M.F` | `show_page`, `save_changes`, `cancel_changes`, `close_page`, `create_object`, `delete_object`, `open_link`, `sign_out`, `complete_task`, `microflow M.F`, `nanoflow M.F` | `MDL-DEPR020` |
-| `not null error message '…'` (also after `unique`, `required`), validation rule `error message '…'`, `on delete restrict error message '…'` | `not null error '…'`, `feedback '…'`, `error_message '…'`, `errormessage '…'` | `MDL-DEPR021` |
-| `on delete cascade` / `restrict` / `set null` | `delete_behavior cascade` / `prevent` / `delete_and_references` / `delete_if_no_references` / `delete_but_keep_references` | `MDL-DEPR022` |
-| `type ReferenceSet` | `type reference_set` | `MDL-DEPR023` |
-| `returns nothing` (REST call) | `returns none` | `MDL-DEPR024` |
+Each keyword has one spelling, and a page action uses the words a microflow uses: `show page`, `save changes`, `cancel changes`, `close page`, `create object`, `delete`, `open link`, `sign out`, `complete task`, `call microflow M.F`, `call nanoflow M.F`. A validation message is `error message '…'` (after `not null`, `unique`, `required`, in a validation rule and after `on delete restrict`); a delete behaviour is the SQL referential action, `on delete cascade` / `restrict` / `set null`; a reference set’s type is `ReferenceSet`; a REST call that returns nothing says `returns nothing`.
 
 ## [One Verb per Job](#one-verb-per-job)
 
-`list` enumerates, `describe` shows one thing, and an `alter` adds and drops its children. The older verbs still parse with the same meaning and warn with the code shown; `mxcli fmt --upgrade` rewrites them, except where noted:
+`list` enumerates, `describe` shows one thing, and an `alter` adds and drops its children:
 
-| Canonical | Deprecated | Code |
-| --- | --- | --- |
-| `describe page M.P`, `describe app security`, `describe security matrix [in M]`, `describe structure …`, `describe context of X` | `show` (or `list`) with the same words; `show project security` | `MDL-DEPR090` |
-| `list navigation`, `list navigation menu [profile]`, `list settings` | `show` with the same words. These print tables (the profiles, the menu items, the settings sections), so they are listings | `MDL-DEPR002` |
-| `alter user role R drop module roles (…)` | `… remove module roles (…)` | `MDL-DEPR091` |
-| `alter settings language drop '…'`, `alter settings workflows drop group '…'` | `remove` | `MDL-DEPR092` |
-| `alter entity E add|rename|modify|drop attribute …` | `… column …` | `MDL-DEPR093` |
-| `call rest service get '…' …` | `rest call get '…' …` | `MDL-DEPR094` |
-| `describe widget type combobox` | `describe widget combobox` | `MDL-DEPR095` |
-| `create fragment F as { … }` | `define fragment F as { … }` | `MDL-DEPR096` |
+- `describe page M.P`, `describe app security`, `describe security matrix [in M]`, `describe structure …`, `describe context of X`;
+- `list navigation`, `list navigation menu [profile]`, `list settings` (they print tables, so they are listings);
+- `alter user role R drop module roles (…)`, `alter settings language drop '…'`, `alter settings workflows drop group '…'`;
+- `alter entity E add|rename|modify|drop attribute …`;
+- `call rest service get '…' …`, `describe widget type combobox`, `create fragment F as { … }`.
 
-Two `show` forms have no canonical spelling at all:
-
-- `show entity X` and `show association X` print a summary that no statement prints any more. `describe entity X` prints the definition as MDL, and `list entities in M` / `list associations in M` print the summary columns. Neither gives the same output, so they are not aliases. They keep working without a header and warn `MDL-V1-SHOWSUMMARY`; under `mdl 1;` they are an error. `fmt --upgrade --header` refuses the header over them, so you choose the replacement.
-- `show version`, `show status`, `show connections` and `show catalog status` report the session, not the model. They are session commands (R7): type them at the REPL. In a script they warn `MDL-V1-SESSION`, and under `mdl 1;` they are an error.
+`show entity X` and `show association X` are not `mdl 1`: `describe entity X` prints the definition as MDL, and `list entities in M` / `list associations in M` print the summary columns. `show version`, `show status`, `show connections` and `show catalog status` report the session, not the model: they are session commands (R7), typed at the REPL.
 
 ## [Document Type Names](#document-type-names)
 
-Document types are named as Studio Pro names them. The old names still parse with the same meaning, warn with the code shown, and `mxcli fmt --upgrade` rewrites them:
+Document types are named as Studio Pro names them: `consumed rest service(s)`, `consumed odata service(s)`, `published odata service(s)`, `task queue(s)`, `alter app security …`, `alter settings runtime …`, `list image collections` / `list icon collections` / `list message definition collections`, `ai model(s)` (the agent editor’s model document), and `create json structure M.J sample '…'`.
 
-| Canonical | Deprecated | Code |
-| --- | --- | --- |
-| `consumed rest service(s)` | `rest client(s)` | `MDL-DEPR550` |
-| `consumed odata service(s)` | `odata client(s)` | `MDL-DEPR551` |
-| `published odata service(s)` | `odata service(s)` | `MDL-DEPR552` |
-| `task queue(s)` | `queue(s)` | `MDL-DEPR553` |
-| `alter app security …` | `alter project security …` | `MDL-DEPR554` |
-| `alter settings runtime …` | `alter settings model …` | `MDL-DEPR555` |
-| `list image collections`, `list icon collections`, `list message definition collections` | the singular after `list` | `MDL-DEPR130` |
-| `ai model` / `ai models` (the agent editor’s model document) | `model` / `models` | `MDL-DEPR131` |
-| `create json structure M.J sample '…'` | `… snippet '…'` | `MDL-DEPR132` |
+The older spellings of all three sections still parse in a script file with the same meaning, warn with an `MDL-DEPR*` code, and `mxcli fmt --upgrade` rewrites them; [Language Versions and Migration](#language-versions-and-migration) lists every one.
 
 `consumed web service`, `published web service` and `xml schema` are reserved: MDL does not support these Studio Pro documents yet, and a statement that names one is refused with an error saying so.
 
@@ -5729,7 +5726,7 @@ Document types are named as Studio Pro names them. The old names still parse wit
 
 ## [Language Version Header](#language-version-header)
 
-A script may start with a header that names the MDL language version it is written in:
+A script starts with a header that names the MDL language version it is written in:
 
 ```
 mdl 1;
@@ -5740,58 +5737,25 @@ create persistent entity Sales.Customer (
 
 ```
 
-- **No header** means `mdl 0`, the current (alpha) language. When a construct means something different under `mdl 1`, a headerless script keeps the old meaning and `check`/`exec` warn about it. A script’s meaning never depends on which mxcli release runs it.
-- **`mdl 1;`** selects the beta language. Until beta it is a **preview**: it parses, but warns `preview: may still change` (`MDL-LANG01`), and `describe` and `fmt` do not emit it.
-- The header must be the **first** statement. A version this mxcli does not know is refused.
+- **`mdl 1`** is the language this manual documents. It was frozen at beta: a script headed `mdl 1;` means the same under every later mxcli release.
+- The header is the **first** statement. It may be repeated later with the same version — descriptions concatenated into one file each start with it — but a header naming another version is an error, and so is a version this mxcli does not know.
+- `describe` writes `mdl 1;` at the top of every description, so a description runs as it is, and `mxcli fmt --upgrade` adds it to an older script.
+- At the REPL and in `mxcli -c "…"`, input without a header is read as `mdl 1`.
+- A script **file** without a header is the older language, `mdl 0`, and keeps its meaning (constructs that mean something else under `mdl 1` warn). How it differs, and how to upgrade it, is on [Language Versions and Migration](#language-versions-and-migration).
 - It is independent of the Mendix version your project targets.
 
-What `mdl 1` makes strict (each is a warning without the header, with the code shown):
+What `mdl 1` makes strict:
 
-| Under `mdl 1;` | Without the header |
-| --- | --- |
-| A statement without `;` is an error. | Accepted; `MDL-V1-SEMI`. |
-| A `/` terminator line is an error. | Accepted; `MDL-V1-SLASH`. |
-| `''` is the only string escape; a backslash is an ordinary character, so `'C:\temp'` is that path. | `\n`, `\r`, `\t`, `\\` and `\'` are escapes; `MDL-V1-ESCAPE` for each literal whose value would change. |
-| A text template (`log`, `show message`, `validation feedback`) written as one literal is the template text even when it spans lines, which is how a template holds a line break. | A template literal spanning lines with no `with ({n} = …)` parameters is an expression: the template is `{1}`, the literal its parameter; `MDL-V1-TEMPLATE`. |
-| In a REST client, published REST service, business event service, model, knowledge base, consumed MCP service or agent, an unknown property key is an error that names the key it most likely meant, and so is a value its key does not take (`Response: json from $X`). | The property is ignored, or read by its shape as before; `MDL-V1-PROP` / `MDL-V1-PROPVALUE`. |
-| A `while` loop is `while <condition> begin … end while;`; leaving out `begin`, or the `while` after `end`, is an error. | Accepted; `MDL-V1-WHILE`. |
-| `show entity X` / `show association X` is an error: `describe entity X` prints the definition, `list entities in M` the summary columns. | Prints the summary; `MDL-V1-SHOWSUMMARY`. |
-| A session command — `connect`, `disconnect`, `use`, `set format = …`, `status`, `show version`, `show status`, `show connections`, `show catalog status`, `check`, `build`, `lint`, `debug`, `execute script`, `execute runtime`, `help`, `introspect api` — is an error in a script. Type it at the REPL, or use the command-line flag (`mxcli exec script.mdl -p app.mpr --json`). The REPL keeps accepting them. | Runs as before; `MDL-V1-SESSION`. |
-| A quoted value of `DynamicClasses`, `DynamicCellClass` or an OData client’s credential or header value is a Mendix string, so the pre-#750 spelling — the expression’s text in quotes, `'if $currentObject/X then ''on'' else '''''`, `'''admin'''`, `'@Mod.C'` — is an error (MDL-WIDGET33, MDL-ODATA07). Write the expression bare. | The quoted text is the expression it holds; `MDL-V1-QUOTEDEXPR`. A quoted class name or plain credential is the string under both. |
+- Every statement ends with `;`, and a `/` terminator line is an error.
+- `''` is the only string escape; a backslash is an ordinary character, so `'C:\temp'` is that path.
+- A text template (`log`, `show message`, `validation feedback`) written as one literal is the template text even when it spans lines, which is how a template holds a line break.
+- In a REST client, published REST service, business event service, model, knowledge base, consumed MCP service or agent, an unknown property key is an error that names the key it most likely meant, and so is a value its key does not take (`Response: json from $X`).
+- A `while` loop is `while <condition> begin … end while;`; leaving out `begin`, or the `while` after `end`, is an error.
+- `show entity X` / `show association X` is an error: `describe entity X` prints the definition, `list entities in M` the summary columns.
+- A session command — `connect`, `disconnect`, `use`, `set format = …`, `status`, `show version`, `show status`, `show connections`, `show catalog status`, `check`, `build`, `lint`, `debug`, `execute script`, `execute runtime`, `help`, `introspect api` — is an error in a script. Type it at the REPL, or use the command-line flag (`mxcli exec script.mdl -p app.mpr --json`).
+- `DynamicClasses`, `DynamicCellClass` and an OData client’s credential or header value take the expression bare; a quoted value is a Mendix string.
 
-### [Upgrading a script: `mxcli fmt --upgrade`](#upgrading-a-script-mxcli-fmt---upgrade)
-
-`mxcli fmt --upgrade` rewrites every deprecated spelling (the `MDL-DEPRnnn` warnings) to its canonical form — `create or replace` becomes `create or modify`, `list entities` becomes `list entities`, `on error { … }` becomes `on error begin … end error` — and changes nothing else: comments, layout and keyword case are kept. A deprecated use with no mechanical rewrite is reported and left in place.
-
-The manual, the skills, `mxcli syntax` and the example scripts are written in the canonical form, and CI holds them to it: `make check-conformance` parses every MDL block in them and fails on a deprecated spelling (`mxcli check --deprecations=error` does the same for a script of your own).
-
-```
-mxcli fmt --upgrade script.mdl            # print the upgraded script
-mxcli fmt --upgrade -w script.mdl         # upgrade in place
-mxcli fmt --upgrade --header -w script.mdl  # also add `mdl 1;`
-
-```
-
-`--header` adds `mdl 1;` after rewriting every construct whose meaning the header would change, so the script keeps doing what it did:
-
-| Code | Rewrite |
-| --- | --- |
-| `MDL-V1-SEMI` | adds the missing `;` |
-| `MDL-V1-SLASH` | deletes the `/` line |
-| `MDL-V1-ESCAPE` | writes the string’s value with `''` as the only escape (`'it\'s\t'` becomes `'it''s` + a tab + `'`) |
-| `MDL-V1-LIMIT1` | `retrieve … limit 1` (one object) becomes `retrieve … first` |
-| `MDL-V1-SET` | `$x = …` becomes `set $x = …` |
-| `MDL-V1-LIST`, `MDL-DEPR003`, `MDL-DEPR004` | a list operation or aggregate call becomes its statement form (`$x = filter($L, …)` → `$x = filter $L where …`); `find`/`contains` on a declared String keeps the call and gains `set` |
-| `MDL-V1-REPLACE02` | `create or replace user role` / `demo user` becomes a plain `create` |
-| `MDL-V1-WHILE` | inserts the missing `begin` after a `while` condition and `while` after its `end` |
-| `MDL-V1-TEMPLATE` | a template literal spanning lines becomes the parameter it was: `log info 'a⏎b';` becomes `log info '{1}' with ({1} = 'a⏎b');` |
-| `MDL-V1-QUOTEDEXPR` | a quoted expression becomes the expression bare: `dynamicclasses: 'if $currentObject/X then ''on'' else '''''` becomes `dynamicclasses: if $currentObject/X then 'on' else ''`. The bare form means the same without the header, so `fmt --upgrade` applies this one without `--header` too |
-
-A construct with no mechanical rewrite is reported with the reason, and `fmt` refuses to add the header rather than change the script’s meaning: an unknown or mis-shaped property (`MDL-V1-PROP`, `MDL-V1-PROPVALUE`), `create or replace view entity` (`MDL-V1-REPLACE01`), a session command in a script (`MDL-V1-SESSION`: move it to the command line or the REPL), a nested list operation such as `count(filter(…))`, `find`/`contains` on a variable whose type the script does not state (when the variable holds a microflow or nanoflow call’s result, the called flow’s return type decides: a flow the script creates earlier is read from the script, and any other from the project given with `-p app.mpr`, so `fmt --upgrade --header -p app.mpr` rewrites it), and an escaped line break (`\n`) inside an expression. An escaped line break in a text template’s literal is rewritten: the break is written into the literal, which under `mdl 1` is still the template text. While `mdl 1` is a preview, the header is added only when asked. Running `fmt --upgrade` on its own output changes nothing.
-
-`-p app.mpr` also settles a bare `commit $X;` in a `create or modify microflow|nanoflow`, with or without `--header`. Since mendixlabs/mxcli#895 a bare commit means *with* events, Studio Pro’s default; an older mxcli stored the same statement *without* events. Where the stored flow commits the variable without events, `fmt --upgrade -p app.mpr` writes `commit $X without events;`, so re-running the script keeps what is stored instead of turning the event handlers on (or, inside a loop under `mdl 1`, being refused). A new flow, a new commit, or a stored commit with events is left as written; where the stored flow commits the variable both ways, the statement is left and reported. Without `-p`, `fmt` prints a note (`MDL067`) for each flow with a bare commit.
-
-The design is in [ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md); `mxcli syntax language-header` has the details.
+The manual, the skills, `mxcli syntax` and the example scripts are written in the canonical form, and CI holds them to it: `make check-conformance` parses every MDL block in them as `mdl 1` and fails on a deprecated spelling (`mxcli check --deprecations=error` does the same for a script of your own). The design is in [ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md); `mxcli syntax language-header` has the details.
 
 ## [Re-runnable Creates: `or modify` and `if not exists`](#re-runnable-creates-or-modify-and-if-not-exists)
 
@@ -5904,11 +5868,9 @@ String literals use single quotes:
 
 The only escape sequence is `''` (two single quotes) to represent a literal single quote, as in a Mendix expression. Under `mdl 1;` a backslash is an ordinary character: `'C:\temp'` is that path.
 
-A script without the header (`mdl 0`) still reads a backslash before `n`, `r`, `t`, `\` or `'` as an escape — `'C:\temp'` holds a tab — and `check` warns `MDL-V1-ESCAPE` for each literal whose value changes under `mdl 1`. Write the backslash-free form (`'it''s'`) to mean the same under both.
+A string in a microflow or nanoflow expression is read by the same rule as any other string, and the expression stores its value the way Studio Pro does: an apostrophe doubled, a backslash and a line break as themselves. `'C:\temp'` stores `'C:\temp'`, whether the builder renders the expression or stores it as written.
 
-A string in a microflow or nanoflow expression is read by the same rule as any other string, and the expression stores its value the way Studio Pro does: an apostrophe doubled, a backslash and a line break as themselves. Under `mdl 1;` `'C:\temp'` stores `'C:\temp'`; without the header `'C:\\temp'` stores `'C:\temp'` and `'it\'s'` stores `'it''s'` — whether the builder renders the expression or stores it as written.
-
-A string in an XPath constraint follows the same rule, wherever the XPath is written: a retrieve’s `where`, an entity access rule, a page datasource, a workflow user task’s `targeting xpath`, and a navigation sync constraint. So do the Mendix expressions a statement stores as written beside them — a retrieve’s `limit` and `offset`, a database query’s `dynamic` expression. `describe` writes each back in its own language: a plain `describe` doubles a backslash inside a string, `describe` in an `mdl 1;` script writes the constraint as stored.
+A string in an XPath constraint follows the same rule, wherever the XPath is written: a retrieve’s `where`, an entity access rule, a page datasource, a workflow user task’s `targeting xpath`, and a navigation sync constraint. So do the Mendix expressions a statement stores as written beside them — a retrieve’s `limit` and `offset`, a database query’s `dynamic` expression. `describe` writes each back as stored.
 
 A line break is written into the literal itself: a string may span lines, and the break is part of its value. This is also how a text template — the message of `log`, `show message` or `validation feedback` — holds a line break; under `mdl 1;` a template written as one literal is the template text whether or not it spans lines:
 
@@ -5922,9 +5884,9 @@ end;
 
 ```
 
-`describe` inside an `mdl 1;` script writes every string this way — a caption, an annotation, a widget property, a string in an expression: `''` is its only escape and a stored line break is a line break in the literal. A plain `describe` keeps the `mdl 0` escapes (`\n`, `\\`) while `mdl 1` is a preview; in a flow’s expression it writes a stored backslash as `\\`, so the description reads back as the stored value. `mxcli fmt --upgrade --header` rewrites an `mdl 0` script’s escaped strings the same way. An expression whose string holds an escaped line break is written as the expression Mendix stores for it, since an expression that spans lines is stored exactly as written.
+`describe` writes every string this way — a caption, an annotation, a widget property, a string in an expression: `''` is its only escape and a stored line break is a line break in the literal.
 
-Without the header a template literal that spans lines and has no parameters is an expression instead — the template is `{1}` and the literal its parameter — and `check` warns `MDL-V1-TEMPLATE`. With `with ({n} = …)` parameters it is the template text under both versions.
+With `with ({n} = …)` parameters the literal is the template text too. Strings in a script without the header follow the older rules on [Language Versions and Migration](#strings-without-the-header).
 
 ### [Numeric Literals](#numeric-literals)
 
@@ -6061,7 +6023,7 @@ Use `--` (SQL style) or `//` (C style) for single-line comments:
 
 ```
 -- This is a single-line comment
-LIST MODULES
+LIST MODULES;
 
 // This is also a single-line comment
 LIST ENTITIES IN Sales
@@ -6133,11 +6095,13 @@ MDL statements can be saved in `.mdl` files and executed as scripts. This is the
 
 - **Extension:** `.mdl`
 - **Encoding:** UTF-8
-- **Statement termination:** Semicolons (`;`) or forward slash (`/`) on its own line
+- **Language header:** a script starts with `mdl 1;`, the MDL language version it is written in (`mxcli fmt --upgrade --header` adds it to an older script)
+- **Statement termination:** every statement ends with a semicolon (`;`)
 
 A typical script file:
 
 ```
+mdl 1;
 -- setup_domain_model.mdl
 -- Creates the Sales domain model
 
@@ -6244,6 +6208,344 @@ Scripts support the same [comment syntax](#comments-and-documentation) as intera
 /** Documentation comment (attached to next element) */
 
 ```
+# [Language Versions and Migration](#language-versions-and-migration)
+
+An MDL script is written in one **language version**, declared by its first
+statement:
+
+```
+mdl 1;
+
+create persistent entity Shop.Customer (
+  Name: String(200)
+);
+
+```
+
+A script file with no header is **mdl 0**, the alpha language. The rest of
+this manual documents `mdl 1`; this page is the one place that documents what
+`mdl 0` means differently, and how to move a script from one to the other.
+
+Two rules make the move safe ([ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md)):
+
+- **A script never changes meaning because a newer mxcli runs it.** A change of
+  meaning, or a new rejection, applies only under the header that introduces
+  it. Without the header the old meaning is kept, and the construct warns with
+  an `MDL-V1-*` code.
+- **A deprecated spelling is a respelling.** It means exactly what its new form
+  means, warns with an `MDL-DEPR*` code, and `mxcli fmt --upgrade` rewrites it.
+  It is refused only from the version named in its entry.
+
+Every warning that carries one of these codes ends with a pointer such as
+`(mxcli help MDL-V1-LIMIT1)`. That command prints the code’s entry: the old
+form, the new form, whether `fmt --upgrade` rewrites it, and the version that
+refuses it. `mxcli syntax <topic> --deprecated` lists the old spellings of one
+topic.
+
+## [mdl 1 is frozen](#mdl-1-is-frozen)
+
+`mdl 1` was frozen at beta. It is a contract: a later change of meaning needs a
+new version, `mdl 2`, and a script headed `mdl 1;` means the same under every
+later mxcli release. What that changes in practice:
+
+| Where | Since the freeze | To get `mdl 0` |
+| --- | --- | --- |
+| `describe` (statement and `mxcli describe`), `mxcli context`, `mxcli diff-local` | Writes `mdl 1`, and every description starts with `mdl 1;`, so it runs as it is. Descriptions concatenated into one file repeat the header; a repeated header naming the same version is allowed. Describe never writes a deprecated spelling, in either version: a List operation or Aggregate list activity is its statement (`$n = count $L;`), never the call (`count($L)`). | `--mdl 0` on the command (no header is written) |
+| `mxcli fmt --upgrade` | Adds the `mdl 1;` header by default, after the rewrites below. | `--header=false` upgrades the spellings alone |
+| `mxcli fmt` (without `--upgrade`) | Keeps the script’s header, or its lack of one: formatting never changes a script’s language. | — |
+| The REPL and `mxcli -c "…"` | Input without a header is read as `mdl 1`. Session commands (`connect`, `set format`, `status`, …) and a missing `;` after the last statement stay allowed: this is the session they belong to. | `--mdl 0` on the command line; in the REPL an `mdl 0;` statement switches the session (and `mdl 1;` back). The REPL is the only place a header may change the language part-way |
+| A script file run with `exec`, `check` or `fmt` | Unchanged: read by its own header, and as `mdl 0` without one ([ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md)). | — |
+
+Before the freeze `mdl 1;` warned “preview: may still change” (`MDL-LANG01`);
+that warning is gone. A header after the first statement must name the same
+version as the first: `mdl 0;` after `mdl 1;` is an error, and so is `mdl 1;`
+part-way through a script that started without one.
+
+## [What a script without the header means](#what-a-script-without-the-header-means)
+
+Each construct below is refused under `mdl 1;` and accepted without the header,
+where it keeps its old meaning and warns with the code shown.
+
+| Under `mdl 1;` | Without the header |
+| --- | --- |
+| A statement without `;` is an error. | Accepted; `MDL-V1-SEMI`. |
+| A `/` terminator line is an error. | Accepted; `MDL-V1-SLASH`. |
+| `''` is the only string escape; a backslash is an ordinary character, so `'C:\temp'` is that path. | `\n`, `\r`, `\t`, `\\` and `\'` are escapes; `MDL-V1-ESCAPE` for each literal whose value would change. |
+| A text template (`log`, `show message`, `validation feedback`) written as one literal is the template text even when it spans lines, which is how a template holds a line break. | A template literal spanning lines with no `with ({n} = …)` parameters is an expression: the template is `{1}`, the literal its parameter; `MDL-V1-TEMPLATE`. |
+| In a REST client, published REST service, business event service, model, knowledge base, consumed MCP service or agent, an unknown property key is an error that names the key it most likely meant, and so is a value its key does not take (`Response: json from $X`). | The property is ignored, or read by its shape as before; `MDL-V1-PROP` / `MDL-V1-PROPVALUE`. |
+| A `while` loop is `while <condition> begin … end while;`; leaving out `begin`, or the `while` after `end`, is an error. | Accepted; `MDL-V1-WHILE`. |
+| `show entity X` / `show association X` is an error: `describe entity X` prints the definition, `list entities in M` the summary columns. | Prints the summary; `MDL-V1-SHOWSUMMARY`. |
+| A session command — `connect`, `disconnect`, `use`, `set format = …`, `status`, `show version`, `show status`, `show connections`, `show catalog status`, `check`, `build`, `lint`, `debug`, `execute script`, `execute runtime`, `help`, `introspect api` — is an error in a script. Type it at the REPL, or use the command-line flag (`mxcli exec script.mdl -p app.mpr --json`). The REPL keeps accepting them. | Runs as before; `MDL-V1-SESSION`. |
+| A quoted value of `DynamicClasses`, `DynamicCellClass` or an OData client’s credential or header value is a Mendix string, so the pre-#750 spelling — the expression’s text in quotes, `'if $currentObject/X then ''on'' else '''''`, `'''admin'''`, `'@Mod.C'` — is an error (MDL-WIDGET33, MDL-ODATA07). Write the expression bare. | The quoted text is the expression it holds; `MDL-V1-QUOTEDEXPR`. A quoted class name or plain credential is the string under both. |
+
+### [Strings without the header](#strings-without-the-header)
+
+A script without the header (`mdl 0`) still reads a backslash before `n`, `r`, `t`, `\` or `'` as an escape — `'C:\temp'` holds a tab — and `check` warns `MDL-V1-ESCAPE` for each literal whose value changes under `mdl 1`. Write the backslash-free form (`'it''s'`) to mean the same under both.
+
+In a microflow or nanoflow expression, without the header `'C:\\temp'` stores `'C:\temp'` and `'it\'s'` stores `'it''s'`: the stored expression is the same value, spelled as Studio Pro spells it.
+
+`describe --mdl 0` keeps the `mdl 0` escapes (`\n`, `\\`): in a flow’s expression and an XPath constraint it writes a stored backslash as `\\`, so the description reads back as the stored value under `mdl 0`. `mxcli fmt --upgrade` rewrites an `mdl 0` script’s escaped strings to the `mdl 1` form. An expression whose string holds an escaped line break is written as the expression Mendix stores for it, since an expression that spans lines is stored exactly as written.
+
+Without the header a template literal that spans lines and has no parameters is an expression instead — the template is `{1}` and the literal its parameter — and `check` warns `MDL-V1-TEMPLATE`. With `with ({n} = …)` parameters it is the template text under both versions.
+
+## [How to migrate a script](#how-to-migrate-a-script)
+
+1. **Commit the script first**, so the upgrade is one reviewable diff.
+2. **Upgrade it with the project it runs against**, and let the upgrade add the
+   header. Never type `mdl 1;` by hand: the upgrade adds it only after
+   rewriting every construct whose meaning the header would change, and refuses
+   when one has no rewrite.
+   
+   ```
+   mxcli fmt --upgrade -w -p app.mpr script.mdl
+   
+   ```
+   
+   The header is the default since the freeze; `--header` still says so
+   explicitly, and `--header=false` upgrades the spellings alone.
+   
+   The project (`-p`) answers what the script alone cannot: whether
+   `find(…)` over a flow’s result is the string function or the list
+   operation, which bare `commit` statements the stored flows run without
+   events, and which `create or modify` statements exec would refuse under
+   the header. The project is only read.
+3. **Read what it reports** on stderr. A deprecated spelling with no mechanical
+   rewrite is left in place and listed as “not upgraded”; a header-gated
+   construct with no rewrite blocks the header, and the file keeps its version.
+   Fix those by hand (`mxcli help <code>` says how) and upgrade again.
+4. **Check it against the project**, the way exec will read it:
+   
+   ```
+   mxcli check script.mdl -p app.mpr --references
+   
+   ```
+   
+   `check -p` reports everything exec would refuse under the header, computed
+   by the same code exec uses, so a refusal shows up here and not halfway
+   through a run.
+5. **Run it twice.** The first `exec` applies the script; the second must write
+   nothing, and report every document unchanged. A second run that writes is a
+   script that does not say what the project holds — the upgrade’s job is to
+   make it say so — and is worth reporting.
+   
+   ```
+   mxcli exec script.mdl -p app.mpr
+   mxcli exec script.mdl -p app.mpr   # expect: nothing written
+   
+   ```
+
+**Test files** (`.test.mdl`, `.test.md`) are upgraded the same way: the
+statements in their blocks are rewritten, and doc comments (`@test`,
+`@expect`, …), separators and prose are kept byte for byte. They take no
+language header yet, so `--header` adds none to them and says so.
+
+**One dialect per file.** Upgrade a headerless file before editing it; do not
+add `mdl 1` statements to an `mdl 0` file.
+
+### [What the upgrade does, in order](#what-the-upgrade-does-in-order)
+
+`mxcli fmt --upgrade` changes nothing but the constructs below; comments,
+layout and keyword case survive, and the result is re-parsed before it is
+written.
+
+1. **Deprecated spellings** become their new form (the `MDL-DEPR*` table).
+   This step runs with or without the header.
+2. **Bare commits are pinned** (with `-p`, with or without the header). A bare
+   `commit $X;` means *with* events, Studio Pro’s default; mxcli releases
+   before that change stored it *without*. In a `create or modify` flow whose
+   stored commit has no events, the upgrade writes `commit $X without events;`
+   so that re-running the script keeps what is stored. Without `-p` the script
+   is left as written and fmt prints a note (`MDL067`) per flow.
+3. **Header-gated constructs** are rewritten to the spelling that keeps their
+   `mdl 0` meaning under the header (not with `--header=false`): the missing `;` is
+   added, `/` lines are deleted, a backslash escape becomes the character it
+   stood for, `retrieve … limit 1` (an object under `mdl 0`) becomes
+   `retrieve … first`, a reassignment gets `set`, and a list operation becomes
+   one statement per activity. One change is version-neutral and is rewritten
+   without the header too (the table says which).
+4. **The header is added** — unless a construct in step 3 has no rewrite, or,
+   with `-p`, exec would refuse a statement under the header (a `create or modify` of a stored flow whose change cannot be spliced in, `MDL-V1-REBUILD`).
+   The file then keeps its version and the rest of the upgrade still applies;
+   `--force-header` adds the header anyway.
+
+### [The rewrites and refusals in detail](#the-rewrites-and-refusals-in-detail)
+
+`mxcli fmt --upgrade` rewrites every deprecated spelling (the `MDL-DEPRnnn` warnings) to its canonical form — `create or replace` becomes `create or modify`, `list entities` becomes `list entities`, `on error { … }` becomes `on error begin … end error` — and changes nothing else: comments, layout and keyword case are kept. A deprecated use with no mechanical rewrite is reported and left in place.
+
+```
+mxcli fmt --upgrade script.mdl                  # print the upgraded script
+mxcli fmt --upgrade -w script.mdl               # upgrade in place, adding `mdl 1;`
+mxcli fmt --upgrade --header=false -w script.mdl  # the spellings alone, no header
+
+```
+
+The header is added after rewriting every construct whose meaning it would change, so the script keeps doing what it did:
+
+| Code | Rewrite |
+| --- | --- |
+| `MDL-V1-SEMI` | adds the missing `;` |
+| `MDL-V1-SLASH` | deletes the `/` line |
+| `MDL-V1-ESCAPE` | writes the string’s value with `''` as the only escape (`'it\'s\t'` becomes `'it''s` + a tab + `'`) |
+| `MDL-V1-LIMIT1` | `retrieve … limit 1` (one object) becomes `retrieve … first` |
+| `MDL-V1-SET` | `$x = …` becomes `set $x = …` |
+| `MDL-V1-LIST`, `MDL-DEPR003`, `MDL-DEPR004` | a list operation or aggregate call becomes its statement form (`$x = filter($L, …)` → `$x = filter $L where …`); `find`/`contains` on a declared String keeps the call and gains `set` |
+| `MDL-V1-REPLACE02` | `create or replace user role` / `demo user` becomes a plain `create` |
+| `MDL-V1-WHILE` | inserts the missing `begin` after a `while` condition and `while` after its `end` |
+| `MDL-V1-TEMPLATE` | a template literal spanning lines becomes the parameter it was: `log info 'a⏎b';` becomes `log info '{1}' with ({1} = 'a⏎b');` |
+| `MDL-V1-QUOTEDEXPR` | a quoted expression becomes the expression bare: `dynamicclasses: 'if $currentObject/X then ''on'' else '''''` becomes `dynamicclasses: if $currentObject/X then 'on' else ''`. The bare form means the same without the header, so `fmt --upgrade` applies this one with `--header=false` too |
+
+A construct with no mechanical rewrite is reported with the reason, and `fmt` refuses to add the header rather than change the script’s meaning: an unknown or mis-shaped property (`MDL-V1-PROP`, `MDL-V1-PROPVALUE`), `create or replace view entity` (`MDL-V1-REPLACE01`), a session command in a script (`MDL-V1-SESSION`: move it to the command line or the REPL), a nested list operation such as `count(filter(…))`, `find`/`contains` on a variable whose type the script does not state (when the variable holds a microflow or nanoflow call’s result, the called flow’s return type decides: a flow the script creates earlier is read from the script, and any other from the project given with `-p app.mpr`, so `fmt --upgrade -p app.mpr` rewrites it), and an escaped line break (`\n`) inside an expression. An escaped line break in a text template’s literal is rewritten: the break is written into the literal, which under `mdl 1` is still the template text. Running `fmt --upgrade` on its own output changes nothing.
+
+`-p app.mpr` also settles a bare `commit $X;` in a `create or modify microflow|nanoflow`, with or without the header. Since mendixlabs/mxcli#895 a bare commit means *with* events, Studio Pro’s default; an older mxcli stored the same statement *without* events. Where the stored flow commits the variable without events, `fmt --upgrade -p app.mpr` writes `commit $X without events;`, so re-running the script keeps what is stored instead of turning the event handlers on (or, inside a loop under `mdl 1`, being refused). A new flow, a new commit, or a stored commit with events is left as written; where the stored flow commits the variable both ways, the statement is left and reported. Without `-p`, `fmt` prints a note (`MDL067`) for each flow with a bare commit.
+
+`-p app.mpr` also tells the upgrade which statements `exec` would refuse once the header is there. Under `mdl 1` a `create or modify microflow|nanoflow` of a stored flow is applied as a patch, and a change the patch cannot make (inside a loop body or an error handler, a redrawn connector, a `return` added) is refused with nothing written; without the header the same statement rebuilds the whole flow (`MDL-V1-REBUILD`). No rewrite keeps that meaning, so `fmt` names each such statement and leaves the header off that file, applying the rest of the upgrade. Change those flows with `alter`, or drop and create them, and upgrade again; `--force-header` adds the header regardless. `mxcli check script.mdl -p app.mpr` reports the same statements (an `MDL-V1-REBUILD` error under `mdl 1`, the warning without the header), computed by the same code as `exec` and `diff`.
+
+## [Behaviour changes to know about](#behaviour-changes-to-know-about)
+
+Besides the generated tables, a few changes alter what an existing script
+**writes**. Most apply under **both** versions, because the old behaviour was a
+silent wrong write rather than a meaning a script could rely on (ADR-0011
+allows fixing those everywhere); the others are gated like any `MDL-V1-*`
+change. They are listed because a script that ran before may write something
+different now. Where the old output can still be asked for, the entry says how.
+
+| Change | What a script writes now | Applies under | Code |
+| --- | --- | --- | --- |
+| String escapes in flow expressions | A string literal in a flow expression stores its value as Studio Pro spells it: `''` doubled, never a backslash escape in the stored expression. Only how a `\` in the MDL literal is *read* depends on the header (`MDL-V1-ESCAPE`). | both | [visitor\_string\_escapes.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/visitor/visitor_string_escapes.go), [mendixexpr.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/mendixexpr/mendixexpr.go) |
+| Pluggable widget schema kept | An unchanged pluggable widget keeps its stored `Type` and `Object` (the widget’s schema) instead of being rebuilt from mxcli’s template, so a widget upgraded in Studio Pro stays upgraded. | both | [cmd\_pages\_pluggable\_passthrough.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_pluggable_passthrough.go) |
+| Text-template attribute binding | `{1} = $Order.Total` binds the attribute and renders with its formatting, as Studio Pro stores it, instead of `toString($Order/Total)`. Write `{1} = toString($Order/Total)` to keep the old output. Without the header the binding warns (`MDL-V1-TEMPLATEATTR`). | both | [cmd\_pages\_template\_attr.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_template_attr.go) |
+| Gallery row click | A row click on a gallery with single-click selection is refused (`MDL-WIDGET36`), with nothing written, because `mx check` fails such a page; without the header it is written and warns (`MDL-V1-GALLERYCLICK`). | `mdl 1` | [validate\_widget\_language.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/validate_widget_language.go) |
+| `create constant … private` | Was never stored. Without the header it parses, does nothing and warns (`MDL-DEPR138`); `fmt --upgrade` deletes it; `mdl 1` refuses it. Set a private value with `mxcli constant set`. | both | [visitor\_deprecations.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/visitor/visitor_deprecations.go) |
+| Commit events | A bare `commit $X;` commits *with* events, Studio Pro’s default; older releases stored it *without*. `check` names the affected flows (`MDL067`), and `fmt --upgrade -p` writes `without events` where the stored flow has it. | both | [commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/upgrade/commit_events.go), [flow\_commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/flow_commit_events.go) |
+| `date` as a type | Mendix has no date-only type: `date` is an alias of `DateTime` and builds exactly what `DateTime` builds. Without the header it warns (`MDL-DEPR160`); `fmt --upgrade` writes `DateTime`; `mdl 1` refuses `date`. | both | [deprecation.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/deprecation/deprecation.go) |
+
+## [Reference](#reference)
+
+The tables below are generated from the registries in the code
+(`visitor.LanguageChanges`, `executor.LanguageChanges` and `mdl/deprecation`)
+by `make gen-migration-reference`; CI fails when they are stale. A version
+above the newest one this mxcli knows (`mdl 2` today) is the version that will
+refuse the spelling; until then it only warns.
+
+### [Changes of meaning (`MDL-V1-*`)](#changes-of-meaning-mdl-v1-)
+
+21 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
+
+| Code | Without the header (mdl 0) | Under `mdl 1;` | Decided at | Rewritten by `fmt --upgrade` |
+| --- | --- | --- | --- | --- |
+| `MDL-V1-ACTIONSLOT` | An `onClick:` or `OnChange:` on a widget with no slot for it is dropped on write | a refusal (MDL-WIDGET37), with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-BOUNDARYDROP` | `drop <activity> boundary event` on an activity with several boundary events drops the first one `describe workflow` prints | a refusal, with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-ESCAPE` | a backslash in a string literal is an escape (`\n` is a newline, `\t` a tab, `\'` an apostrophe, `\\` one backslash) | an ordinary character, as in a Mendix expression; `''` is the only escape | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-GALLERYCLICK` | A gallery row click on a single-click selection is written, and `mx check` fails the page (“The item click action is ambiguous”) | a refusal (MDL-WIDGET36), with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-LIMIT1` | `retrieve … limit 1` binds a single object (Mendix’s “First object” range, so a loop over it is CE0100 and count() or head() CE0097); write `retrieve … first` to say so | a list of one (a Custom range), and the object is written `first` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-LIST` | a list operation or aggregate written as a call — `find(…)` or `contains(…)`, a call after `set`, or one call nested in another — is turned into a List operation or Aggregate list activity, guessing from its arguments whether a string function was meant, | an error: a List operation or Aggregate list is one statement per activity whose operand is a variable (`$x = find $L where …;`, `$n = count $L;`), and after `set` a call is always the expression function | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-PROP` | an unknown property key is accepted and ignored | an error | parse | no: blocks `--header`; an unknown property key is ignored under mdl 0 and an error under mdl 1; which key was meant cannot be guessed, so correct or delete it by hand |
+| `MDL-V1-PROPVALUE` | a value its key does not take is accepted, and ignored or read by its shape | an error | parse | no: blocks `--header`; a value its key does not take is ignored or read by its shape under mdl 0; what was meant cannot be guessed, so correct it by hand |
+| `MDL-V1-QUOTEDEXPR` | a quoted value holding expression text in an expression property (DynamicClasses, DynamicCellClass, an OData client’s HttpUsername / HttpPassword / ClientCertificate or header value) is that expression: the outer quotes are dropped and the doubled ones undone | a Mendix string, so the old spelling is refused (MDL-WIDGET33, MDL-ODATA07); write the expression itself, without the outer quotes and with its own quotes single | parse | yes: `fmt --upgrade`, with or without `--header` |
+| `MDL-V1-REBUILD` | `create or modify microflow|nanoflow` rebuilds the whole stored flow when the change cannot be spliced in, which resets curves, drops merges and renumbers element IDs | a refusal that names the change the splice cannot make, with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-REMOTETYPE` | `create or modify external entity` writes a mapped attribute with the declared type and keeps the service’s RemoteType, which mx check reports as CE6616 | a refusal that names the attribute and the type the service publishes, with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-REPLACE01` | `create or replace view entity` deletes the view entity and creates a new one (a new identity; its access rules and associations are lost) | `create or modify view entity`, which rewrites it in place and keeps its identity | parse | no: blocks `--header`; `create or replace view entity` drops and recreates the view entity under mdl 0, which no mdl 1 statement does: write `create or modify view entity` to keep its identity, or `drop entity` then `create view entity` to discard it |
+| `MDL-V1-REPLACE02` | `create or replace` on a user role or demo user is a plain create, which fails when it already exists | `create or modify` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-SEMI` | a statement without a terminating `;` is accepted | an error: every statement ends with `;` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-SESSION` | a session command in a script runs as if typed at the REPL | an error: a script holds model statements only; type the command at the REPL, or use the command-line flag (`-p app.mpr` to connect, `--json` for the output format) | parse | no: blocks `--header`; a session command (`connect`, `set format`, `status`, `help`, …) is refused in an mdl 1 script, and no model statement does what it does: move it out of the script, to the command line (`-p app.mpr` to connect, `--json` for the output format) or the REPL |
+| `MDL-V1-SET` | `$x = <expression>` without `set` changes the variable | an error: a reassignment is written `set $x = <expression>;` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-SHOWSUMMARY` | `show entity X` / `show association X` prints a summary of the element | an error: `show` is dropped (R6) and the summary has no mdl 1 statement; write `describe entity X` for the definition, or `list entities in M` / `list associations in M` for the summary | parse | no: blocks `--header`; `show entity X` / `show association X` print a summary no mdl 1 statement prints: `describe` prints the definition as MDL and `list entities` / `list associations` the summary columns, so either would change the script’s output; choose one by hand |
+| `MDL-V1-SLASH` | a `/` after a statement is accepted as a terminator (SQL\*Plus style) | an error: `;` is the only statement terminator | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-TEMPLATE` | a message template written as one string literal that spans lines is an expression: the template is `{1}` and the literal its parameter | the template text, as a literal on one line is; a line break in a template is written into the literal | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-TEMPLATEATTR` | a text-template parameter bound to a non-String attribute (`{1} = $Order.Total`) was stored as `toString($Order/Total)` by earlier mxcli releases | an attribute reference, rendered with the attribute’s formatting, as Studio Pro stores it | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-WHILE` | `while <condition>` accepts a body without `begin` and an `end` without `while` | an error: a while loop is `while <condition> begin … end while;`, like `loop … begin … end loop;` | parse | yes: `fmt --upgrade --header` |
+
+### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
+
+84 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+
+| Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
+| --- | --- | --- | --- | --- |
+| `MDL-DEPR001` | `create or replace …` | `create or modify …` | yes: `replace` → `modify` | mdl 2 |
+| `MDL-DEPR002` | `show …` | `list …` | yes: `show` → `list` | mdl 2 |
+| `MDL-DEPR003` | `$x = <operation>($List, …)` | `$x = <operation> $List …` | yes: call form to statement form: head/tail $L; filter/find $L by Member = v (when the condition has that shape) or where ; sort $L by …; union/intersect $A with $B; subtract($A, $B) -> subtract $B from $A; equals $A and $B; range($L, o, n) -> range $L offset o limit n | mdl 2 |
+| `MDL-DEPR004` | `$n = <function>($List, …)` | `$n = <function> $List …` | yes: call form to statement form: count $L; sum|average|minimum|maximum $L by Attr (for $L.Attr) or of ; all|any $L where ; reduce $L from  as  using | mdl 2 |
+| `MDL-DEPR005` | `row row1 { … } / column Name (…) — a name on an element Mendix stores none for` | `row { … } / column (…)` | yes: name out of the element: `row row1 {` becomes `row {` | mdl 2 |
+| `MDL-DEPR006` | `call microflow M.F($Param = expr)` | `call microflow M.F(Param = expr)` | yes: parameter name without its `$` (quoted when it is not an identifier or keyword) | mdl 2 |
+| `MDL-DEPR007` | `show page M.P(Param: expr)` | `show page M.P(Param = expr)` | yes: colon as `=`: `Param: expr` -> `Param = expr` | mdl 2 |
+| `MDL-DEPR008` | `call microflow M.F with (Param = '<expression>')` | `call microflow M.F(Param = <expression>)` | yes: string list as a list after the callee, each string’s content written as the bare expression | mdl 2 |
+| `MDL-DEPR009` | `objects [$a, $b] / parameters ['a', 'b']` | `with ({1} = $a, {2} = $b)` | yes: positional list as numbered placeholders: `objects [a, b]` -> `with ({1} = a, {2} = b)` | mdl 2 |
+| `MDL-DEPR020` | `show_page, save_changes, close_page, microflow M.F, …` | `show page, save changes, close page, call microflow M.F, …` | yes: page action as words: the underscore becomes a space (`show_page` -> `show page`, also `save_changes`, `cancel_changes`, `close_page`, `create_object`, `open_link`, `sign_out`, `complete_task`); `delete_object` -> `delete`; `microflow M.F` / `nanoflow M.F` -> `call microflow M.F` / `call nanoflow M.F` | mdl 2 |
+| `MDL-DEPR021` | `error '…' / feedback '…' / error_message '…'` | `error message '…'` | yes: message keyword as `error message`: `not null error '…'` (and after `unique` or `required`), a validation rule’s `feedback '…'`, and `error_message` / `errormessage` | mdl 2 |
+| `MDL-DEPR022` | `delete_behavior …` | `on delete cascade|restrict|set null` | yes: delete behaviour as the SQL referential action: `delete_behavior cascade` / `delete_and_references` -> `on delete cascade`; `prevent` / `delete_if_no_references` -> `on delete restrict`; `delete_but_keep_references` -> `on delete set null` | mdl 2 |
+| `MDL-DEPR023` | `type reference_set` | `type ReferenceSet` | yes: type name as Mendix writes it: `reference_set` -> `ReferenceSet` | mdl 2 |
+| `MDL-DEPR024` | `call rest service … returns none` | `call rest service … returns nothing` | yes: `none` → `nothing` | mdl 2 |
+| `MDL-DEPR030` | `grant M.Role on M.E (rights) where '[xpath]'` | `grant rights on entity M.E to M.Role where [xpath]` | yes: rights before `on entity`, roles after `to`, and the XPath out of its string: `grant R on M.E (read *) where '[A = ''x'']'` becomes `grant read * on entity M.E to R where [A = 'x']` | mdl 2 |
+| `MDL-DEPR031` | `targeting [users|groups] xpath '[xpath]'` | `targeting [users|groups] xpath [xpath]` | yes: XPath out of its string: `xpath '[Name = ''Admin'']'` becomes `xpath [Name = 'Admin']` | mdl 2 |
+| `MDL-DEPR060` | `alter settings runtime Key = value, … / create configuration 'X' Key = value, …` | `alter settings runtime ( Key: value, … ) / create configuration 'X' ( Key: value, … )` | yes: assignments in parentheses, each `=` as `:` | mdl 2 |
+| `MDL-DEPR061` | `alter consumed|published odata service X set Key = value, …` | `alter consumed|published odata service X set ( Key: value, … )` | yes: assignments in parentheses, each `=` as `:` | mdl 2 |
+| `MDL-DEPR062` | `alter styling on page P widget w set Class = 'x', 'Full width' = on` | `alter styling on page P widget w set ( Class: 'x', 'Full width': on )` | yes: assignments in parentheses, each `=` as `:` | mdl 2 |
+| `MDL-DEPR063` | `alter entity M.E set allow_create_change_locally = true` | `alter entity M.E set ( AllowCreateChangeLocally: true )` | yes: property as create’s list: `set ( AllowCreateChangeLocally: <value> )` | mdl 2 |
+| `MDL-DEPR064` | `type: Reference / owner: Both / storage: Table` | `type Reference / owner Both / storage Table` | yes: clause without its colon: `type: Reference` as `type Reference` (also `owner`, `storage`) | mdl 2 |
+| `MDL-DEPR065` | `alter entity M.E modify attribute A Type` | `alter entity M.E modify attribute A: Type` | yes: attribute definition with its colon: `A Type` as `A: Type` | mdl 2 |
+| `MDL-DEPR070` | `operation X { Method: get, … }` | `operation X ( Method: get, … )` | yes: operation’s braces: `operation X { … }` becomes `operation X ( … )` | mdl 2 |
+| `MDL-DEPR071` | `tool X { … } / mcp service M.S { … } / knowledge base K { … }` | `tool X ( … ) / mcp service M.S ( … ) / knowledge base K ( … )` | yes: attachment’s braces: `tool X { … }` becomes `tool X ( … )` | mdl 2 |
+| `MDL-DEPR072` | `image collection M.C ( image X from file '…', … )` | `image collection M.C { image X ( File: '…' ) … }` | yes: image list: the images move into { } without commas, and `from file '…'` becomes `( File: '…' )` | mdl 2 |
+| `MDL-DEPR073` | `message definition collection M.C ( definition D for M.E ( A, M.E_B/M.B ( C ) ) )` | `message definition collection M.C { definition D for M.E { A, M.E_B/M.B { C } } }` | yes: message trees: each parenthesised definition list and member tree moves into { } | mdl 2 |
+| `MDL-DEPR074` | `alter microflow M.F { insert after $X { … } }` | `alter microflow M.F { insert after $X begin … end; }` | yes: fragment’s braces: `{` becomes `begin` and `}` becomes `end` | mdl 2 |
+| `MDL-DEPR080` | `decision '<expression>' / timer '<expression>' / due date '<expression>'` | `decision <expression> / timer <expression> / due date <expression>` | yes: expression out of its string: `decision '$Ctx/Total > 1000'` becomes `decision $Ctx/Total > 1000` | mdl 2 |
+| `MDL-DEPR081` | `Visible: [<expression>] / Editable: [<expression>]` | `Visible: <expression> / Editable: <expression>` | yes: brackets into the expression they store: `Visible: [Active]` becomes `Visible: $currentObject/Active` | mdl 2 |
+| `MDL-DEPR082` | `revoke M.Role on M.E [(rights)]` | `revoke rights|all on entity M.E from M.Role` | yes: rights (or `all` when none are listed) before `on entity`, roles after `from`: `revoke R on M.E (write *)` becomes `revoke write * on entity M.E from R`, `revoke R on M.E` becomes `revoke all on entity M.E from R` | mdl 2 |
+| `MDL-DEPR083` | `Username: $Const` | `Username: @Module.Const` | yes: `$Const` becomes `@<the service's module>.Const` | mdl 2 |
+| `MDL-DEPR084` | `Key: Module.Const` | `Key: @Module.Const` | yes: `@` before the constant’s name | mdl 2 |
+| `MDL-DEPR085` | `alter settings constant 'Module.Const' …` | `alter settings constant @Module.Const …` | yes: constant’s name out of its string, with `@`: `constant 'M.ApiUrl'` becomes `constant @M.ApiUrl` | mdl 2 |
+| `MDL-DEPR090` | `show page|project security|security matrix|structure|context of …` | `describe page|app security|security matrix|structure|context of …` | yes: verb as `describe`: `show page X` -> `describe page X`, `show project security` -> `describe app security`; the same for `list` on these forms | mdl 2 |
+| `MDL-DEPR091` | `alter user role R remove module roles (…)` | `alter user role R drop module roles (…)` | yes: `remove` → `drop` | mdl 2 |
+| `MDL-DEPR092` | `alter settings language remove '…' / alter settings workflows remove group '…'` | `alter settings language drop '…' / alter settings workflows drop group '…'` | yes: `remove` → `drop` | mdl 2 |
+| `MDL-DEPR093` | `alter entity E add|rename|modify|drop column …` | `alter entity E add|rename|modify|drop attribute …` | yes: `column` → `attribute` | mdl 2 |
+| `MDL-DEPR094` | `rest call get|post|… 'url' …` | `call rest service get|post|… 'url' …` | yes: statement keyword: `rest call` becomes `call rest service` | mdl 2 |
+| `MDL-DEPR095` | `describe widget <name>` | `describe widget type <name>` | yes: `type` after `widget`: `describe widget combobox` -> `describe widget type combobox` | mdl 2 |
+| `MDL-DEPR096` | `define fragment F as { … }` | `create fragment F as { … }` | yes: `define` → `create` | mdl 2 |
+| `MDL-DEPR100` | `create constant|association|json structure|image collection … comment '…'` | `/** … */ before the statement` | yes: documentation as a doc comment: the clause is deleted and its text written as `/** … */` before the statement | mdl 2 |
+| `MDL-DEPR101` | `set Key = value [on target] / set (Key = value, …) [on target]` | `set (Key: value, …) [on target]` | yes: each `=` as `:`, and the assignments in parentheses when they are not | mdl 2 |
+| `MDL-DEPR102` | `set Key: value [on target]` | `set (Key: value) [on target]` | yes: assignment in parentheses | mdl 2 |
+| `MDL-DEPR103` | `drop widget a, b` | `drop a, b` | yes: `drop widget a` as `drop a` | mdl 2 |
+| `MDL-DEPR104` | `<workflow activity> comment '…'` | `<workflow activity> caption '…'` | yes: `comment` → `caption` | mdl 2 |
+| `MDL-DEPR105` | `create page|snippet|consumed rest service|… M.N (…, Folder: '…', …)` | `create page|snippet|consumed rest service|… M.N folder '…' (…)` | yes: folder as a clause: the property is deleted from the list and written as `folder '…'` after the name | mdl 2 |
+| `MDL-DEPR106` | `Documentation: '…' in a regular expression, task queue or scheduled event` | `/** … */ before the statement` | yes: documentation as a doc comment: the property is deleted from the list and its text written as `/** … */` before the statement | mdl 2 |
+| `MDL-DEPR120` | `Headers: ( 'Name' = value )` | `Headers: ( 'Name': value )` | yes: header list: `'Name' = value` becomes `'Name': value` | mdl 2 |
+| `MDL-DEPR121` | `navigation P menu ( menu item …; menu 'X' ( … ); ) / create menu M.M ( … )` | `navigation P { menu item … menu 'X' { … } } / create menu M.M { … }` | yes: menu items: `menu (` becomes `{`, a menu’s or sub-menu’s ( ) become { }, and the `;` after each item is dropped | mdl 2 |
+| `MDL-DEPR122` | `menu item 'X' page M.P icon I / microflow M.F / sign out` | `menu item 'X' ( OnClick: show page M.P, Icon: I ) / call microflow M.F / sign out` | yes: item clauses: `page M.P` becomes `( OnClick: show page M.P )`, `microflow M.F` `OnClick: call microflow M.F`, `sign out` `OnClick: sign out`, and `icon I` `Icon: I` | mdl 2 |
+| `MDL-DEPR123` | `Params: { $P: M.E } / Variables: { $v: Boolean = 'true' }` | `Params: ( $P: M.E ) / Variables: ( $v: Boolean = 'true' )` | yes: header map: the braces become ( ) | mdl 2 |
+| `MDL-DEPR124` | `ContentParams: [{1} = expr]` | `ContentParams: ({1} = expr)` | yes: template parameters: the brackets become ( ) | mdl 2 |
+| `MDL-DEPR125` | `DesignProperties: ['Key': 'Value', 'Group': ['k': on]]` | `DesignProperties: ('Key': 'Value', 'Group': ('k': on))` | yes: design properties: each bracketed list becomes ( ) | mdl 2 |
+| `MDL-DEPR126` | `snippetcall s (Snippet: M.S, Params: {$Asset: $var})` | `snippetcall s (Snippet: M.S, Params: (Asset = $var))` | yes: snippet call arguments: `{$P: $v}` becomes `(P = $v)` | mdl 2 |
+| `MDL-DEPR127` | `database connection M.Db type '…' connection string @M.C … begin query Q sql '…' returns M.E map (c as A); end` | `database connection M.Db ( Type: '…', ConnectionString: @M.C, … ) { query Q ( Sql: '…', Returns: M.E, Map: ( A = c ) ) }` | yes: clauses become the property list: `type` `Type:`, `connection string` `ConnectionString:`, `host` `Host:`, `port` `Port:`, `database` `DatabaseName:`, `username` `Username:`, `password` `Password:`; `begin … end` becomes { }; a query’s `sql`, `parameter`, `returns` and `map` become Sql, Parameters, Returns and Map, and `column as Attr` becomes `Attr = column` | mdl 2 |
+| `MDL-DEPR130` | `list image|icon|message definition collection [in M]` | `list image|icon|message definition collections [in M]` | yes: singular as the plural: `collection` -> `collections` after `list` | mdl 2 |
+| `MDL-DEPR131` | `create|alter|drop|describe|move model M.X / list models` | `create|alter|drop|describe|move ai model M.X / list ai models` | yes: document name: `model` becomes `ai model`, `models` becomes `ai models` | mdl 2 |
+| `MDL-DEPR132` | `create json structure M.J snippet '…'` | `create json structure M.J sample '…'` | yes: `snippet` → `sample` | mdl 2 |
+| `MDL-DEPR133` | `alter app security level …|demo users on|off|guest access on [role R]|off|strict mode on|off` | `alter app security ( SecurityLevel: …, EnableDemoUsers: …, EnableGuestAccess: …, GuestUserRole: R, StrictMode: … )` | yes: clause as a property list: `level production` -> `( SecurityLevel: production )` | mdl 2 |
+| `MDL-DEPR134` | `create constant M.C ( … ) folder '…' / create snippet M.S (…) folder '…' { … }` | `create constant M.C folder '…' ( … ) / create snippet M.S folder '…' (…) { … }` | yes: clause moved: `folder '…'` goes right after the name | mdl 2 |
+| `MDL-DEPR135` | `alter entity|association|enumeration … set comment '…'` | `alter entity|association|enumeration … set documentation '…'` | yes: `comment` → `documentation` | mdl 2 |
+| `MDL-DEPR136` | `create constant M.C type T default v [exposed to client]` | `create constant M.C ( Type: T, DefaultValue: v, ExposedToClient: true )` | yes: constant properties: `type T default v exposed to client` becomes `( Type: T, DefaultValue: v, ExposedToClient: true )` | mdl 2 |
+| `MDL-DEPR137` | `create demo user 'u' password 'p' [entity M.E] (Role, …)` | `create demo user 'u' ( Password: 'p', Entity: M.E, UserRoles: (Role, …) )` | yes: demo user properties: `password 'p' entity M.E (R1, R2)` becomes `( Password: 'p', Entity: M.E, UserRoles: (R1, R2) )` | mdl 2 |
+| `MDL-DEPR138` | `create constant M.C … private` | `create constant M.C …` | yes: constant’s `private` modifier away: it is deleted | mdl 1 |
+| `MDL-DEPR140` | `alter workflow M.W set display 'x' / set description … / set export level … / set due date … / set overview page … / set parameter $P: M.E` | `alter workflow M.W { set ( Display: 'x', Description: …, ExportLevel: …, DueDate: …, OverviewPage: …, Parameter: $P: M.E ); }` | yes: property as `set ( Key: value )`, inside the statement’s { } | mdl 2 |
+| `MDL-DEPR141` | `alter workflow M.W set activity X page M.P / description … / targeting … / due date …` | `alter workflow M.W { set ( Page: M.P, Description: …, Targeting: …, DueDate: … ) on X; }` | yes: `set activity X <prop> v` as `set ( Key: v ) on X`, inside the statement’s { } | mdl 2 |
+| `MDL-DEPR142` | `alter workflow M.W insert after X <activity>;` | `alter workflow M.W { insert after X { <activity>; } }` | yes: inserted activity in { }, inside the statement’s { } | mdl 2 |
+| `MDL-DEPR143` | `alter workflow M.W drop activity X` | `alter workflow M.W { drop X; }` | yes: `drop activity X` as `drop X`, inside the statement’s { } | mdl 2 |
+| `MDL-DEPR144` | `alter workflow M.W replace activity X with <activity>;` | `alter workflow M.W { replace X with { <activity>; } }` | yes: `replace activity X with a;` as `replace X with { a; }`, inside the statement’s { } | mdl 2 |
+| `MDL-DEPR145` | `alter workflow M.W insert outcome 'N' on X { … }` | `alter workflow M.W { insert into X { outcomes 'N' { … } } }` | yes: `insert outcome 'N' on X { … }` as `insert into X { outcomes 'N' { … } }` | mdl 2 |
+| `MDL-DEPR146` | `alter workflow M.W insert path on X { … }` | `alter workflow M.W { insert into X { path { … } } }` | yes: `insert path on X { … }` as `insert into X { path { … } }` | mdl 2 |
+| `MDL-DEPR147` | `alter workflow M.W insert condition 'V' on X { … }` | `alter workflow M.W { insert into X { outcomes 'V' -> { … } } }` | yes: `insert condition 'V' on X { … }` as `insert into X { outcomes 'V' -> { … } }` | mdl 2 |
+| `MDL-DEPR148` | `alter workflow M.W insert boundary event on X <event>` | `alter workflow M.W { insert into X { boundary event <event> } }` | yes: `insert boundary event on X e` as `insert into X { boundary event e }` | mdl 2 |
+| `MDL-DEPR149` | `alter workflow M.W drop outcome 'N' on X / drop condition 'V' on X / drop path 'Path n' on X / drop boundary event on X` | `alter workflow M.W { drop X outcome 'N'; drop X outcome true; drop X path n; drop X boundary event; }` | yes: member after the activity it belongs to: `drop X outcome 'N'`, `drop X path n`, `drop X boundary event` | mdl 2 |
+| `MDL-DEPR160` | `date` | `DateTime` | yes: type `date` as the type it was stored as: `DateTime` | mdl 1 |
+| `MDL-DEPR540` | `on error [without rollback] { … }` | `on error [without rollback] begin … end error` | yes: `{` becomes `begin` and the closing `}` becomes `end error` | mdl 2 |
+| `MDL-DEPR550` | `rest client / rest clients` | `consumed rest service / consumed rest services` | yes: document type name: `rest client` becomes `consumed rest service`, `rest clients` `consumed rest services` | mdl 2 |
+| `MDL-DEPR551` | `odata client / odata clients` | `consumed odata service / consumed odata services` | yes: document type name: `odata client` becomes `consumed odata service`, `odata clients` `consumed odata services` | mdl 2 |
+| `MDL-DEPR552` | `odata service / odata services` | `published odata service / published odata services` | yes: document type name: `odata service` becomes `published odata service` | mdl 2 |
+| `MDL-DEPR553` | `queue / queues` | `task queue / task queues` | yes: document type name: `queue` becomes `task queue`, `queues` `task queues` | mdl 2 |
+| `MDL-DEPR554` | `alter project security …` | `alter app security …` | yes: security name: `project security` becomes `app security` | mdl 2 |
+| `MDL-DEPR555` | `alter settings model …` | `alter settings runtime …` | yes: section name: `model` becomes `runtime` | mdl 2 |
+| `MDL-DEPR710` | `create user role R (M.A, …) [manage all roles]` | `create user role R ( ModuleRoles: (M.A, …), ManageAllRoles: true, … )` | yes: user role properties: the role list becomes `ModuleRoles: (…)` in a ( Key: value ) list, and `manage all roles` becomes `ManageAllRoles: true` | mdl 2 |
+| `MDL-DEPR711` | `Headers: ('Authorization': 'Bearer ' + $Token) / ('X-Key': $Key)` | `Headers: ('Authorization': 'Bearer {Token}') / ('X-Key': '{Key}')` | yes: header value as a template: `'text' + $P` becomes `'text{P}'` | mdl 2 |
+
 # [Data Types](#data-types)
 
 MDL has a type system that maps to the Mendix metamodel attribute types. Every attribute in an entity definition has a type that determines how values are stored and validated.
@@ -6682,6 +6984,7 @@ Status: Enumeration(Sales.OrderStatus) DEFAULT 'Draft'
 Add, rename, re-caption, or remove values on an existing enumeration:
 
 ```
+mdl 1;
 -- Add a new value (the CAPTION keyword is required for ALTER, unlike CREATE)
 ALTER ENUMERATION Sales.OrderStatus
   ADD VALUE OnHold CAPTION 'On Hold';
@@ -6793,6 +7096,7 @@ Sales.Order_Customer     -- association
 This example creates a small Sales domain model with related entities, an enumeration, and an association:
 
 ```
+mdl 1;
 -- Enumeration for order statuses
 CREATE ENUMERATION Sales.OrderStatus (
   Draft 'Draft',
@@ -6995,6 +7299,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 Toggle on existing entities with ALTER ENTITY:
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Order ADD ATTRIBUTE Owner: AutoOwner;
 ALTER ENTITY Sales.Order DROP ATTRIBUTE ChangedDate;
 
@@ -7065,6 +7370,7 @@ ON AFTER CREATE CALL Sales.ACT_InitDefaults;
 Event handlers can also be added or removed via `ALTER ENTITY`:
 
 ```
+mdl 1;
 -- Add a handler to an existing entity
 ALTER ENTITY Sales.Order
   ADD EVENT HANDLER ON BEFORE DELETE CALL Sales.ACT_CheckCanDelete RAISE ERROR;
@@ -7437,6 +7743,7 @@ INDEX (Name, CreatedAt DESC)    -- mixed: Name ascending, CreatedAt descending
 Use `ALTER ENTITY` to add or remove indexes on existing entities:
 
 ```
+mdl 1;
 -- Add a named index
 ALTER ENTITY Sales.Customer
   ADD INDEX idx_customer_email (Email);
@@ -7476,6 +7783,7 @@ ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
 New attributes support the same [constraints](#constraints) as in `CREATE ENTITY`. Add several with one statement each:
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE LoyaltyPoints: Integer DEFAULT 0;
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE MemberSince: DateTime NOT NULL;
 
@@ -7492,6 +7800,7 @@ ALTER ENTITY Sales.Customer DROP ATTRIBUTE Notes;
 Drop several with one statement each:
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Customer DROP ATTRIBUTE Notes;
 ALTER ENTITY Sales.Customer DROP ATTRIBUTE TempField;
 ALTER ENTITY Sales.Customer DROP ATTRIBUTE OldStatus;
@@ -7511,6 +7820,7 @@ type slot accepts a bare qualified name (an entity or enumeration reference), so
 a clause written where the type belongs is read *as* the type:
 
 ```
+mdl 1;
 -- WRONG: `SET` is read as the type name, not as a keyword
 ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE Discount: SET DEFAULT 0;
 
@@ -7596,6 +7906,7 @@ ALTER ENTITY Sales.Customer
 System attributes use the same `ADD ATTRIBUTE` / `DROP ATTRIBUTE` syntax as regular attributes:
 
 ```
+mdl 1;
 -- Add system attributes
 ALTER ENTITY Sales.Order ADD ATTRIBUTE Owner: AutoOwner;
 ALTER ENTITY Sales.Order ADD ATTRIBUTE ChangedBy: AutoChangedBy;
@@ -7612,6 +7923,7 @@ ALTER ENTITY Sales.Order DROP ATTRIBUTE ChangedDate;
 Register microflows to run before or after entity operations:
 
 ```
+mdl 1;
 -- Before commit: validates and can abort (RAISE ERROR)
 ALTER ENTITY Sales.Order
   ADD EVENT HANDLER ON BEFORE COMMIT CALL Sales.ValidateOrder($currentObject) RAISE ERROR;
@@ -7718,18 +8030,18 @@ END;
 List microflows and nanoflows in the project:
 
 ```
-LIST MICROFLOWS
-LIST MICROFLOWS IN MyModule
-LIST NANOFLOWS
-LIST NANOFLOWS IN MyModule
+LIST MICROFLOWS;
+LIST MICROFLOWS IN MyModule;
+LIST NANOFLOWS;
+LIST NANOFLOWS IN MyModule;
 
 ```
 
 View the full MDL definition of an existing microflow or nanoflow (round-trippable output):
 
 ```
-DESCRIBE MICROFLOW MyModule.ACT_CreateOrder
-DESCRIBE NANOFLOW MyModule.NAV_ShowDetails
+DESCRIBE MICROFLOW MyModule.ACT_CreateOrder;
+DESCRIBE NANOFLOW MyModule.NAV_ShowDetails;
 
 ```
 ## [DROP](#drop)
@@ -7737,6 +8049,7 @@ DESCRIBE NANOFLOW MyModule.NAV_ShowDetails
 Remove a microflow or nanoflow:
 
 ```
+mdl 1;
 DROP MICROFLOW MyModule.ACT_CreateOrder;
 DROP NANOFLOW MyModule.NAV_ShowDetails;
 
@@ -7827,6 +8140,7 @@ END;
 Move an existing microflow to a different folder:
 
 ```
+mdl 1;
 MOVE MICROFLOW Sales.ACT_CreateOrder TO FOLDER 'Orders/Actions';
 MOVE NANOFLOW Sales.NAV_ShowDetail TO FOLDER 'Navigation';
 
@@ -7958,7 +8272,7 @@ Activities like CREATE and RETRIEVE produce result variables:
 
 ```
 $Order = CREATE Sales.Order (Status = 'New');
-RETRIEVE $Customer FROM Sales.Customer WHERE Email = $Email LIMIT 1;
+RETRIEVE $Customer FROM Sales.Customer WHERE Email = $Email FIRST;
 $Result = CALL MICROFLOW Sales.CalculateTotal (Order = $Order);
 
 ```
@@ -8258,7 +8572,7 @@ RETRIEVE $RecentOrders FROM Sales.Order
 
 ```
 
-With `FIRST` the result is a single entity object (Mendix’s “First object” range). Otherwise the result is a list, including with `LIMIT`/`OFFSET`. A bare `LIMIT 1` depends on the language version: a list of one under `mdl 1;`, and without the header the object, with warning `MDL-V1-LIMIT1`. `describe` prints the object range as `FIRST`.
+With `FIRST` the result is a single entity object (Mendix’s “First object” range). Otherwise the result is a list, including with `LIMIT`/`OFFSET`. A bare `LIMIT 1` is a list of one (a script file without the header reads it differently; see [Language Versions and Migration](#language-versions-and-migration)). `describe` prints the object range as `FIRST`.
 
 ### [RETRIEVE by Association](#retrieve-by-association)
 
@@ -8622,7 +8936,7 @@ END WHILE;
 ```
 > **Caution:** Ensure the condition will eventually become false to avoid infinite loops.
 
-`BEGIN` and `END WHILE` are required under the `mdl 1;` header, as they are for `LOOP`. A script without the header may still leave either out, and `check` warns `MDL-V1-WHILE`.
+`BEGIN` and `END WHILE` are required, as they are for `LOOP`.
 
 ## [Error Handling](#error-handling-2)
 
@@ -8673,7 +8987,7 @@ that closes it. A handler that rejoins somewhere else names that point with
 
 ```
 -- Continue despite retrieval failure
-RETRIEVE $Config FROM Admin.SystemConfig LIMIT 1 ON ERROR CONTINUE;
+RETRIEVE $Config FROM Admin.SystemConfig FIRST ON ERROR CONTINUE;
 
 -- Custom error handler for external call
 $Response = CALL MICROFLOW Integration.CallExternalAPI (
@@ -9202,14 +9516,14 @@ The following activities are server-only and cannot be used in nanoflows:
 - `CALL EXTERNAL ACTION` — external actions are server-side
 - All **workflow actions** (call/open workflow, set task outcome, user task, etc.)
 
-> **Note:** Per-action error handling (`on error continue`) IS supported in nanoflows. Only `ErrorEvent` (raise error as a standalone flow action) is forbidden. Note that `on error rollback` is syntactically valid but only rolls back in-memory changes — nanoflows have no database transactions.
+> **Note:** Per-action error handling is supported in nanoflows, per activity. Only `ErrorEvent` (raise error as a standalone flow action) is forbidden. A nanoflow has no database transaction, so an activity without a clause aborts the flow on error. `declare`, `set`, `retrieve` and `delete` take every clause; `create`, `commit`, `call nanoflow` and `call microflow` take only `on error without rollback begin … end error`; `change`, `log`, `show page`, `close page`, `show message` and `validation feedback` take none. Every other form is CE6035 at build time, and mxcli refuses it (MDL091) — measured on Mendix 11.14.0.
 
 ## [SHOW and DESCRIBE](#show-and-describe-1)
 
 ```
-LIST NANOFLOWS
-LIST NANOFLOWS IN MyModule
-DESCRIBE NANOFLOW MyModule.NAV_ShowDetails
+LIST NANOFLOWS;
+LIST NANOFLOWS IN MyModule;
+DESCRIBE NANOFLOW MyModule.NAV_ShowDetails;
 
 ```
 ## [DROP](#drop-1)
@@ -9374,7 +9688,7 @@ BEGIN
   IF $IsValid THEN
     RETRIEVE $Existing FROM Sales.Customer
       WHERE Email = $Customer/Email
-      LIMIT 1;
+      FIRST;
     IF $Existing != empty THEN
       VALIDATION FEEDBACK $Customer/Email MESSAGE 'A customer with this email already exists';
       SET $IsValid = false;
@@ -9533,7 +9847,7 @@ BEGIN
   DECLARE $Config Integration.SyncConfig;
   DECLARE $Success Boolean = false;
 
-  RETRIEVE $Config FROM Integration.SyncConfig LIMIT 1;
+  RETRIEVE $Config FROM Integration.SyncConfig FIRST;
 
   @caption 'Call external API'
   $Response = CALL MICROFLOW Integration.SUB_CallExternalAPI (
@@ -9636,7 +9950,8 @@ CHANGE $Customer (Notes = $NewNotes);
 ```
 -- CORRECT: append with guard
 IF $NewNotes != empty THEN
-  CHANGE $Customer (Notes = $Customer/Notes + '\n' + $NewNotes);
+  CHANGE $Customer (Notes = $Customer/Notes + '
+' + $NewNotes);
 END IF;
 
 ```
@@ -9715,7 +10030,7 @@ CREATE PAGE MyModule.Home
   CONTAINER cMain {
     DYNAMICTEXT txtWelcome (Content: 'Welcome to the application')
   }
-}
+};
 
 ```
 ### [Page with Parameters](#page-with-parameters)
@@ -9733,12 +10048,12 @@ CREATE PAGE MyModule.Customer_Edit
   DATAVIEW dvCustomer (DataSource: $Customer) {
     TEXTBOX txtName (Label: 'Name', Attribute: Name)
     TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 ```
 ## [Page Properties](#page-properties)
@@ -9879,10 +10194,10 @@ CREATE PAGE MyModule.CustomerList
 {
   -- Widgets here fill the main content area of Atlas_Default
   DATAGRID dgCustomers (DataSource: DATABASE MyModule.Customer) {
-    COLUMN colName (Attribute: Name, Caption: 'Name')
-    COLUMN colEmail (Attribute: Email, Caption: 'Email')
+    COLUMN (Attribute: Name, Caption: 'Name')
+    COLUMN (Attribute: Email, Caption: 'Email')
   }
-}
+};
 
 ```
 
@@ -9898,12 +10213,12 @@ CREATE PAGE MyModule.Customer_Edit
 {
   DATAVIEW dvCustomer (DataSource: $Customer) {
     TEXTBOX txtName (Label: 'Name', Attribute: Name)
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 ```
 ## [Page Parameters](#page-parameters)
@@ -9962,8 +10277,8 @@ Retrieves entities directly from the database. Optionally includes an XPath cons
 
 ```
 DATAGRID dgOrders (DataSource: DATABASE Sales.Order) {
-  COLUMN colId (Attribute: OrderId, Caption: 'Order #')
-  COLUMN colDate (Attribute: OrderDate, Caption: 'Date')
+  COLUMN (Attribute: OrderId, Caption: 'Order #')
+  COLUMN (Attribute: OrderDate, Caption: 'Date')
 }
 
 ```
@@ -10005,7 +10320,7 @@ Binds to the currently selected item in another list widget:
 
 ```
 DATAGRID dgProducts (DataSource: DATABASE MyModule.Product) {
-  COLUMN colName (Attribute: Name)
+  COLUMN (Attribute: Name)
 }
 
 DATAVIEW dvDetail (DataSource: SELECTION dgProducts) {
@@ -10089,16 +10404,16 @@ Creates a responsive grid with rows and columns. The primary layout mechanism fo
 
 ```
 LAYOUTGRID grid1 {
-  ROW row1 {
-    COLUMN col1 {
+  ROW {
+    COLUMN {
       TEXTBOX txtName (Label: 'Name', Attribute: Name)
     }
-    COLUMN col2 {
+    COLUMN {
       TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
     }
   }
-  ROW row2 {
-    COLUMN colFull {
+  ROW {
+    COLUMN {
       TEXTAREA txtNotes (Label: 'Notes', Attribute: Notes)
     }
   }
@@ -10149,7 +10464,7 @@ DATAVIEW dvCustomer (DataSource: $Customer) {
   TEXTBOX txtName (Label: 'Name', Attribute: Name)
   TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
   COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
-  FOOTER footer1 {
+  FOOTER {
     ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
     ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
   }
@@ -10171,11 +10486,11 @@ Displays a list of objects in a tabular format with columns, sorting, and pagina
 
 ```
 DATAGRID dgOrders (DataSource: DATABASE Sales.Order, PageSize: 20) {
-  COLUMN colId (Attribute: OrderId, Caption: 'Order #')
-  COLUMN colDate (Attribute: OrderDate, Caption: 'Date')
-  COLUMN colAmount (Attribute: Amount, Caption: 'Amount', Alignment: right)
-  COLUMN colStatus (Attribute: Status, Caption: 'Status')
-  CONTROLBAR bar1 {
+  COLUMN (Attribute: OrderId, Caption: 'Order #')
+  COLUMN (Attribute: OrderDate, Caption: 'Date')
+  COLUMN (Attribute: Amount, Caption: 'Amount', Alignment: right)
+  COLUMN (Attribute: Status, Caption: 'Status')
+  CONTROLBAR {
     ACTIONBUTTON btnNew (Caption: 'New', Action: CALL MICROFLOW Sales.ACT_CreateOrder, ButtonStyle: Primary)
   }
 }
@@ -10381,12 +10696,12 @@ COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
 ```
 ### [REFERENCESELECTOR](#referenceselector)
 
-Dropdown for selecting an associated object via a reference association:
+The classic reference selector (`Forms$ReferenceSelector`) is a built-in Forms
+widget mxcli has no writer for. The keyword parses, and `check` refuses it as
+**MDL-WIDGET38** rather than letting `exec` stop at the page. Select an
+associated object with a `COMBOBOX` over the association instead; it needs its
+own `datasource:` (CE0642 without one) and a caption attribute.
 
-```
-REFERENCESELECTOR rsCategory (Label: 'Category', Attribute: Category)
-
-```
 ## [Display Widgets](#display-widgets-1)
 
 ### [DYNAMICTEXT](#dynamictext)
@@ -10467,7 +10782,7 @@ The snake-case spellings (`SAVE_CHANGES`, `SHOW_PAGE`, …) and `MICROFLOW …` 
 ```
 ACTIONBUTTON btnProcess (
   Caption: 'Process',
-  Action: MICROFLOW Sales.ACT_ProcessOrder(Order = $Order),
+  Action: CALL MICROFLOW Sales.ACT_ProcessOrder(Order = $Order),
   ButtonStyle: Primary
 )
 
@@ -10504,16 +10819,17 @@ DATAVIEW dvOrder (DataSource: $Order) {
     DYNAMICTEXT txtOrderTitle (Content: 'Order #{1}', Attribute: OrderId)
   }
   TEXTBOX txtStatus (Label: 'Status', Attribute: Status)
-  FOOTER ftr1 { ... }
+  FOOTER { ... }
 }
 
 ```
 ### [FOOTER](#footer)
 
-Footer section of a DataView. Typically contains save/cancel buttons:
+Footer section of a DataView. Typically contains save/cancel buttons. It
+stores no name of its own; `ALTER PAGE` addresses it as `<dataview>.footer`:
 
 ```
-FOOTER footer1 {
+FOOTER {
   ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
   ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
 }
@@ -10728,7 +11044,7 @@ CREATE PAGE MyModule.Customer_Edit
   DATAVIEW dvCustomer (DataSource: $Customer) {
     TEXTBOX txtName (Label: 'Name', Attribute: Name)
   }
-}
+};
 
 ```
 ### [Database Source](#database-source-1)
@@ -10737,8 +11053,8 @@ Retrieves entities directly from the database. Works with list widgets (DataGrid
 
 ```
 DATAGRID dgCustomers (DataSource: DATABASE MyModule.Customer) {
-  COLUMN colName (Attribute: Name, Caption: 'Customer Name')
-  COLUMN colEmail (Attribute: Email, Caption: 'Email')
+  COLUMN (Attribute: Name, Caption: 'Customer Name')
+  COLUMN (Attribute: Email, Caption: 'Email')
 }
 
 ```
@@ -10754,7 +11070,7 @@ DATAVIEW dvStats (DataSource: MICROFLOW MyModule.DS_GetStatistics) {
 
 -- List for a DataGrid
 DATAGRID dgFiltered (DataSource: MICROFLOW MyModule.DS_GetFilteredOrders) {
-  COLUMN colId (Attribute: OrderId)
+  COLUMN (Attribute: OrderId)
 }
 
 ```
@@ -10791,8 +11107,8 @@ Binds to the currently selected item in another list widget. Enables master-deta
 ```
 -- Master: list of products
 DATAGRID dgProducts (DataSource: DATABASE MyModule.Product) {
-  COLUMN colName (Attribute: Name)
-  COLUMN colPrice (Attribute: Price)
+  COLUMN (Attribute: Name)
+  COLUMN (Attribute: Price)
 }
 
 -- Detail: shows the selected product
@@ -10895,7 +11211,7 @@ CREATE SNIPPET MyModule.Footer FOLDER 'Snippets'
   CONTAINER cFooter (Class: 'app-footer') {
     DYNAMICTEXT txtCopyright (Content: '2024 My Company. All rights reserved.')
   }
-}
+};
 
 ```
 ### [Snippet with Parameters](#snippet-with-parameters)
@@ -10919,7 +11235,7 @@ CREATE SNIPPET MyModule.CustomerCard
       )
     }
   }
-}
+};
 
 ```
 ## [Using Snippets in Pages](#using-snippets-in-pages)
@@ -10936,7 +11252,7 @@ CREATE PAGE MyModule.Home
   CONTAINER cMain {
     SNIPPETCALL scFooter (Snippet: MyModule.Footer)
   }
-}
+};
 
 ```
 
@@ -11017,6 +11333,7 @@ ALTER SNIPPET <Module>.<Name> {
 Change one or more properties on a widget identified by name:
 
 ```
+mdl 1;
 -- Single property
 ALTER PAGE Module.EditPage {
   SET (Caption: 'Save & Close') ON btnSave
@@ -11077,6 +11394,7 @@ ALTER PAGE Module.EditPage {
 Switch a page’s layout without rebuilding the widget tree. All widget content is preserved – only the layout reference and placeholder mappings are updated.
 
 ```
+mdl 1;
 -- Auto-map placeholders by name (common case)
 ALTER PAGE Module.EditPage {
   SET Layout = Atlas_Core.Atlas_Default
@@ -11098,6 +11416,7 @@ Not supported for snippets (snippets don’t have layouts).
 Insert new widgets before or after an existing widget:
 
 ```
+mdl 1;
 -- Insert after a widget
 ALTER PAGE Module.EditPage {
   INSERT AFTER txtEmail {
@@ -11131,6 +11450,7 @@ The inserted widgets use the same syntax as in `CREATE PAGE`. Multiple widgets c
 Remove one or more widgets by name:
 
 ```
+mdl 1;
 ALTER PAGE Module.EditPage {
   DROP txtUnused
 };
@@ -11161,6 +11481,7 @@ ALTER PAGE Module.EditPage {
 Add or remove page-level variables:
 
 ```
+mdl 1;
 -- Add a variable
 ALTER PAGE Module.EditPage {
   ADD Variables $showAdvanced: Boolean = 'false'
@@ -11208,6 +11529,7 @@ ALTER PAGE Module.Customer_Edit {
 ### [Add a Field to an Edit Page](#add-a-field-to-an-edit-page)
 
 ```
+mdl 1;
 -- First, check what's on the page
 DESCRIBE PAGE MyModule.Customer_Edit;
 
@@ -11236,6 +11558,7 @@ column is addressed by what it shows: `grid column(Attr)` for the column bound t
 `grid column('Caption')` for the column with that caption.
 
 ```
+mdl 1;
 -- Add a column after an existing one
 ALTER PAGE MyModule.Customer_Overview {
   INSERT AFTER dgCustomers column(Email) {
@@ -11292,11 +11615,11 @@ CREATE PAGE MyModule.Customer_Overview FOLDER 'Customers'
 )
 {
   DATAGRID dgCustomers (DataSource: DATABASE MyModule.Customer, PageSize: 20) {
-    COLUMN colName (Attribute: Name, Caption: 'Name')
-    COLUMN colEmail (Attribute: Email, Caption: 'Email')
-    COLUMN colStatus (Attribute: Status, Caption: 'Status')
-    COLUMN colCreated (Attribute: CreatedDate, Caption: 'Created')
-    CONTROLBAR bar1 {
+    COLUMN (Attribute: Name, Caption: 'Name')
+    COLUMN (Attribute: Email, Caption: 'Email')
+    COLUMN (Attribute: Status, Caption: 'Status')
+    COLUMN (Attribute: CreatedDate, Caption: 'Created')
+    CONTROLBAR {
       ACTIONBUTTON btnNew (
         Caption: 'New Customer',
         Action: CALL MICROFLOW MyModule.ACT_Customer_New,
@@ -11306,7 +11629,7 @@ CREATE PAGE MyModule.Customer_Overview FOLDER 'Customers'
       ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
     }
   }
-}
+};
 
 ```
 
@@ -11342,12 +11665,12 @@ CREATE PAGE MyModule.Customer_Edit FOLDER 'Customers'
     TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
     COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
     CHECKBOX cbActive (Label: 'Active', Attribute: IsActive)
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 ```
 ## [Detail Page (Full Page)](#detail-page-full-page)
@@ -11364,23 +11687,23 @@ CREATE PAGE MyModule.Customer_Detail FOLDER 'Customers'
 {
   DATAVIEW dvCustomer (DataSource: $Customer) {
     LAYOUTGRID grid1 {
-      ROW rowBasic {
-        COLUMN col1 {
+      ROW {
+        COLUMN {
           TEXTBOX txtName (Label: 'Name', Attribute: Name)
           TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
         }
-        COLUMN col2 {
+        COLUMN {
           TEXTBOX txtPhone (Label: 'Phone', Attribute: Phone)
           COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
         }
       }
-      ROW rowNotes {
-        COLUMN colNotes {
+      ROW {
+        COLUMN {
           TEXTAREA txtNotes (Label: 'Notes', Attribute: Notes)
         }
       }
     }
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnEdit (
         Caption: 'Edit',
         Action: SHOW PAGE MyModule.Customer_Edit,
@@ -11389,7 +11712,7 @@ CREATE PAGE MyModule.Customer_Detail FOLDER 'Customers'
       ACTIONBUTTON btnBack (Caption: 'Back', Action: CLOSE PAGE)
     }
   }
-}
+};
 
 ```
 ## [Master-Detail Pattern](#master-detail-pattern)
@@ -11406,13 +11729,13 @@ CREATE PAGE MyModule.Product_MasterDetail FOLDER 'Products'
 )
 {
   LAYOUTGRID gridMain {
-    ROW rowContent {
-      COLUMN colList {
+    ROW {
+      COLUMN {
         DATAGRID dgProducts (DataSource: DATABASE MyModule.Product, PageSize: 15) {
-          COLUMN colName (Attribute: Name, Caption: 'Product')
-          COLUMN colPrice (Attribute: Price, Caption: 'Price', Alignment: right)
-          COLUMN colCategory (Attribute: Category, Caption: 'Category')
-          CONTROLBAR bar1 {
+          COLUMN (Attribute: Name, Caption: 'Product')
+          COLUMN (Attribute: Price, Caption: 'Price', Alignment: right)
+          COLUMN (Attribute: Category, Caption: 'Category')
+          CONTROLBAR {
             ACTIONBUTTON btnNew (
               Caption: 'New',
               Action: CALL MICROFLOW MyModule.ACT_Product_New,
@@ -11421,20 +11744,20 @@ CREATE PAGE MyModule.Product_MasterDetail FOLDER 'Products'
           }
         }
       }
-      COLUMN colDetail {
+      COLUMN {
         DATAVIEW dvDetail (DataSource: SELECTION dgProducts) {
           TEXTBOX txtName (Label: 'Name', Attribute: Name)
           TEXTBOX txtDescription (Label: 'Description', Attribute: Description)
           TEXTBOX txtPrice (Label: 'Price', Attribute: Price)
           COMBOBOX cbCategory (Label: 'Category', Attribute: Category)
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
           }
         }
       }
     }
   }
-}
+};
 
 ```
 ### [With Related Items](#with-related-items)
@@ -11449,28 +11772,28 @@ CREATE PAGE MyModule.Order_MasterDetail FOLDER 'Orders'
 )
 {
   LAYOUTGRID gridMain {
-    ROW rowContent {
-      COLUMN colOrders {
+    ROW {
+      COLUMN {
         DATAGRID dgOrders (DataSource: DATABASE MyModule.Order, PageSize: 10) {
-          COLUMN colOrderId (Attribute: OrderId, Caption: 'Order #')
-          COLUMN colDate (Attribute: OrderDate, Caption: 'Date')
-          COLUMN colStatus (Attribute: Status, Caption: 'Status')
-          COLUMN colTotal (Attribute: TotalAmount, Caption: 'Total', Alignment: right)
+          COLUMN (Attribute: OrderId, Caption: 'Order #')
+          COLUMN (Attribute: OrderDate, Caption: 'Date')
+          COLUMN (Attribute: Status, Caption: 'Status')
+          COLUMN (Attribute: TotalAmount, Caption: 'Total', Alignment: right)
         }
       }
-      COLUMN colDetail {
+      COLUMN {
         DATAVIEW dvOrder (DataSource: SELECTION dgOrders) {
           DYNAMICTEXT txtOrderInfo (Content: 'Order #{1}', Attribute: OrderId)
           TEXTBOX txtStatus (Label: 'Status', Attribute: Status)
 
           -- Order lines via association
           DATAGRID dgLines (DataSource: ASSOCIATION Order_OrderLine) {
-            COLUMN colProduct (Attribute: ProductName, Caption: 'Product')
-            COLUMN colQty (Attribute: Quantity, Caption: 'Qty', Alignment: right)
-            COLUMN colLineTotal (Attribute: LineTotal, Caption: 'Total', Alignment: right)
+            COLUMN (Attribute: ProductName, Caption: 'Product')
+            COLUMN (Attribute: Quantity, Caption: 'Qty', Alignment: right)
+            COLUMN (Attribute: LineTotal, Caption: 'Total', Alignment: right)
           }
 
-          FOOTER footer1 {
+          FOOTER {
             ACTIONBUTTON btnEdit (
               Caption: 'Edit Order',
               Action: SHOW PAGE MyModule.Order_Edit,
@@ -11481,7 +11804,7 @@ CREATE PAGE MyModule.Order_MasterDetail FOLDER 'Orders'
       }
     }
   }
-}
+};
 
 ```
 ## [CRUD Page Set](#crud-page-set)
@@ -11503,10 +11826,10 @@ CREATE PAGE HR.Employee_Overview FOLDER 'Employees'
 )
 {
   DATAGRID dgEmployees (DataSource: DATABASE HR.Employee, PageSize: 20) {
-    COLUMN colName (Attribute: FullName, Caption: 'Name')
-    COLUMN colDept (Attribute: Department, Caption: 'Department')
-    COLUMN colHireDate (Attribute: HireDate, Caption: 'Hire Date')
-    CONTROLBAR bar1 {
+    COLUMN (Attribute: FullName, Caption: 'Name')
+    COLUMN (Attribute: Department, Caption: 'Department')
+    COLUMN (Attribute: HireDate, Caption: 'Hire Date')
+    CONTROLBAR {
       ACTIONBUTTON btnNew (
         Caption: 'New Employee',
         Action: CALL MICROFLOW HR.ACT_Employee_New,
@@ -11516,7 +11839,7 @@ CREATE PAGE HR.Employee_Overview FOLDER 'Employees'
       ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
     }
   }
-}
+};
 
 -- 2. Edit page (popup)
 CREATE PAGE HR.Employee_Edit FOLDER 'Employees'
@@ -11531,12 +11854,12 @@ CREATE PAGE HR.Employee_Edit FOLDER 'Employees'
     TEXTBOX txtDept (Label: 'Department', Attribute: Department)
     DATEPICKER dpHireDate (Label: 'Hire Date', Attribute: HireDate)
     TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 -- 3. New employee microflow
 CREATE MICROFLOW HR.ACT_Employee_New
@@ -11562,18 +11885,18 @@ CREATE PAGE MyModule.Dashboard FOLDER 'Dashboard'
 )
 {
   LAYOUTGRID gridDash {
-    ROW rowTop {
-      COLUMN colRecent {
+    ROW {
+      COLUMN {
         CONTAINER cRecent (Class: 'card') {
           DYNAMICTEXT txtRecentTitle (Content: 'Recent Orders')
           DATAGRID dgRecent (DataSource: MICROFLOW MyModule.DS_RecentOrders, PageSize: 5) {
-            COLUMN colOrderId (Attribute: OrderId, Caption: 'Order #')
-            COLUMN colDate (Attribute: OrderDate, Caption: 'Date')
-            COLUMN colStatus (Attribute: Status, Caption: 'Status')
+            COLUMN (Attribute: OrderId, Caption: 'Order #')
+            COLUMN (Attribute: OrderDate, Caption: 'Date')
+            COLUMN (Attribute: Status, Caption: 'Status')
           }
         }
       }
-      COLUMN colStats {
+      COLUMN {
         CONTAINER cStats (Class: 'card') {
           DATAVIEW dvStats (DataSource: MICROFLOW MyModule.DS_GetStatistics) {
             DYNAMICTEXT txtTotal (Content: 'Total Orders: {1}', Attribute: TotalOrders)
@@ -11583,7 +11906,7 @@ CREATE PAGE MyModule.Dashboard FOLDER 'Dashboard'
       }
     }
   }
-}
+};
 
 ```
 ## [See Also](#see-also-17)
@@ -11654,6 +11977,7 @@ LIST DEMO USERS;
 Toggle the security level and demo user visibility:
 
 ```
+mdl 1;
 ALTER APP SECURITY ( SecurityLevel: PRODUCTION );
 ALTER APP SECURITY ( EnableDemoUsers: TRUE );
 ALTER APP SECURITY ( EnableDemoUsers: FALSE );
@@ -11666,6 +11990,7 @@ the app without signing in. It is a flag plus a user role, and the role carries
 the weight – **whatever it can read is public**.
 
 ```
+mdl 1;
 -- The role anonymous visitors are given. System.User is what lets an
 -- unauthenticated session exist at all.
 CREATE USER ROLE Anonymous ( ModuleRoles: (Shop.Viewer, System.User) );
@@ -11681,6 +12006,7 @@ Turning it off keeps the stored role, so switching it back on needs no `ROLE`
 clause:
 
 ```
+mdl 1;
 ALTER APP SECURITY ( EnableGuestAccess: FALSE );
 ALTER APP SECURITY ( EnableGuestAccess: TRUE );
 
@@ -11741,6 +12067,7 @@ CREATE MODULE ROLE <Module>.<Role> [DESCRIPTION '<text>'];
 Examples:
 
 ```
+mdl 1;
 CREATE MODULE ROLE Shop.Admin DESCRIPTION 'Full administrative access';
 CREATE MODULE ROLE Shop.User DESCRIPTION 'Standard customer-facing role';
 CREATE MODULE ROLE Shop.Viewer;
@@ -11777,6 +12104,7 @@ The `MANAGE ALL ROLES` option allows users with this role to assign any user rol
 Examples:
 
 ```
+mdl 1;
 -- Administrator with management rights
 CREATE USER ROLE AppAdmin ( ModuleRoles: (Shop.Admin, System.Administrator), ManageAllRoles: true );
 
@@ -11792,6 +12120,7 @@ CREATE USER ROLE AppViewer ( ModuleRoles: (Shop.Viewer) );
 Add or drop module roles from an existing user role:
 
 ```
+mdl 1;
 ALTER USER ROLE AppAdmin ADD MODULE ROLES (Reporting.Admin);
 ALTER USER ROLE AppUser DROP MODULE ROLES (Shop.Viewer);
 
@@ -11813,6 +12142,7 @@ LIST USER ROLES;
 A common pattern is to create module roles first, then compose them into user roles:
 
 ```
+mdl 1;
 -- 1. Module roles
 CREATE MODULE ROLE Shop.Admin DESCRIPTION 'Full shop access';
 CREATE MODULE ROLE Shop.User DESCRIPTION 'Standard shop access';
@@ -11918,6 +12248,7 @@ role to pick up future members automatically, give its rule a `READ *` or
 Limit which objects a role can see or modify using an XPath expression in the `WHERE` clause:
 
 ```
+mdl 1;
 -- Users can only access their own orders
 GRANT READ *, WRITE * ON ENTITY Shop.Order TO Shop.User
   WHERE [Sales.Order_Customer/Sales.Customer/Name = $currentUser];
@@ -11935,6 +12266,7 @@ Note that single quotes inside XPath expressions must be doubled (`''`), since t
 GRANT is **additive**. If a role already has an access rule on the entity, the new rights are merged in without removing existing permissions:
 
 ```
+mdl 1;
 -- Initial grant
 GRANT READ (Name, Email) ON ENTITY Shop.Customer TO Shop.User;
 
@@ -11959,6 +12291,7 @@ The constraint is part of a rule’s identity. Two GRANTs for the same role with
 which is how row-level security is normally written:
 
 ```
+mdl 1;
 -- Two separate rules for one role
 GRANT READ * ON ENTITY Shop.Order TO Shop.User WHERE [Status = 'Open'];
 GRANT READ (Total) ON ENTITY Shop.Order TO Shop.User WHERE [Owner = $currentUser];
@@ -11976,6 +12309,7 @@ updates the same rules instead of accumulating new ones.
 Each GRANT creates a separate access rule. An entity can have rules for multiple roles:
 
 ```
+mdl 1;
 GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Shop.Order TO Shop.Admin;
 GRANT READ *, WRITE * ON ENTITY Shop.Order TO Shop.User WHERE [Status = 'Open'];
 GRANT READ * ON ENTITY Shop.Order TO Shop.Viewer;
@@ -11997,6 +12331,7 @@ REVOKE <Module>.<Role> ON <Module>.<Entity> (<rights>);
 Examples:
 
 ```
+mdl 1;
 -- Remove all access for Viewer
 REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Viewer;
 
@@ -12044,6 +12379,7 @@ GRANT EXECUTE ON MICROFLOW <Module>.<Name> TO <Module>.<Role> [, ...];
 Examples:
 
 ```
+mdl 1;
 -- Single role
 GRANT EXECUTE ON MICROFLOW Shop.ACT_ProcessOrder TO Shop.Admin;
 
@@ -12076,6 +12412,7 @@ GRANT VIEW ON PAGE <Module>.<Name> TO <Module>.<Role> [, ...];
 Examples:
 
 ```
+mdl 1;
 GRANT VIEW ON PAGE Shop.Order_Overview TO Shop.User, Shop.Admin;
 GRANT VIEW ON PAGE Shop.Admin_Dashboard TO Shop.Admin;
 
@@ -12098,6 +12435,7 @@ REVOKE VIEW ON PAGE Shop.Admin_Dashboard FROM Shop.User;
 Nanoflow access uses the same syntax as microflow access:
 
 ```
+mdl 1;
 GRANT EXECUTE ON NANOFLOW Shop.NAV_Filter TO Shop.User, Shop.Admin;
 REVOKE EXECUTE ON NANOFLOW Shop.NAV_Filter FROM Shop.User;
 
@@ -12173,6 +12511,7 @@ GRANT is **additive**: if the role already has an access rule on the entity, new
 Examples:
 
 ```
+mdl 1;
 -- Full access
 GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Shop.Customer TO Shop.Admin;
 
@@ -12208,6 +12547,7 @@ For partial revoke, `REVOKE READ (x)` sets member x access to None. `REVOKE WRIT
 Examples:
 
 ```
+mdl 1;
 -- Remove all access
 REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Viewer;
 
@@ -12300,6 +12640,7 @@ REVOKE ACCESS ON PUBLISHED ODATA SERVICE <Module>.<Name> FROM <Module>.<Role> [,
 A typical security setup script:
 
 ```
+mdl 1;
 -- Module roles
 CREATE MODULE ROLE Shop.Admin DESCRIPTION 'Full access';
 CREATE MODULE ROLE Shop.User DESCRIPTION 'Standard access';
@@ -12374,6 +12715,7 @@ The keys are Studio Pro’s property names. The clause form `PASSWORD '<password
 ### [Examples](#examples-4)
 
 ```
+mdl 1;
 -- Basic demo user
 CREATE DEMO USER 'demo_admin' ( Password: 'Admin123!', UserRoles: (Administrator) );
 
@@ -12424,6 +12766,7 @@ LIST DEMO USERS;
 ## [Typical Setup](#typical-setup-1)
 
 ```
+mdl 1;
 -- Enable demo users and set prototype security
 ALTER APP SECURITY ( SecurityLevel: PROTOTYPE );
 ALTER APP SECURITY ( EnableDemoUsers: TRUE );
@@ -12539,7 +12882,7 @@ no `;` between them. The old `MENU ( … )` block still parses and warns
 ### [Full Example](#full-example)
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web
   HOME PAGE MyModule.AdminHome FOR Administrator
   LOGIN PAGE Administration.Login
@@ -12559,7 +12902,7 @@ CREATE OR REPLACE NAVIGATION Responsive
 A profile only requires a home page:
 
 ```
-CREATE OR REPLACE NAVIGATION Phone
+CREATE OR MODIFY NAVIGATION Phone
   HOME PAGE MyModule.Home_Phone;
 
 ```
@@ -12571,7 +12914,7 @@ an empty screen. This is the most common way an offline profile looks broken
 while every check passes.
 
 ```
-create or replace navigation PhoneOffline
+create or modify navigation PhoneOffline
   home page MyModule.Mobile_Dashboard
   sync (
     sync MyModule.Setting online;
@@ -12632,7 +12975,7 @@ Each navigation profile has a default home page, optional role-specific home pag
 Every profile requires a default home page. This is shown to users whose role has no specific home page assignment:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web;
 
 ```
@@ -12641,7 +12984,7 @@ CREATE OR REPLACE NAVIGATION Responsive
 Use `HOME PAGE ... FOR` to direct users to different pages based on their **user role**:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web
   HOME PAGE MyModule.AdminDashboard FOR Administrator
   HOME PAGE MyModule.ManagerDashboard FOR Manager;
@@ -12663,7 +13006,7 @@ When a user logs in, the runtime checks their roles and redirects to the most sp
 The login page is shown to unauthenticated users:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web
   LOGIN PAGE Administration.Login;
 
@@ -12673,7 +13016,7 @@ CREATE OR REPLACE NAVIGATION Responsive
 An optional custom 404 page:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web
   NOT FOUND PAGE MyModule.Custom404;
 
@@ -12705,7 +13048,7 @@ MENU '<label>' [( Icon: <icon> )] {
 ### [Complete Example](#complete-example-4)
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE Shop.Home
   LOGIN PAGE Administration.Login
   {
@@ -12770,6 +13113,7 @@ ALTER SETTINGS RUNTIME ( <Key>: <Value>, ... );
 Examples:
 
 ```
+mdl 1;
 ALTER SETTINGS RUNTIME ( AfterStartupMicroflow: 'MyModule.ACT_Startup' );
 ALTER SETTINGS RUNTIME ( HashAlgorithm: 'BCrypt' );
 ALTER SETTINGS RUNTIME ( JavaVersion: '17' );
@@ -12793,6 +13137,7 @@ ALTER SETTINGS CONFIGURATION '<Name>' ( <Key>: <Value>, ... );
 Examples:
 
 ```
+mdl 1;
 ALTER SETTINGS CONFIGURATION 'default' ( DatabaseType: 'POSTGRESQL' );
 ALTER SETTINGS CONFIGURATION 'default' ( DatabaseUrl: 'jdbc:postgresql://localhost:5432/myapp' );
 ALTER SETTINGS CONFIGURATION 'default' ( HttpPortNumber: '8080' );
@@ -12828,6 +13173,7 @@ ALTER SETTINGS LANGUAGE DROP '<code>';
 
 ```
 ```
+mdl 1;
 -- enable a language; the defaults match Studio Pro's Add Language dialog
 ALTER SETTINGS LANGUAGE ADD 'de_DE';
 
@@ -12923,6 +13269,7 @@ ALTER SETTINGS WORKFLOWS ( <Key>: <Value>, ... );
 Examples:
 
 ```
+mdl 1;
 ALTER SETTINGS WORKFLOWS ( UserEntity: 'Administration.Account' );
 ALTER SETTINGS WORKFLOWS ( DefaultTaskParallelism: '5' );
 
@@ -13126,7 +13473,7 @@ BEGIN
     };
 
   -- After both paths complete, manager reviews
-  DECISION $WorkflowContext/NeedsManagerApproval COMMENT 'Manager approval required?'
+  DECISION $WorkflowContext/NeedsManagerApproval CAPTION 'Manager approval required?'
     OUTCOMES TRUE -> {
       USER TASK ManagerReview 'Review onboarding'
         PAGE HR.ManagerReviewPage
@@ -13147,6 +13494,7 @@ starting or ending, the workflow completing, failing or being aborted. Use one t
 audit a process or react to it without adding activities to the flow.
 
 ```
+mdl 1;
 CREATE MICROFLOW HR.ACT_AuditTask (
   $WorkflowEvent: System.WorkflowEvent,
   $WorkflowRecord: System.WorkflowRecord,
@@ -13359,7 +13707,7 @@ DECISION [<name>] <expression> [COMMENT '<caption>']
 Example:
 
 ```
-DECISION $WorkflowContext/Total > 1000 COMMENT 'Order value over $1000?'
+DECISION $WorkflowContext/Total > 1000 CAPTION 'Order value over $1000?'
   OUTCOMES TRUE -> {
     USER TASK ManagerApproval 'Manager must approve'
       PAGE Shop.ApprovalPage
@@ -13979,6 +14327,7 @@ until the previous one finishes.
 ### [Examples](#examples-5)
 
 ```
+mdl 1;
 -- Every night at 04:00 in the server's timezone
 CREATE SCHEDULED EVENT Ops.NightlyCleanup (
   Microflow: Ops.SE_Cleanup,
@@ -14055,6 +14404,7 @@ Mendix stores parallelism as an expression string, so a bare integer and a quote
 one mean the same thing and an arbitrary expression is legal:
 
 ```
+mdl 1;
 CREATE TASK QUEUE Ops.OrderProcessing ( Parallelism: 3, ClusterWide: true );
 CREATE TASK QUEUE Ops.Mail;                      -- defaults: 1, per-instance
 CREATE OR MODIFY TASK QUEUE Ops.OrderProcessing ( Parallelism: '$MyModule.Workers' );
@@ -14120,6 +14470,7 @@ The image format is detected automatically from the file extension. Relative pat
 ### [Examples](#examples-6)
 
 ```
+mdl 1;
 -- Minimal: empty collection
 CREATE IMAGE COLLECTION MyModule.AppIcons;
 
@@ -14694,7 +15045,7 @@ mxcli provides a suite of cross-reference navigation commands that let you explo
 Cross-reference navigation commands require a **full catalog refresh** before use:
 
 ```
-REFRESH CATALOG FULL
+REFRESH CATALOG FULL;
 
 ```
 
@@ -14954,6 +15305,7 @@ LIST IMPACT OF Sales.Customer;
 Moving elements across modules changes their qualified name and can break references:
 
 ```
+mdl 1;
 -- Check impact before moving
 LIST IMPACT OF OldModule.Customer;
 
@@ -15018,7 +15370,12 @@ mxcli context -p app.mpr Module.MyMicroflow
 # With depth control
 mxcli context -p app.mpr Module.MyMicroflow --depth 3
 
+# MDL sources in the alpha language (mdl 0) instead of mdl 1
+mxcli context -p app.mpr Module.MyMicroflow --mdl 0
+
 ```
+
+The MDL sources are written in `mdl 1`, each headed by `mdl 1;`.
 
 The `--depth` flag controls how many levels of related elements are included in the context output. A higher depth gives a broader picture but produces more output.
 
@@ -15085,7 +15442,7 @@ excluded by default — they dominate the raw top-N but aren’t actionable.
 Every section is a thin `SELECT` over a view, so it is reproducible directly:
 
 ```
-select * from CATALOG.graph_god_nodes order by Degree desc limit 20
+select * from CATALOG.graph_god_nodes order by Degree desc limit 20;
 
 ```
 ## [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality)
@@ -15193,9 +15550,9 @@ graph survives a rebuild. To drop back, delete `.mxcli/catalog.db` and refresh.
 ### [SHOW commands](#show-commands)
 
 ```
-list communities                                   -- the community_summary listing
-list community of Sales.Order                      -- which community an asset is in
-list community members of Sales.Order              -- its co-clustered assets
+list communities;                                   -- the community_summary listing
+list community of Sales.Order;                      -- which community an asset is in
+list community members of Sales.Order;              -- its co-clustered assets
 
 ```
 ## [Two refactoring journeys](#two-refactoring-journeys)
@@ -15276,7 +15633,7 @@ The `SEARCH` command performs full-text search across all strings and source cod
 ## [Syntax](#syntax-5)
 
 ```
-SEARCH '<keyword>'
+SEARCH '<keyword>';
 
 ```
 ## [Examples](#examples-8)
@@ -15430,13 +15787,13 @@ The `REFRESH CATALOG` command builds or rebuilds the catalog index from the curr
 
 ```
 -- Basic refresh: builds metadata tables
-REFRESH CATALOG
+REFRESH CATALOG;
 
 -- Full refresh: builds metadata + cross-references + source
-REFRESH CATALOG FULL
+REFRESH CATALOG FULL;
 
 -- Force rebuild: ignores cached catalog
-REFRESH CATALOG FULL FORCE
+REFRESH CATALOG FULL FORCE;
 
 ```
 ## [Refresh Levels](#refresh-levels)
@@ -17389,6 +17746,7 @@ From the browser mode, press `x` to switch to the MDL execution view. A full-scr
 The textarea supports standard text editing. Type or paste any MDL statements:
 
 ```
+mdl 1;
 LIST MODULES;
 
 CREATE PERSISTENT ENTITY MyModule.Customer (
@@ -18733,7 +19091,8 @@ mxcli provides two diff commands for comparing MDL scripts against project state
 
 ## [mxcli diff](#mxcli-diff)
 
-Compares an MDL script against the current project state, showing what would change if the script were executed. This is a dry-run preview.
+Shows what `mxcli exec` would change in the project if it ran the script, without
+changing the project.
 
 **Usage:**
 
@@ -18741,82 +19100,92 @@ Compares an MDL script against the current project state, showing what would cha
 mxcli diff -p app.mpr changes.mdl
 
 ```
+### [How it works: diff runs exec](#how-it-works-diff-runs-exec)
 
-This shows:
+`diff` copies the project to a scratch folder, runs the script there with exec’s
+own code — the same pre-flight checks, the statements in order, under the
+script’s language header — and then compares the copy with the project unit by
+unit. What it reports is therefore exactly what `exec` would write: there is no
+second judgement to disagree with exec’s. The project itself is only read, and
+the scratch copy is deleted afterwards (it leaves out `.git`, `deployment`,
+`releases` and `node_modules`).
 
-- Elements that would be created (new entities, microflows, pages)
-- Elements that would be modified (changed attributes, altered properties)
-- Elements that would be removed (DROP statements)
-
-Use `mxcli diff` to review changes before applying them, especially when working with AI-generated scripts.
-
-### [What diff does not compare](#what-diff-does-not-compare)
-
-`diff` compares entities, view entities, enumerations, associations, microflows
-and nanoflows. Every other statement — `grant`, `create constant`, pages,
-navigation, settings — is listed under **Not compared** after the summary:
-
-```
-Summary: 0 new, 0 modified, 1 unchanged
-
-Not compared (2 statement(s)) — diff has no comparison for these,
-so they are absent from the summary above, not unchanged:
-  create constant x1
-  grant microflow access x1
+Each unit exec would add, rewrite, move or remove is shown as the `describe` of
+the document before and after. A domain model is shown per entity and
+association, module security per module role, and project security per user
+role and demo user. This covers every document kind — pages, snippets,
+layouts, navigation, settings, security, folders — and statements of every
+kind, including `grant`, `alter`, `move` and `drop`.
 
 ```
+--- Page.MyFirstModule.Home_Web (current)
++++ Page.MyFirstModule.Home_Web (script)
+@@ -1,6 +1,6 @@
+ create or modify page MyFirstModule.Home_Web (
+   Title: 'Homepage',
+-  Layout: Atlas_Core.Atlas_TopBar,
++  Layout: Atlas_Core.Atlas_Default,
+   PopupResizable: true
+ ) {
 
-Read that list. The counts describe only the statements diff understands, so a
-script made entirely of the others summarises as all zeros — which means “not
-examined”, not “no change”. Those statements were previously skipped without a
-word, so the summary looked like a clean bill of health for a script that would
-add documents (#997).
-
-### [Both sides go through one renderer](#both-sides-go-through-one-renderer)
-
-The project side and the script side are rendered by the same describer
-`describe microflow` uses, so an unmodified `describe` dump diffs as
-**unchanged**. Before this, the script side had a renderer of its own that
-covered 18 of 43 activity types and silently emitted nothing for the rest, so a
-java-action call, a `download file` or a canvas annotation appeared as a
-deletion in a script that changed nothing at all.
-
-### [`create or modify` of a flow: diff reaches exec’s verdict](#create-or-modify-of-a-flow-diff-reaches-execs-verdict)
-
-`exec` applies `create or modify microflow|nanoflow` on a flow that exists as a
-patch spliced into the stored flow, and under `mdl 1;` it refuses a change the
-splice cannot make (a change inside a loop body, a redrawn connector) rather
-than rebuild the flow. `diff` runs the same patch planning, under the script’s
-own language header, without writing, so the two agree:
-
-- a statement `exec` would refuse is listed as **Refused**, with the reason,
-  and counted as refused in the summary;
-- a statement whose patch is empty — nothing `exec` would write — is
-  **unchanged**, whatever the two renderings differ in (surrounding whitespace,
-  a bracketed `where [ … ]` against the bare form describe prints). A statement
-  that builds the flow that is stored is unchanged however that flow is
-  described: a guard clause `if … then return …; end if; return …;` that
-  describe prints as `if … then … else … end if`, a nested guard it prints with
-  a `join`/`merge` pair, a long flow it prints as crossed branches
-  (ako/mxcli#859);
-- a statement `exec` would write although its MDL renders as stored — a
-  `folder` clause naming another folder, which `exec` applies as a move — is
-  **modified**, with what `exec` would write:
-  
-  ```
-  Modified: Microflow Shop.ACT_Apply: its MDL renders as stored, but exec would write it: moved to folder 'Archive'
-  
-  ```
-
-```
-Refused: Microflow Shop.ACT_Apply: exec would refuse this statement and write nothing: the Loop at (700, 200) changes inside its body; …
-
-Summary: 0 new, 0 modified, 0 unchanged, 1 refused
+Summary: 0 new, 1 modified, 0 removed — exec would write 1 unit(s)
 
 ```
 
-Before this, `diff` compared renderings only and said “unchanged” for a
-statement `exec` then refused (ako/mxcli#839).
+A unit exec rewrites although its description does not change — a property
+`describe` does not print, a translation, a move to another folder — is listed
+on one line with what changes, so a write is never hidden behind identical MDL:
+
+```
+Modified: Page MyFirstModule.Home_Web: changed: CanvasHeight, CanvasWidth
+Modified: Microflow Shop.ACT_Apply: moved to 'Shop/Archive'
+
+```
+
+Files exec writes next to the model (Java sources, theme files) are listed as
+`New file:` / `Modified file:`.
+
+### [What diff no longer reports](#what-diff-no-longer-reports)
+
+Because the verdict is exec’s own, a script exec has already applied diffs as
+`exec would write nothing`. Before (ako/mxcli#907), diff compared the script’s
+text with the stored document’s description and reported phantom changes
+exec never makes — `Boolean` against the stored `Boolean default false`,
+`String` against `String(unlimited)`, a position, a re-laid-out flow — and
+did not compare pages, translations or layouts at all.
+
+### [Refusals and errors](#refusals-and-errors)
+
+- A script exec’s pre-flight refuses (a `check` error, an unresolved
+  reference, a name clash) is reported as **Refused**, with the same report
+  exec prints, and nothing is written. `--no-check` skips the pre-flight, as
+  it does for exec.
+- A statement exec stops at — a plain `create` of a document that exists
+  (ako/mxcli#807), a `create or modify` of a flow the splice cannot make
+  under `mdl 1;` — is reported as **Refused** with exec’s error, after the
+  changes exec makes before it. `--continue-on-error` runs every statement,
+  as it does for exec.
+- Statements that depend on earlier ones (a flow calling a microflow the
+  script creates first) are diffed like any other, because the earlier ones
+  run first (ako/mxcli#856).
+
+```
+Refused: exec would stop at this error, having written nothing: entity already exists: Shop.Order — …
+
+Summary: 0 new, 0 modified, 0 removed — exec would write nothing
+
+```
+
+`diff` always runs the script with the file engine on the scratch copy, also
+under `--mcp`: the script is executed for real, and only the copy may receive
+it. `--exec-output` prints what exec reports while it runs.
+
+For the same reason a script may not reach past the copy. A `connect` to the
+`-p` project (a headerless script may hold one, and so may a script it runs
+with `execute script`) is followed on the copy; a `connect` to any other
+project, a `sql <alias> <query>` and an `import from` are refused with an error,
+because diff has no copy of that project or database and does not run them for
+real.
 
 ## [mxcli diff-local](#mxcli-diff-local)
 
@@ -18956,7 +19325,7 @@ The `SQL CONNECT` command establishes a named connection to an external database
 ## [Syntax](#syntax-8)
 
 ```
-SQL CONNECT <driver> '<dsn>' AS <alias>
+SQL CONNECT <driver> '<dsn>' AS <alias>;
 
 ```
 
@@ -20029,7 +20398,8 @@ a longer prompt.
    template’s, with nothing to subtract. See [mxcli report](#mxcli-report) for how to
    read the six category scores.
 7. **Proposes the model in MDL and waits** — module, entities, roles, pages — before
-   building anything. Two of those choices it makes deliberately rather than by
+   building anything. Every script it writes, from the first, starts with `mdl 1;`, so
+   the project never holds a headerless (`mdl 0`) script to upgrade. Two of those choices it makes deliberately rather than by
    default: a process with steps someone has to act on becomes a **workflow** (state
    machine, user-task inbox, timers, a definition the business can read) rather than
    a status attribute and some microflows, and a total or count across records
@@ -20542,6 +20912,7 @@ mxcli docker run -p app.mpr
 The runtime uses configuration from the project’s settings. You can view and modify these with:
 
 ```
+mdl 1;
 LIST SETTINGS;
 DESCRIBE SETTINGS;
 ALTER SETTINGS CONFIGURATION 'default' ( DatabaseType: 'POSTGRESQL' );
@@ -21119,7 +21490,8 @@ MDL files (`.mdl`) receive full syntax coloring based on a TextMate grammar:
 
 | Token Type | Examples | Color Theme Category |
 | --- | --- | --- |
-| Keywords | `CREATE`, `SHOW`, `DESCRIBE`, `ALTER`, `GRANT` | `keyword` |
+| Language header | `mdl 1;` | `keyword.control.directive` |
+| Keywords | `CREATE`, `LIST`, `DESCRIBE`, `ALTER`, `GRANT` | `keyword` |
 | Types | `String`, `Integer`, `Boolean`, `DateTime` | `support.type` |
 | Strings | `'Hello World'` | `string` |
 | Numbers | `100`, `3.14` | `constant.numeric` |
@@ -21152,6 +21524,14 @@ Line 3, Col 42: mismatched input ')' expecting ','
 ```
 
 Parse diagnostics run **on every keystroke** (debounced) and do not require a Mendix project file.
+
+## [Language Version Diagnostics](#language-version-diagnostics)
+
+The `mdl 1;` header a script starts with sets the language version it is checked
+against. Deprecated spellings (`MDL-DEPR*`) and, in a script without the header,
+constructs whose meaning `mdl 1` changes (`MDL-V1-*`) are underlined as warnings.
+Hover over one for `mxcli help <code>`, and use the quick fix (Ctrl+.) to apply the
+`fmt --upgrade` rewrite. See [LSP Capabilities](#capabilities-1).
 
 ## [Semantic Diagnostics (On Save)](#semantic-diagnostics-on-save)
 
@@ -21203,9 +21583,11 @@ Press Ctrl+Space or start typing to trigger context-aware completions:
 At the start of a statement, the extension suggests top-level MDL keywords:
 
 ```
-CREATE  SHOW  DESCRIBE  ALTER  DROP  GRANT  REVOKE  SEARCH  REFRESH  ...
+CREATE  LIST  DESCRIBE  ALTER  DROP  GRANT  REVOKE  SEARCH  REFRESH  ...
 
 ```
+
+Completion offers mdl 1 spellings only: no deprecated alias is suggested.
 
 After a keyword, context-appropriate follow-up keywords appear:
 
@@ -21233,6 +21615,11 @@ CREATE PERSISTENT ENTITY ${1:Module}.${2:EntityName} (
 );
 
 ```
+
+The extension also contributes editor snippets that start a new script with the
+language header: `mdl` inserts `mdl 1;`, and `script` / `script microflow` insert a
+small mdl 1 script.
+
 ### [Reference Completion](#reference-completion)
 
 When the language server has a loaded project, qualified name references offer completions from the actual model:
@@ -21574,7 +21961,8 @@ The MDL language server supports the following LSP capabilities.
 | --- | --- | --- |
 | `textDocument/publishDiagnostics` | Parse and semantic error reporting | Push-based; parse on change, semantic on save |
 | `textDocument/completion` | Code completion | Keywords, snippets, and project references |
-| `textDocument/hover` | Hover documentation | MDL definitions for qualified names |
+| `textDocument/hover` | Hover documentation | MDL definitions for qualified names; `mxcli help <code>` on a migration warning |
+| `textDocument/codeAction` | Quick fixes | The `fmt --upgrade` rewrite for a migration warning |
 | `textDocument/definition` | Go-to-definition | Opens element source as virtual document |
 | `textDocument/documentSymbol` | Document outline | All MDL statements in the file |
 | `textDocument/foldingRange` | Code folding | Statement blocks, widget trees, comments |
@@ -21594,7 +21982,10 @@ Trigger characters: `.` and  (space).
 
 Completion items include:
 
-- **Keywords** – `CREATE`, `SHOW`, `DESCRIBE`, `ALTER`, `DROP`, `GRANT`, etc.
+- **Keywords** – `CREATE`, `LIST`, `DESCRIBE`, `ALTER`, `DROP`, `GRANT`, etc. Only mdl 1
+  spellings are offered: a keyword the grammar accepts only as a deprecated alias
+  (`SHOW_PAGE`, `DELETE_BEHAVIOR`, `DEFINE`, …) is not, and the listings follow
+  `LIST`, not `SHOW`.
 - **Keyword sequences** – `PERSISTENT ENTITY`, `MODULE ROLE`, `USER ROLE`
 - **Data types** – `String`, `Integer`, `Boolean`, `DateTime`, `Decimal`, etc.
 - **Snippets** – Multi-line templates for entity, microflow, page creation
@@ -21607,6 +21998,33 @@ Completion items include:
 - Syntax errors from the ANTLR4 lexer and parser
 - Missing tokens, unexpected tokens, mismatched brackets
 - Reported with exact line/column positions
+
+### [Language Version Diagnostics (on change)](#language-version-diagnostics-on-change)
+
+The server reads each document’s `mdl <n>;` header and reports what `mxcli check`
+reports for that version, at the token or line it is about:
+
+- **`MDL-DEPRnnn`** – a deprecated spelling (a warning; refused from the version
+  its entry names)
+- **`MDL-V1-*`** – in a script without the header, a construct whose meaning
+  changes under `mdl 1;`. Under the header it means the new thing and does not warn;
+  a construct mdl 1 refuses is a parse error there.
+- **`MDL-LANG01`** – the header names a version that is still a preview
+
+Hovering over an `MDL-DEPR*` or `MDL-V1-*` warning shows `mxcli help <code>`: the old
+and new form, and whether `fmt --upgrade` rewrites it. The quick fix (Ctrl+.) is that
+rewrite:
+
+- a deprecated spelling, or a change whose rewrite means the same under every version,
+  is rewritten where it stands;
+- any other `MDL-V1-*` change is fixed by upgrading the whole script, as
+  `mxcli fmt --upgrade --header` does: its rewrite keeps the old meaning only once
+  the header is there. It is offered only when that upgrade succeeds.
+
+A use with no mechanical rewrite gets no quick fix – it is reported, never guessed at.
+With several deprecated spellings in a file, “Rewrite all … (fmt –upgrade)” fixes
+them at once. The migration codes are listed in
+[Language versions and migration](#language-versions-and-migration).
 
 ### [Semantic Diagnostics (on save)](#semantic-diagnostics-on-save-1)
 
@@ -21624,7 +22042,6 @@ The following LSP capabilities are not currently implemented:
 | `textDocument/references` | Planned |
 | `textDocument/rename` | Planned |
 | `textDocument/formatting` | Planned |
-| `textDocument/codeAction` | Planned |
 | `textDocument/signatureHelp` | Not planned |
 | `workspace/symbol` | Not planned |
 
@@ -22032,6 +22449,7 @@ CREATE PAGE Module.CustomerOverview (
 Update `manage-security.md` with your standard role hierarchy:
 
 ```
+mdl 1;
 -- Your organization's standard roles
 CREATE MODULE ROLE Module.SystemAdmin DESCRIPTION 'Full system access';
 CREATE MODULE ROLE Module.PowerUser DESCRIPTION 'Extended user access';
@@ -23951,15 +24369,15 @@ This statement takes no parameters.
 List all modules in the project:
 
 ```
-LIST MODULES
+LIST MODULES;
 
 ```
 
 Use the result to explore a specific module:
 
 ```
-LIST MODULES
-LIST ENTITIES IN MyFirstModule
+LIST MODULES;
+LIST ENTITIES IN MyFirstModule;
 
 ```
 ## [See Also](#see-also-39)
@@ -23989,21 +24407,21 @@ The name of the module to filter by. Only entities belonging to this module are 
 List all entities in the project:
 
 ```
-LIST ENTITIES
+LIST ENTITIES;
 
 ```
 
 List entities in a specific module:
 
 ```
-LIST ENTITIES IN Sales
+LIST ENTITIES IN Sales;
 
 ```
 
 Show the definition of a single entity:
 
 ```
-DESCRIBE ENTITY Sales.Customer
+DESCRIBE ENTITY Sales.Customer;
 
 ```
 ## [See Also](#see-also-40)
@@ -24035,28 +24453,28 @@ The name of the module to filter by. Only microflows or nanoflows belonging to t
 List all microflows in the project:
 
 ```
-LIST MICROFLOWS
+LIST MICROFLOWS;
 
 ```
 
 List microflows in a specific module:
 
 ```
-LIST MICROFLOWS IN Administration
+LIST MICROFLOWS IN Administration;
 
 ```
 
 List all nanoflows:
 
 ```
-LIST NANOFLOWS
+LIST NANOFLOWS;
 
 ```
 
 List nanoflows in a specific module:
 
 ```
-LIST NANOFLOWS IN MyFirstModule
+LIST NANOFLOWS IN MyFirstModule;
 
 ```
 ## [See Also](#see-also-41)
@@ -24088,28 +24506,28 @@ The name of the module to filter by. Only pages or snippets belonging to this mo
 List all pages in the project:
 
 ```
-LIST PAGES
+LIST PAGES;
 
 ```
 
 List pages in a specific module:
 
 ```
-LIST PAGES IN Sales
+LIST PAGES IN Sales;
 
 ```
 
 List all snippets:
 
 ```
-LIST SNIPPETS
+LIST SNIPPETS;
 
 ```
 
 List snippets in a specific module:
 
 ```
-LIST SNIPPETS IN Common
+LIST SNIPPETS IN Common;
 
 ```
 ## [See Also](#see-also-42)
@@ -24139,14 +24557,14 @@ The name of the module to filter by. Only enumerations belonging to this module 
 List all enumerations in the project:
 
 ```
-LIST ENUMERATIONS
+LIST ENUMERATIONS;
 
 ```
 
 List enumerations in a specific module:
 
 ```
-LIST ENUMERATIONS IN Sales
+LIST ENUMERATIONS IN Sales;
 
 ```
 ## [See Also](#see-also-43)
@@ -24180,21 +24598,21 @@ A `Module.AssociationName` reference identifying a specific association.
 List all associations in the project:
 
 ```
-LIST ASSOCIATIONS
+LIST ASSOCIATIONS;
 
 ```
 
 List associations in a specific module:
 
 ```
-LIST ASSOCIATIONS IN Sales
+LIST ASSOCIATIONS IN Sales;
 
 ```
 
 Show a single association:
 
 ```
-DESCRIBE ASSOCIATION Sales.Order_Customer
+DESCRIBE ASSOCIATION Sales.Order_Customer;
 
 ```
 ## [See Also](#see-also-44)
@@ -24228,28 +24646,28 @@ The name of the module to filter by. Only constants belonging to this module are
 List all constants in the project:
 
 ```
-LIST CONSTANTS
+LIST CONSTANTS;
 
 ```
 
 List constants in a specific module:
 
 ```
-LIST CONSTANTS IN MyModule
+LIST CONSTANTS IN MyModule;
 
 ```
 
 Compare constant values across all configurations:
 
 ```
-LIST CONSTANT VALUES
+LIST CONSTANT VALUES;
 
 ```
 
 Compare constant values for a specific module:
 
 ```
-LIST CONSTANT VALUES IN MyModule
+LIST CONSTANT VALUES IN MyModule;
 
 ```
 ## [See Also](#see-also-45)
@@ -24279,14 +24697,14 @@ The name of the module to filter by. Only workflows belonging to this module are
 List all workflows in the project:
 
 ```
-LIST WORKFLOWS
+LIST WORKFLOWS;
 
 ```
 
 List workflows in a specific module:
 
 ```
-LIST WORKFLOWS IN Approvals
+LIST WORKFLOWS IN Approvals;
 
 ```
 ## [See Also](#see-also-46)
@@ -24316,14 +24734,14 @@ The name of the module to filter by. Only business event services belonging to t
 List all business event services:
 
 ```
-LIST BUSINESS EVENTS
+LIST BUSINESS EVENTS;
 
 ```
 
 List business event services in a specific module:
 
 ```
-LIST BUSINESS EVENTS IN OrderModule
+LIST BUSINESS EVENTS IN OrderModule;
 
 ```
 ## [See Also](#see-also-47)
@@ -24398,28 +24816,28 @@ Include system and marketplace modules in the output. Without this flag, only us
 Show module-level summary (one line per module):
 
 ```
-DESCRIBE STRUCTURE DEPTH 1
+DESCRIBE STRUCTURE DEPTH 1;
 
 ```
 
 Show default structure (documents with signatures, user modules only):
 
 ```
-DESCRIBE STRUCTURE
+DESCRIBE STRUCTURE;
 
 ```
 
 Describe structure of a single module:
 
 ```
-DESCRIBE STRUCTURE IN MyFirstModule
+DESCRIBE STRUCTURE IN MyFirstModule;
 
 ```
 
 Show full detail including all modules:
 
 ```
-DESCRIBE STRUCTURE DEPTH 3 ALL
+DESCRIBE STRUCTURE DEPTH 3 ALL;
 
 ```
 ## [See Also](#see-also-49)
@@ -24451,22 +24869,22 @@ A filter expression on widget properties. Supported filter columns include `Widg
 List all widgets (requires catalog):
 
 ```
-REFRESH CATALOG FULL
-LIST WIDGETS
+REFRESH CATALOG FULL;
+LIST WIDGETS;
 
 ```
 
 List widgets in a specific module:
 
 ```
-LIST WIDGETS IN Sales
+LIST WIDGETS IN Sales;
 
 ```
 
 Filter widgets by type:
 
 ```
-LIST WIDGETS WHERE WidgetType = 'DataGrid'
+LIST WIDGETS WHERE WidgetType = 'DataGrid';
 
 ```
 ## [See Also](#see-also-50)
@@ -24496,7 +24914,7 @@ A `Module.EntityName` reference identifying the entity to describe. Both the mod
 Describe a customer entity:
 
 ```
-DESCRIBE ENTITY Sales.Customer
+DESCRIBE ENTITY Sales.Customer;
 
 ```
 
@@ -24521,7 +24939,7 @@ INDEX (Name);
 Describe a non-persistent entity:
 
 ```
-DESCRIBE ENTITY Sales.CustomerFilter
+DESCRIBE ENTITY Sales.CustomerFilter;
 
 ```
 ## [See Also](#see-also-51)
@@ -24553,7 +24971,7 @@ A `Module.MicroflowName` or `Module.NanoflowName` reference identifying the flow
 Describe a microflow:
 
 ```
-DESCRIBE MICROFLOW Sales.ACT_CreateOrder
+DESCRIBE MICROFLOW Sales.ACT_CreateOrder;
 
 ```
 
@@ -24578,7 +24996,7 @@ END;
 Describe a nanoflow:
 
 ```
-DESCRIBE NANOFLOW MyModule.NAV_ValidateInput
+DESCRIBE NANOFLOW MyModule.NAV_ValidateInput;
 
 ```
 ## [See Also](#see-also-52)
@@ -24610,7 +25028,7 @@ A `Module.PageName` or `Module.SnippetName` reference identifying the page or sn
 Describe a page:
 
 ```
-DESCRIBE PAGE Sales.Customer_Edit
+DESCRIBE PAGE Sales.Customer_Edit;
 
 ```
 
@@ -24627,19 +25045,19 @@ CREATE PAGE Sales.Customer_Edit
   DATAVIEW dvCustomer (DataSource: $Customer) {
     TEXTBOX txtName (Label: 'Name', Attribute: Name)
     TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 ```
 
 Describe a snippet:
 
 ```
-DESCRIBE SNIPPET Common.NavigationMenu
+DESCRIBE SNIPPET Common.NavigationMenu;
 
 ```
 ## [See Also](#see-also-53)
@@ -24669,7 +25087,7 @@ A `Module.EnumerationName` reference identifying the enumeration to describe. Bo
 Describe an enumeration:
 
 ```
-DESCRIBE ENUMERATION Sales.OrderStatus
+DESCRIBE ENUMERATION Sales.OrderStatus;
 
 ```
 
@@ -24714,7 +25132,7 @@ A `Module.AssociationName` reference identifying the association to describe. Bo
 Describe an association:
 
 ```
-DESCRIBE ASSOCIATION Sales.Order_Customer
+DESCRIBE ASSOCIATION Sales.Order_Customer;
 
 ```
 
@@ -24734,7 +25152,7 @@ CREATE ASSOCIATION Sales.Order_Customer
 Describe a many-to-many association:
 
 ```
-DESCRIBE ASSOCIATION Sales.Order_Product
+DESCRIBE ASSOCIATION Sales.Order_Product;
 
 ```
 ## [See Also](#see-also-55)
@@ -24764,14 +25182,14 @@ The search term to look for. Must be enclosed in single quotes. Matches against 
 Search for a keyword:
 
 ```
-SEARCH 'Customer'
+SEARCH 'Customer';
 
 ```
 
 Search for an error message:
 
 ```
-SEARCH 'is required'
+SEARCH 'is required';
 
 ```
 
@@ -24961,6 +25379,7 @@ CREATE PERSISTENT ENTITY HR.Employee EXTENDS System.User (
 ### [File and image entities](#file-and-image-entities)
 
 ```
+mdl 1;
 CREATE PERSISTENT ENTITY Catalog.ProductPhoto EXTENDS System.Image (
     Caption: String(200),
     SortOrder: Integer DEFAULT 0
@@ -25070,7 +25489,7 @@ INDEX (OrderDate DESC);
 - Boolean attributes without an explicit `DEFAULT` automatically default to `FALSE`.
 - `AutoNumber` attributes are only valid on persistent entities.
 - The `@Position` annotation is optional and only affects the visual layout in Mendix Studio Pro.
-- Statements can be terminated with `;` or `/` (Oracle-style).
+- Every statement ends with `;`.
 
 ## [See Also](#see-also-57)
 
@@ -25141,6 +25560,7 @@ A single-quoted string to use as the entity’s documentation.
 ### [Add new attributes](#add-new-attributes)
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Notes: String(unlimited);
 
@@ -25240,6 +25660,7 @@ DROP ENTITY Sales.CustomerFilter;
 ### [Drop entity after checking impact](#drop-entity-after-checking-impact)
 
 ```
+mdl 1;
 -- Check what references this entity
 LIST IMPACT OF Sales.OldEntity;
 
@@ -25373,6 +25794,7 @@ DROP ENUMERATION Sales.OrderStatus;
 ### [Drop after checking references](#drop-after-checking-references)
 
 ```
+mdl 1;
 LIST IMPACT OF Sales.OldStatus;
 DROP ENUMERATION Sales.OldStatus;
 
@@ -25536,6 +25958,7 @@ DROP ASSOCIATION Sales.Order_Customer;
 ### [Drop after checking impact](#drop-after-checking-impact)
 
 ```
+mdl 1;
 LIST IMPACT OF Sales.OldAssociation;
 DROP ASSOCIATION Sales.OldAssociation;
 
@@ -25625,6 +26048,7 @@ CREATE CONSTANT MyModule.DatabasePassword ( Type: String, DefaultValue: '' );
 ### [Override constant per configuration](#override-constant-per-configuration)
 
 ```
+mdl 1;
 -- Create the constant
 CREATE CONSTANT MyModule.ApiBaseUrl ( Type: String, DefaultValue: 'https://api.example.com' );
 
@@ -25749,7 +26173,7 @@ RETRIEVE $List FROM $Parent/Module.AssocName;
 
 ```
 
-`RETRIEVE ... FIRST` returns a single entity. Without a range, or with `LIMIT`/`OFFSET`, it returns a list. A bare `LIMIT 1` is a list of one under `mdl 1;`; without the header it keeps its old meaning, a single entity, and warns `MDL-V1-LIMIT1`. Retrieve by association traverses an association from a known object.
+`RETRIEVE ... FIRST` returns a single entity. Without a range, or with `LIMIT`/`OFFSET`, it returns a list. A bare `LIMIT 1` is a list of one (for a script file without the header, see [Language Versions and Migration](#language-versions-and-migration)). Retrieve by association traverses an association from a known object.
 
 **Calls**
 
@@ -26112,9 +26536,10 @@ END;
 ## [Synopsis](#synopsis-30)
 
 ```
-DROP MICROFLOW module.Name
+mdl 1;
+DROP MICROFLOW module.Name;
 
-DROP NANOFLOW module.Name
+DROP NANOFLOW module.Name;
 
 ```
 ## [Description](#description-30)
@@ -26146,6 +26571,7 @@ DROP NANOFLOW Sales.NAV_ValidateOrder;
 Check impact before dropping:
 
 ```
+mdl 1;
 -- See what references this microflow
 LIST IMPACT OF Sales.ACT_CreateOrder;
 
@@ -26167,7 +26593,7 @@ CREATE [ OR MODIFY ] JAVA ACTION module.Name [ FOLDER 'folder_path' ] ( paramete
     [ EXPOSED AS 'caption' IN 'category' ]
     AS $$ java_code $$
 
-DROP JAVA ACTION module.Name
+DROP JAVA ACTION module.Name;
 
 ```
 ## [Description](#description-31)
@@ -26268,6 +26694,7 @@ DROP JAVA ACTION MyModule.JA_FormatCurrency;
 ### [Idempotent upsert with OR MODIFY](#idempotent-upsert-with-or-modify)
 
 ```
+mdl 1;
 -- Initial creation
 CREATE JAVA ACTION MyModule.JA_FormatCurrency (
     Amount: Decimal NOT NULL,
@@ -26315,7 +26742,7 @@ CREATE [ OR MODIFY ] JAVASCRIPT ACTION module.Name [ FOLDER 'folder_path' ] ( pa
     [ PLATFORM Web | Native | Hybrid | All ]
     AS $$ javascript_code $$
 
-DROP JAVASCRIPT ACTION module.Name
+DROP JAVASCRIPT ACTION module.Name;
 
 ```
 ## [Description](#description-32)
@@ -26633,10 +27060,10 @@ there, addressed by the widget’s own name:
 
 ```
 DATAGRID dgOrders (DataSource: DATABASE FROM Sales.Order, Selection: Single) {
-  COLUMN colNr (Attribute: Number, Caption: 'Order #')
-  CONTROLBAR cb {
+  COLUMN (Attribute: Number, Caption: 'Order #')
+  CONTROLBAR {
     CONTAINER cShip (Class: 'command',
-      Action: NANOFLOW Sales.ACT_Ship(Order = $dgOrders)) {
+      Action: CALL NANOFLOW Sales.ACT_Ship(Order = $dgOrders)) {
       ACTIONBUTTON btnShip (Caption: 'Ship')
     }
   }
@@ -26713,7 +27140,7 @@ CREATE PAGE MyModule.Customer_Edit
         TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
         COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
 
-        FOOTER footer1 {
+        FOOTER {
             ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
             ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
         }
@@ -26732,11 +27159,11 @@ CREATE PAGE Sales.Order_Overview FOLDER 'Orders'
 )
 {
     DATAGRID dgOrders (DataSource: DATABASE Sales.Order, PageSize: 20) {
-        COLUMN colId (Attribute: OrderId, Caption: 'Order #')
-        COLUMN colDate (Attribute: OrderDate, Caption: 'Date')
-        COLUMN colStatus (Attribute: Status, Caption: 'Status')
-        COLUMN colAmount (Attribute: TotalAmount, Caption: 'Amount', Alignment: right)
-        CONTROLBAR cb1 {
+        COLUMN (Attribute: OrderId, Caption: 'Order #')
+        COLUMN (Attribute: OrderDate, Caption: 'Date')
+        COLUMN (Attribute: Status, Caption: 'Status')
+        COLUMN (Attribute: TotalAmount, Caption: 'Amount', Alignment: right)
+        CONTROLBAR {
             ACTIONBUTTON btnNew (Caption: 'New Order', Action: SHOW PAGE Sales.Order_Edit, ButtonStyle: Primary)
         }
     }
@@ -26754,15 +27181,15 @@ CREATE PAGE MyModule.Dashboard
 )
 {
     LAYOUTGRID lgMain {
-        ROW row1 {
-            COLUMN col1 (Class: 'col-md-8') {
+        ROW {
+            COLUMN (Class: 'col-md-8') {
                 CONTAINER cntRecent (Class: 'card') {
                     LISTVIEW lvRecent (DataSource: DATABASE MyModule.RecentActivity, PageSize: 5) {
                         DYNAMICTEXT txtDesc (Attribute: Description)
                     }
                 }
             }
-            COLUMN col2 (Class: 'col-md-4') {
+            COLUMN (Class: 'col-md-4') {
                 CONTAINER cntStats (Class: 'card') {
                     DYNAMICTEXT txtCount (Attribute: TotalCount)
                 }
@@ -26802,14 +27229,14 @@ CREATE PAGE Sales.Product_Gallery
 )
 {
     LAYOUTGRID lgMain {
-        ROW row1 {
-            COLUMN col1 (Class: 'col-md-6') {
+        ROW {
+            COLUMN (Class: 'col-md-6') {
                 GALLERY galProducts (DataSource: DATABASE Sales.Product, PageSize: 12) {
                     DYNAMICTEXT txtName (Attribute: Name)
                     DYNAMICTEXT txtPrice (Attribute: Price)
                 }
             }
-            COLUMN col2 (Class: 'col-md-6') {
+            COLUMN (Class: 'col-md-6') {
                 DATAVIEW dvDetail (DataSource: SELECTION galProducts) {
                     TEXTBOX txtName (Label: 'Product', Attribute: Name)
                     TEXTBOX txtDesc (Label: 'Description', Attribute: Description)
@@ -26838,7 +27265,7 @@ CREATE PAGE MyModule.AdvancedForm
         CONTAINER cntAdvanced (Visible: '$showAdvanced') {
             TEXTAREA taNotes (Label: 'Notes', Attribute: Notes)
         }
-        FOOTER footer1 {
+        FOOTER {
             ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
             ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
         }
@@ -26978,7 +27405,7 @@ CREATE PAGE MyModule.Customer_Edit
 {
     DATAVIEW dvCustomer (DataSource: $Customer) {
         SNIPPETCALL snpAddress (Snippet: MyModule.AddressFields)
-        FOOTER footer1 {
+        FOOTER {
             ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
         }
     }
@@ -27187,6 +27614,7 @@ ALTER PAGE Sales.Order_Edit {
 Add and drop page variables:
 
 ```
+mdl 1;
 ALTER PAGE Sales.Order_Edit {
     ADD Variables $showAdvanced : Boolean = 'false';
 };
@@ -27252,9 +27680,10 @@ ALTER PAGE MyModule.Customer_Edit {
 ## [Synopsis](#synopsis-36)
 
 ```
-DROP PAGE module.Name
+mdl 1;
+DROP PAGE module.Name;
 
-DROP SNIPPET module.Name
+DROP SNIPPET module.Name;
 
 ```
 ## [Description](#description-36)
@@ -27286,6 +27715,7 @@ DROP SNIPPET MyModule.CustomerHeader;
 Check impact before dropping:
 
 ```
+mdl 1;
 -- See what references this page
 LIST IMPACT OF Sales.Order_Edit;
 
@@ -27438,7 +27868,7 @@ are alternatives for the same slot, and naming both is refused. With neither, th
 A topbar layout, which is the shape `mxcli new` scaffolds:
 
 ```
-CREATE OR REPLACE LAYOUT MyModule.App_Default
+CREATE OR MODIFY LAYOUT MyModule.App_Default
 (
     layouttype: 'Responsive',
     class: 'layout-atlas layout-atlas-responsive-topbar'
@@ -27629,6 +28059,7 @@ ALTER LAYOUT MyModule.App_Default {
 Change it, then remove it:
 
 ```
+mdl 1;
 ALTER LAYOUT MyModule.App_Default {
     SET (Content: 'Renamed') ON brand;
 };
@@ -27769,6 +28200,7 @@ CREATE MODULE ROLE Shop.Admin DESCRIPTION 'Full administrative access to shop mo
 Create multiple roles for a module:
 
 ```
+mdl 1;
 CREATE MODULE ROLE HR.Manager DESCRIPTION 'Can manage employees';
 CREATE MODULE ROLE HR.Employee DESCRIPTION 'Self-service access';
 CREATE MODULE ROLE HR.Viewer DESCRIPTION 'Read-only access';
@@ -27992,6 +28424,7 @@ Mendix inheritance is multi-table: a child adds attributes to its parent’s, an
 GRANT exactly like one of the entity’s own; `READ *` and `WRITE *` cover them too.
 
 ```
+mdl 1;
 CREATE PERSISTENT ENTITY Docs.DocumentBase (DocName: String(200));
 CREATE PERSISTENT ENTITY Docs.Contract EXTENDS Docs.DocumentBase (ContractNumber: String(50));
 
@@ -28021,6 +28454,7 @@ appear in the access rule — listing them is CE0066. Grant only the entity’s 
 members; mxcli excludes the platform ones automatically.
 
 ```
+mdl 1;
 CREATE PERSISTENT ENTITY Docs.Employee EXTENDS System.User (EmployeeNo: String(20));
 GRANT READ (EmployeeNo) ON ENTITY Docs.Employee TO Docs.Viewer;
 
@@ -28197,6 +28631,7 @@ CREATE DEMO USER 'demo_admin' ( Password: 'Admin123!', Entity: Administration.Ac
 Create multiple demo users for different roles:
 
 ```
+mdl 1;
 CREATE DEMO USER 'admin' ( Password: '1', Entity: Administration.Account, UserRoles: (AppAdmin) );
 CREATE DEMO USER 'user' ( Password: '1', Entity: Administration.Account, UserRoles: (AppUser) );
 CREATE DEMO USER 'viewer' ( Password: '1', Entity: Administration.Account, UserRoles: (AppViewer) );
@@ -28273,6 +28708,7 @@ verbatim, so without it the package’s rules reach the project unchecked
 ## [Examples](#examples-56)
 
 ```
+mdl 1;
 -- After a headless module install or update
 UPDATE SECURITY UserCommons;
 
@@ -28468,7 +28904,7 @@ dropped.
 Minimal navigation with just a home page:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
     HOME PAGE MyModule.Home_Web;
 
 ```
@@ -28476,7 +28912,7 @@ CREATE OR REPLACE NAVIGATION Responsive
 Full navigation with role-specific homes and menus:
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
     HOME PAGE MyModule.Home_Web
     HOME PAGE MyModule.AdminHome FOR Administrator
     LOGIN PAGE Administration.Login
@@ -28495,7 +28931,7 @@ CREATE OR REPLACE NAVIGATION Responsive
 Native mobile navigation:
 
 ```
-CREATE OR REPLACE NAVIGATION NativePhone
+CREATE OR MODIFY NAVIGATION NativePhone
     HOME PAGE Mobile.Dashboard
     {
         MENU ITEM 'Home' ( OnClick: SHOW PAGE Mobile.Dashboard )
@@ -28930,7 +29366,7 @@ END WORKFLOW;
 ## [Synopsis](#synopsis-48)
 
 ```
-DROP WORKFLOW module.Name
+DROP WORKFLOW module.Name;
 
 ```
 ## [Description](#description-48)
@@ -28987,6 +29423,7 @@ Mendix supports consuming and publishing OData services. Consumed services (ODat
 Bulk-create external entities from a consumed OData service’s cached `$metadata`.
 
 ```
+mdl 1;
 -- Create all entity types from the contract
 CREATE EXTERNAL ENTITIES FROM Module.Service;
 
@@ -29118,6 +29555,7 @@ These document types support moving data between Mendix entities and external da
 ## [Drop Statements](#drop-statements)
 
 ```
+mdl 1;
 DROP JSON STRUCTURE module.Name;
 DROP IMPORT MAPPING module.Name;
 DROP EXPORT MAPPING module.Name;
@@ -29228,7 +29666,7 @@ entry applied to nothing and reported nothing.
 ### [Idempotent replacement](#idempotent-replacement)
 
 ```
-CREATE OR REPLACE JSON STRUCTURE MyModule.JSON_Pet
+CREATE OR MODIFY JSON STRUCTURE MyModule.JSON_Pet
     SAMPLE '{"id": 1, "name": "Fido", "status": "available", "tags": []}';
 
 ```
@@ -29430,6 +29868,7 @@ attribute exactly like one of the entity’s own; mxcli resolves each to the ent
 that **declares** it.
 
 ```
+mdl 1;
 CREATE PERSISTENT ENTITY Docs.DocumentBase (DocName: String(200), Confidential: Boolean);
 CREATE PERSISTENT ENTITY Docs.Contract EXTENDS Docs.DocumentBase (ContractNumber: String(50));
 
@@ -29757,6 +30196,7 @@ The Mendix Agent Editor introduces four document types that must be set up in de
 ## [Drop Statements](#drop-statements-1)
 
 ```
+mdl 1;
 DROP AI MODEL module.Name;
 DROP KNOWLEDGE BASE module.Name;
 DROP CONSUMED MCP SERVICE module.Name;
@@ -29791,7 +30231,7 @@ CREATE [ OR MODIFY ] AI MODEL module.Name (
     [, Environment: 'environment' ]
 );
 
-DROP AI MODEL module.Name
+DROP AI MODEL module.Name;
 
 ```
 
@@ -29826,15 +30266,14 @@ Optional. The deployment environment. Populated by Studio Pro after key validati
 ### [Minimal model](#minimal-model)
 
 ```
+mdl 1;
 CREATE CONSTANT MyModule."ModelKey"
     ( Type: String, DefaultValue: '' );
-/
 
 CREATE AI MODEL MyModule."GPT4Model" (
     Provider: MxCloudGenAI,
     key: @MyModule.ModelKey
 );
-/
 
 ```
 ### [Model with Portal metadata (for round-trip scripts)](#model-with-portal-metadata-for-round-trip-scripts)
@@ -29847,7 +30286,6 @@ CREATE AI MODEL MyModule."ConfiguredModel" (
     KeyName: 'prod-gpt4-turbo',
     Environment: 'production'
 );
-/
 
 ```
 ### [Idempotent upsert](#idempotent-upsert)
@@ -29858,14 +30296,12 @@ CREATE OR MODIFY AI MODEL MyModule."GPT4Model" (
     key: @MyModule.ModelKey,
     DisplayName: 'GPT-4 Turbo (Updated)'
 );
-/
 
 ```
 ### [Cleanup](#cleanup-1)
 
 ```
 DROP AI MODEL MyModule.GPT4Model;
-/
 
 ```
 ## [See Also](#see-also-91)
@@ -29882,7 +30318,7 @@ CREATE [ OR MODIFY ] KNOWLEDGE BASE module.Name (
     key: @module.KeyConstant
 );
 
-DROP KNOWLEDGE BASE module.Name
+DROP KNOWLEDGE BASE module.Name;
 
 ```
 
@@ -29909,15 +30345,14 @@ A qualified reference to a String constant that holds the Portal resource key fo
 ### [Create a knowledge base](#create-a-knowledge-base)
 
 ```
+mdl 1;
 CREATE CONSTANT MyModule."KBKey"
     ( Type: String, DefaultValue: '' );
-/
 
 CREATE KNOWLEDGE BASE MyModule."ProductDocs" (
     Provider: MxCloudGenAI,
     key: @MyModule.KBKey
 );
-/
 
 ```
 ### [Idempotent upsert](#idempotent-upsert-1)
@@ -29927,7 +30362,6 @@ CREATE OR MODIFY KNOWLEDGE BASE MyModule."ProductDocs" (
     Provider: MxCloudGenAI,
     key: @MyModule.KBKey
 );
-/
 
 ```
 ## [See Also](#see-also-92)
@@ -29946,7 +30380,7 @@ CREATE [ OR MODIFY ] CONSUMED MCP SERVICE module.Name (
     [, documentation: 'description' ]
 );
 
-DROP CONSUMED MCP SERVICE module.Name
+DROP CONSUMED MCP SERVICE module.Name;
 
 ```
 
@@ -29983,7 +30417,6 @@ CREATE CONSUMED MCP SERVICE MyModule."WebSearch" (
     ConnectionTimeoutSeconds: 30,
     documentation: 'Web search MCP server for research tasks'
 );
-/
 
 ```
 ### [Idempotent upsert](#idempotent-upsert-2)
@@ -29995,7 +30428,6 @@ CREATE OR MODIFY CONSUMED MCP SERVICE MyModule."WebSearch" (
     ConnectionTimeoutSeconds: 60,
     documentation: 'Updated web search MCP service'
 );
-/
 
 ```
 ## [See Also](#see-also-93)
@@ -30032,7 +30464,7 @@ CREATE [ OR MODIFY ] AGENT module.Name (
 } ]
 ;
 
-DROP AGENT module.Name
+DROP AGENT module.Name;
 
 ```
 
@@ -30109,7 +30541,6 @@ CREATE AGENT MyModule."Summarizer" (
     SystemPrompt: 'Summarize the given text in 3 sentences.',
     UserPrompt: 'Enter text to summarize.'
 );
-/
 
 ```
 ### [Agent with variable substitution](#agent-with-variable-substitution)
@@ -30122,7 +30553,6 @@ CREATE AGENT MyModule."Translator" (
     SystemPrompt: 'Translate the text into {{Language}}.',
     UserPrompt: 'Hello world'
 );
-/
 
 ```
 ### [Agent with multi-line dollar-quoted prompt](#agent-with-multi-line-dollar-quoted-prompt)
@@ -30143,7 +30573,6 @@ Provide specific, actionable feedback.$$,
     fmt.Println("Hello, World!")
 }$$
 );
-/
 
 ```
 ### [Conversational agent with MCP service and knowledge base](#conversational-agent-with-mcp-service-and-knowledge-base)
@@ -30171,7 +30600,6 @@ CREATE AGENT MyModule."ResearchAssistant" (
         Enabled: true
     )
 };
-/
 
 ```
 ### [Idempotent upsert](#idempotent-upsert-3)
@@ -30185,7 +30613,6 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
     SystemPrompt: $$You are an updated research assistant.$$,
     UserPrompt: 'How can I help you today?'
 );
-/
 
 ```
 ## [Notes](#notes-14)
@@ -30322,7 +30749,7 @@ CREATE BUSINESS EVENT SERVICE Inventory.StockUpdates
 Replace an existing service:
 
 ```
-CREATE OR REPLACE BUSINESS EVENT SERVICE Shop.OrderEvents
+CREATE OR MODIFY BUSINESS EVENT SERVICE Shop.OrderEvents
 (
     ServiceName: 'com.example.shop.orders',
     EventNamePrefix: 'shop'
@@ -30342,7 +30769,7 @@ CREATE OR REPLACE BUSINESS EVENT SERVICE Shop.OrderEvents
 ## [Synopsis](#synopsis-58)
 
 ```
-DROP BUSINESS EVENT SERVICE module.Name
+DROP BUSINESS EVENT SERVICE module.Name;
 
 ```
 ## [Description](#description-58)
@@ -30475,6 +30902,7 @@ DROP IMAGE COLLECTION MyModule.StatusIcons;
 ### [Check references before dropping](#check-references-before-dropping)
 
 ```
+mdl 1;
 LIST REFERENCES TO MyModule.AppIcons;
 DROP IMAGE COLLECTION MyModule.AppIcons;
 
@@ -30863,6 +31291,7 @@ DESCRIBE CONTEXT OF Sales.ACT_CreateOrder DEPTH 3;
 ### [Check impact before moving an element](#check-impact-before-moving-an-element)
 
 ```
+mdl 1;
 LIST IMPACT OF Sales.CustomerEdit;
 MOVE PAGE Sales.CustomerEdit TO NewModule;
 
@@ -31492,6 +31921,7 @@ ALTER SETTINGS LANGUAGE ( DefaultLanguageCode: 'en_US' );
 ### [Enable, change and disable a language](#enable-change-and-disable-a-language)
 
 ```
+mdl 1;
 ALTER SETTINGS LANGUAGE ADD 'de_DE';
 ALTER SETTINGS LANGUAGE ADD 'ar_SD' (CheckCompleteness: true, CustomDateFormat: 'yyyy-MM-dd');
 ALTER SETTINGS LANGUAGE ADD OR MODIFY 'de_DE' (CheckCompleteness: true);
@@ -31521,6 +31951,7 @@ ALTER SETTINGS WORKFLOWS ( UserEntity: 'Administration.Account' );
 ### [Manage workflow groups](#manage-workflow-groups)
 
 ```
+mdl 1;
 ALTER SETTINGS WORKFLOWS ADD GROUP 'Approvers' (Description: 'Primary approval group');
 ALTER SETTINGS WORKFLOWS ADD GROUP 'Reviewers';
 
@@ -31629,6 +32060,7 @@ CREATE MODULE OrderManagement;
 ### [Create multiple modules for a layered architecture](#create-multiple-modules-for-a-layered-architecture)
 
 ```
+mdl 1;
 CREATE MODULE Sales;
 CREATE MODULE Inventory;
 CREATE MODULE Reporting;
@@ -31692,7 +32124,7 @@ CREATE PAGE MyModule.Order_Edit FOLDER 'Orders'
 )
 {
   CONTAINER main {}
-}
+};
 
 ```
 ## [See Also](#see-also-113)
@@ -31736,6 +32168,7 @@ DROP FOLDER 'Orders/Archive' IN MyModule;
 ### [Move contents out first, then drop](#move-contents-out-first-then-drop)
 
 ```
+mdl 1;
 -- Move all documents to module root
 MOVE MICROFLOW MyModule.ACT_Process TO MyModule;
 MOVE PAGE MyModule.ProcessDetail TO MyModule;
@@ -31838,6 +32271,7 @@ MOVE PAGE OldModule.CustomerPage TO FOLDER 'Screens' IN NewModule;
 ### [Move a mapping or JSON structure](#move-a-mapping-or-json-structure)
 
 ```
+mdl 1;
 MOVE IMPORT MAPPING MyModule.IMM_Order TO FOLDER 'Private/Import mappings';
 MOVE EXPORT MAPPING MyModule.EXM_Order TO FOLDER 'Private/Export mappings';
 MOVE JSON STRUCTURE MyModule.JSON_Order TO FOLDER 'Private/JSON structures';
@@ -31852,6 +32286,7 @@ follows the qualified name straight away. The `Folder: 'path'` property that pag
 snippets and REST/OData services also take is a deprecated alias (`MDL-DEPR105`):
 
 ```
+mdl 1;
 CREATE OR MODIFY JSON STRUCTURE MyModule.JSON_Order
   FOLDER 'Private/JSON structures'
   SAMPLE '{"id": 1}';
@@ -31878,6 +32313,7 @@ MOVE FOLDER MyModule.OldName TO FOLDER 'Archive';
 ### [Check impact before a cross-module move](#check-impact-before-a-cross-module-move)
 
 ```
+mdl 1;
 LIST IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
@@ -32164,6 +32600,16 @@ Statements for inspecting and configuring the current REPL session.
 | --- | --- |
 | [SET](#set-1) | Set a session variable |
 | [SHOW STATUS](#show-status) | Display the current connection and session information |
+
+## [The session’s language](#the-sessions-language)
+
+The REPL and `mxcli -c "…"` read input without a language header as `mdl 1`.
+`mxcli --mdl 0` (or `mxcli -c "…" --mdl 0`) starts them in `mdl 0`, and in the
+REPL an `mdl 0;` or `mdl 1;` statement switches the session for what follows;
+`describe` in the session writes the session’s language. Session statements
+are accepted here under every version, and the last statement of an input
+needs no `;`. A script file is read by its own header; see
+[Language Versions and Migration](#language-versions-and-migration).
 
 # [SET](#set-1)
 
@@ -33262,6 +33708,7 @@ compared with what was stored before the run. This matters for a “reset, then
 grant” section:
 
 ```
+mdl 1;
 revoke all on entity Shop.Order from Shop.User;
 grant read *, write * on entity Shop.Order to Shop.User;
 
@@ -33451,6 +33898,20 @@ Measured on a settled 40-statement script: 41 lines / 1,604 B became 2 lines /
    statement, so a one-liner collapsed to a count of one.
 
 `mutationTally` (`mdl/executor/mutation_tally.go`), active only inside a program run.
+
+**Every statement that writes is judged this way, not only the ones that report
+a document.** Security and settings statements report a sentence (“Granted access
+on …”, “Set project security level to …”, “Updated configuration …”) and used to
+print it unconditionally, so a settled re-run announced writes that never reached
+disk (#890). They go through `ExecContext.reportWrite`, the same rule with a
+sentence for the write and `Unchanged <subject>` for the elision. A `move` to the
+container the document already has writes nothing and says Unchanged.
+
+A run of access-rule statements is the one case where a statement cannot know at
+the time: its domain model is held until the run ends (#872). Its reports are held
+with it (`accessRuleRun`, `mdl/executor/access_rule_run.go`) and printed at the
+flush — as written, or as Unchanged when the flush was elided. A
+`revoke` + `grant` reset that nets to nothing therefore reports nothing written.
 
 # [v1 (SQLite) vs v2 (mprcontents/)](#v1-sqlite-vs-v2-mprcontents)
 
@@ -36412,7 +36873,7 @@ Everything mxcli can do, organized by use case.
 | --- | --- | --- |
 | Design properties (Atlas v3) | Requires Mendix 11.0+ | Use CSS classes on 10.x |
 | REST query parameters | Requires Mendix 11.0+ | Build query string manually on 10.x |
-| Concurrent editing | Not supported | Close Studio Pro before mxcli writes |
+| Concurrent editing | Not supported — a file-based write is refused while Studio Pro has the project open (`<project>.mpr.lock` present) | Close Studio Pro before mxcli writes, or write through it with `--mcp`; `exec --force` overrides |
 | Widget template drift | CE0463 on version mismatch | MPK augmentation handles most cases |
 | Marketplace module update | Existing modules are reported, not updated in place | Update via Studio Pro (preserves local edits and entity IDs) |
 | 47 of 52 metamodel domains | Not yet implemented | REST, OData write, etc. pending |
@@ -37380,6 +37841,7 @@ Modifies an existing entity without full replacement.
 **Example:**
 
 ```
+mdl 1;
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Phone: String(50);
 ALTER ENTITY Sales.Customer ADD ATTRIBUTE Notes: String(unlimited);
 
@@ -37400,6 +37862,7 @@ ALTER ENTITY Sales.Customer ADD INDEX (Email);
 **Example:**
 
 ```
+mdl 1;
 CREATE CONSTANT MyModule.ApiBaseUrl ( Type: String, DefaultValue: 'https://api.example.com' );
 CREATE CONSTANT MyModule.MaxRetries ( Type: Integer, DefaultValue: 3 );
 CREATE CONSTANT MyModule.EnableLogging ( Type: Boolean, DefaultValue: true );
@@ -37513,7 +37976,7 @@ AUTHENTICATION Basic, Session
 
 **Notes:**
 
-- `RETRIEVE ... FIRST` returns a single entity; `RETRIEVE ... LIMIT n [OFFSET n]` returns a list. A bare `LIMIT 1` is a list of one under `mdl 1;`, and without the header the single entity, with warning `MDL-V1-LIMIT1`.
+- `RETRIEVE ... FIRST` returns a single entity; `RETRIEVE ... LIMIT n [OFFSET n]` returns a list. A bare `LIMIT 1` is a list of one.
 - `ROLLBACK $Entity [REFRESH];` IS supported. Rolls back uncommitted changes to an object.
 
 ## [Project Organization](#project-organization)
@@ -37618,7 +38081,7 @@ END WORKFLOW;
 **Navigation Example:**
 
 ```
-CREATE OR REPLACE NAVIGATION Responsive
+CREATE OR MODIFY NAVIGATION Responsive
   HOME PAGE MyModule.Home_Web
   HOME PAGE MyModule.AdminHome FOR Administrator
   LOGIN PAGE Administration.Login
@@ -37739,12 +38202,12 @@ CREATE PAGE MyModule.Customer_Edit
     TEXTBOX txtEmail (Label: 'Email', Attribute: Email)
     COMBOBOX cbStatus (Label: 'Status', Attribute: Status)
 
-    FOOTER footer1 {
+    FOOTER {
       ACTIONBUTTON btnSave (Caption: 'Save', Action: SAVE CHANGES, ButtonStyle: Primary)
       ACTIONBUTTON btnCancel (Caption: 'Cancel', Action: CANCEL CHANGES)
     }
   }
-}
+};
 
 ```
 
@@ -37779,6 +38242,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 **Example:**
 
 ```
+mdl 1;
 ALTER PAGE Module.EditPage {
   SET (Caption: 'Save & Close', ButtonStyle: Success) ON btnSave;
   DROP txtUnused;
@@ -37881,6 +38345,7 @@ Cross-reference commands require `REFRESH CATALOG FULL` to populate reference da
 | --- | --- | --- |
 | Interactive REPL | `mxcli` | Interactive MDL shell |
 | Inline commands | `mxcli -p app.mpr -c "CMD1; CMD2; CMD3"` | Semicolons batch multiple commands |
+| Inline, keep going | `mxcli -p app.mpr -c "CMD1; CMD2" --continue-on-error` | Without it a batch stops at the first failing statement and says how many were not run; an empty `-c` is an error |
 | Execute script | `mxcli exec script.mdl -p app.mpr` | Script file |
 | Stdin piping | `echo "CMD" | mxcli -p app.mpr` | Quiet mode, pipe-friendly |
 | Check syntax | `mxcli check script.mdl` | Parse-only validation |
@@ -37895,6 +38360,7 @@ Cross-reference commands require `REFRESH CATALOG FULL` to populate reference da
 | External SQL | `mxcli sql --driver postgres --dsn '...' "SELECT 1"` | Direct database query |
 | Docker build | `mxcli docker build -p app.mpr` | Build with PAD patching |
 | Docker check | `mxcli docker check -p app.mpr` | Validate with `mx check` |
+| Version | `mxcli version` (or `--version`) | Build version and build time |
 | Diagnostics | `mxcli diag [--bundle]` | Session logs, version info |
 | Loop report | `mxcli diag loop-report [--json]` | Which mxcli commands a session actually ran, how often, how long |
 | New project | `mxcli new <name> --version X.Y.Z` | Create project from scratch with all tooling |
@@ -38057,6 +38523,7 @@ Only structural MDL keywords require quoting: `Create`, `Delete`, `Begin`, `End`
 **Quoted identifiers** escape any reserved word using double-quotes (ANSI SQL style) or backticks (MySQL style):
 
 ```
+mdl 1;
 DESCRIBE ENTITY "ComboBox"."CategoryTreeVE";
 LIST ENTITIES IN "ComboBox";
 CREATE PERSISTENT ENTITY Module.VATRate ("Create": DateTime, Rate: Decimal);
@@ -38661,11 +39128,27 @@ iterator name exists, so mxbuild rejects this with CE0109 "Undefined variable
 
 The rule keys on **scope, not on the name**. `$item` is perfectly valid in a predicate when it is the enclosing loop’s iterator, which is how the O(N) lookup idiom is written — inside `loop $item in $L`, `find($Others, Key = $item/Key)` navigates the loop’s variable and is not flagged.
 
+### [MDL-STUB01: One flow declared twice in a script set](#mdl-stub01-one-flow-declared-twice-in-a-script-set)
+
+```
+MyFirstModule.Export is declared by 2 `create or modify` statements in this script
+set: 13-actions.mdl:40 (mdl 0), 30-export.mdl:12 (mdl 1). Run in order, the first
+replaces what the last one stored, on every run; ... A self-recursive flow no
+longer needs a placeholder (#843): drop the stub and keep the real statement [MDL-STUB01]
+
+```
+
+**Cause:** A script set — `mxcli check` or `mxcli fmt --upgrade` given several files, read as one run in the order given — declares one microflow or nanoflow with two `create or modify` statements: a placeholder (“stub”) that earlier scripts can reference, followed by the real flow. Run in order, the stub replaces the stored real flow and the real statement restores it, on every run. Under different language headers it is worse: the mdl 0 stub rebuilds the real flow, the mdl 1 real statement can be refused (its change cannot be spliced into the stub), and the project keeps running the placeholder with `mx check` reporting nothing (ako/mxcli#905).
+
+**Solution:** Drop the stub. Since #843 a self-recursive flow is created in one statement, and a script that only references the flow does not need it to exist until it runs. If the stub has to stay, give both files the same header: `mxcli fmt --upgrade -w -p app.mpr` over **all** the files decides the header for the pair together — added to both or to neither — where upgrading the files one at a time could split it.
+
+It is a warning. One file checked alone is not read as a set.
+
 ### [MDL-DEPRnnn: Deprecated spelling](#mdl-deprnnn-deprecated-spelling)
 
 ```
 line 1: `create or replace …` (enumeration) is deprecated; write `create or modify …`
-— same meaning. Refused from `mdl 2`. [MDL-DEPR001]
+— same meaning. Refused from `mdl 2`. (mxcli help MDL-DEPR001) [MDL-DEPR001]
 
 ```
 
@@ -38674,6 +39157,8 @@ line 1: `create or replace …` (enumeration) is deprecated; write `create or mo
 **Solution:** Write the canonical form the warning names. The rewrite is a mechanical keyword swap, and the suggestion line says which one.
 
 `check` and `exec` report these as **warnings**. To fail the run on one, for example in CI over documentation and examples, pass `--deprecations=error`.
+
+`mxcli help <code>` prints the entry for any `MDL-DEPRnnn` or `MDL-V1-*` code, `mxcli syntax <topic> --deprecated` lists a topic’s old spellings, and [Language Versions and Migration](#language-versions-and-migration) tabulates them all.
 
 The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It holds the code, old form, canonical form, rewrite and removal version of each entry. A spelling is only registered where it means exactly the same as its canonical form. `create or replace view entity`, for example, drops and recreates the view entity, so it is not reported. Likewise `show` is reported as `MDL-DEPR002` only where its canonical form is `list` (plurals, relationship queries and the summary tables), and as `MDL-DEPR090` where it is `describe` with the same output. `show entity X` and `show version` are neither: the first has no mdl 1 statement (`MDL-V1-SHOWSUMMARY`), the second is a session command (`MDL-V1-SESSION`).
 
@@ -38702,9 +39187,11 @@ The rule keys on the operand not reducing to a variable, so it also covers a non
 -- WRONG
 $n = count(filter($Requests, $currentObject/Status = Module.ENUM_Status.Approved));
 
+```
+```
 -- RIGHT
-$Approved = filter($Requests, $currentObject/Status = Module.ENUM_Status.Approved);
-$n        = count($Approved);
+$Approved = filter $Requests where $currentObject/Status = Module.ENUM_Status.Approved;
+$n        = count $Approved;
 
 ```
 
