@@ -1,3 +1,7 @@
+## 2026-10-03 -- mxcli v0.24.0 @ 14a0a7c
+- +154 / -6 lines
+- Sections changed: [Microflow, Page, and Nanoflow Access](#microflow-page-and-nanoflow-access), [Any installed widget](#any-installed-widget), [Behaviour changes to know about](#behaviour-changes-to-know-about), [Description](#description-41), [How to migrate a script](#how-to-migrate-a-script), [Input Widgets](#input-widgets-1), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation), [Re-runnable Creates: `or modify` and `if not exists`](#re-runnable-creates-or-modify-and-if-not-exists) (+4 more)
+
 ## 2026-10-02 -- mxcli v0.24.0 @ 4ba1495
 - +973 / -486 lines
 - Sections changed: MDL sources in the alpha language (mdl 0) instead of mdl 1, Or use Cursor's Composer, Continue.dev's sidebar, etc., [Language Versions and Migration](#language-versions-and-migration), [Master-Detail Page](#master-detail-page), [Session Statements](#session-statements), [A run of grants is compared as a whole](#a-run-of-grants-is-compared-as-a-whole), [ADD Attributes](#add-attributes), [ADD/DROP EVENT HANDLER](#adddrop-event-handler) (+216 more)

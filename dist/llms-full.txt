@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.24.0 @ 4ba1495
-Generated: 2026-10-02T07:51:48Z
+Version:   mxcli v0.24.0 @ 14a0a7c
+Generated: 2026-10-03T07:29:15Z
 
 ---
 
@@ -2706,6 +2706,8 @@ This catches everything Level 1 catches, plus:
 - A plain `create` whose name already exists in the project
 
 This is the check you should run before executing a script. It’s fast (reads the project but doesn’t modify it) and catches most mistakes.
+
+`mxcli exec` runs the same semantic checks before it writes anything, and refuses a script with an error. It prints errors and warnings in full but only counts the info notes (`2 info notes not shown — run mxcli check script.mdl to see them`), so a re-run stays readable; `check` prints every note, and `exec --verbose` does too.
 
 References inside an **excluded** document (`@excluded`, or a page or snippet
 that stays excluded because its stored namesake is) are reported as
@@ -5767,7 +5769,7 @@ A plain `create` fails when the element already exists. Two guards make a script
 | `create or modify page M.P …` | created | rewritten to match the statement (identity kept) |
 | `create page if not exists M.P …` | created | **left untouched**, reported as skipped |
 
-`if not exists` goes after the kind’s keywords and before the name, on every `create` that names one element — `create microflow if not exists M.MF () …`, `create module if not exists M;`, `create user role if not exists Clerk (M.User);`, `create configuration if not exists 'Default' (…);`. It is not accepted on `annotation`, `index` (use `alter entity … add index if not exists`), `validation rule`, `navigation`, `translations` or `external entities`, which have no single named element to test. Writing `create or modify … if not exists` is refused as `MDL067`: the two guards contradict each other. `describe` never emits `if not exists`.
+`if not exists` goes after the kind’s keywords and before the name, on every `create` that names one element — `create microflow if not exists M.MF () …`, `create module if not exists M;`, `create user role if not exists Clerk (M.User);`, `create configuration if not exists 'Default' (…);`. It is not accepted on `annotation`, `index` (use `alter entity … add index if not exists`), `validation rule`, `navigation`, `translations` or `external entities`, which have no single named element to test. Writing `create or modify … if not exists` is refused as `MDL085`: the two guards contradict each other. `describe` never emits `if not exists`.
 
 ## [Case Insensitivity](#case-insensitivity)
 
@@ -6336,8 +6338,11 @@ Without the header a template literal that spans lines and has no parameters is 
 
 **Test files** (`.test.mdl`, `.test.md`) are upgraded the same way: the
 statements in their blocks are rewritten, and doc comments (`@test`,
-`@expect`, …), separators and prose are kept byte for byte. They take no
-language header yet, so `--header` adds none to them and says so.
+`@expect`, …), separators and prose are kept byte for byte. The header goes
+on the first line of a `.test.mdl` file and on the first line inside each
+`mdl-test` block of a `.test.md` file; `--header=false` declines it, as for a
+script. The runner and `check` read it, so a test body means under the header
+what it means in a script (see [Test Formats](#test-formats)).
 
 **One dialect per file.** Upgrade a headerless file before editing it; do not
 add `mdl 1` statements to an `mdl 0` file.
@@ -6416,7 +6421,7 @@ different now. Where the old output can still be asked for, the entry says how.
 | Text-template attribute binding | `{1} = $Order.Total` binds the attribute and renders with its formatting, as Studio Pro stores it, instead of `toString($Order/Total)`. Write `{1} = toString($Order/Total)` to keep the old output. Without the header the binding warns (`MDL-V1-TEMPLATEATTR`). | both | [cmd\_pages\_template\_attr.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_template_attr.go) |
 | Gallery row click | A row click on a gallery with single-click selection is refused (`MDL-WIDGET36`), with nothing written, because `mx check` fails such a page; without the header it is written and warns (`MDL-V1-GALLERYCLICK`). | `mdl 1` | [validate\_widget\_language.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/validate_widget_language.go) |
 | `create constant … private` | Was never stored. Without the header it parses, does nothing and warns (`MDL-DEPR138`); `fmt --upgrade` deletes it; `mdl 1` refuses it. Set a private value with `mxcli constant set`. | both | [visitor\_deprecations.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/visitor/visitor_deprecations.go) |
-| Commit events | A bare `commit $X;` commits *with* events, Studio Pro’s default; older releases stored it *without*. `check` names the affected flows (`MDL067`), and `fmt --upgrade -p` writes `without events` where the stored flow has it. | both | [commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/upgrade/commit_events.go), [flow\_commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/flow_commit_events.go) |
+| Commit events | A bare `commit $X;` commits *with* events, Studio Pro’s default; older releases stored it *without*. `check` names the affected flows (`MDL067`; `exec -p` leaves out a flow the project already stores with events), and `fmt --upgrade -p` writes `without events` where the stored flow has it. | both | [commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/upgrade/commit_events.go), [flow\_commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/flow_commit_events.go) |
 | `date` as a type | Mendix has no date-only type: `date` is an alias of `DateTime` and builds exactly what `DateTime` builds. Without the header it warns (`MDL-DEPR160`); `fmt --upgrade` writes `DateTime`; `mdl 1` refuses `date`. | both | [deprecation.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/deprecation/deprecation.go) |
 
 ## [Reference](#reference)
@@ -6457,7 +6462,7 @@ refuse the spelling; until then it only warns.
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
-84 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+85 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 | --- | --- | --- | --- | --- |
@@ -6536,6 +6541,7 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR148` | `alter workflow M.W insert boundary event on X <event>` | `alter workflow M.W { insert into X { boundary event <event> } }` | yes: `insert boundary event on X e` as `insert into X { boundary event e }` | mdl 2 |
 | `MDL-DEPR149` | `alter workflow M.W drop outcome 'N' on X / drop condition 'V' on X / drop path 'Path n' on X / drop boundary event on X` | `alter workflow M.W { drop X outcome 'N'; drop X outcome true; drop X path n; drop X boundary event; }` | yes: member after the activity it belongs to: `drop X outcome 'N'`, `drop X path n`, `drop X boundary event` | mdl 2 |
 | `MDL-DEPR160` | `date` | `DateTime` | yes: type `date` as the type it was stored as: `DateTime` | mdl 1 |
+| `MDL-DEPR161` | `create regular expression M.R ( …, ExportLevel: Public )` | `create regular expression M.R ( …, ExportLevel: API )` | yes: regular expression’s export level value `Public` as `API` | mdl 2 |
 | `MDL-DEPR540` | `on error [without rollback] { … }` | `on error [without rollback] begin … end error` | yes: `{` becomes `begin` and the closing `}` becomes `end error` | mdl 2 |
 | `MDL-DEPR550` | `rest client / rest clients` | `consumed rest service / consumed rest services` | yes: document type name: `rest client` becomes `consumed rest service`, `rest clients` `consumed rest services` | mdl 2 |
 | `MDL-DEPR551` | `odata client / odata clients` | `consumed odata service / consumed odata services` | yes: document type name: `odata client` becomes `consumed odata service`, `odata clients` `consumed odata services` | mdl 2 |
@@ -10120,6 +10126,23 @@ TEXTBOX txtStatus (Label: 'Status', Attribute: Status, Editable: $currentObject/
 
 Static values: `Editable: Never`, `Editable: Always`.
 
+### [Pluggable Widgets](#pluggable-widgets)
+
+A pluggable widget takes `Visible:` in all the forms above, and `Editable:` when
+its widget package declares the Editability system property —
+`<systemProperty key="Editability"/>` in its widget XML. The combo box declares it:
+
+```
+COMBOBOX cmbStatus (Label: 'Status', Attribute: Status, Editable: Never, Visible: $currentObject/Title != empty)
+
+```
+
+Visibility is available on every pluggable widget, as in Studio Pro: a declared
+`<systemProperty key="Visibility"/>` only places the setting in the widget’s own
+tabs, and a data grid, which declares none, still takes `Visible:`. A widget whose
+package does not declare Editability (a data grid, an image) has no such setting
+in Studio Pro either, so `mxcli check` refuses `Editable:` on it as `MDL-WIDGET41`.
+
 ## [Layouts](#layouts)
 
 Layouts are referenced by their qualified name (`Module.LayoutName`). Common Atlas layouts include:
@@ -10645,6 +10668,31 @@ All input widgets share common properties:
 | `Editable` | Editability mode | `Editable: ReadOnly` |
 | `Visible` | Visibility expression | `Visible: '$showField'` |
 
+Each input widget takes only some attribute types. Measured with mxbuild 11.14.0,
+every other pairing is CE2421 (“Only attributes of type … are allowed here.”):
+
+| Widget | Attribute types |
+| --- | --- |
+| `TEXTBOX` | String, Integer, Long, Decimal, AutoNumber (and Hashed string) |
+| `TEXTAREA` | String |
+| `DATEPICKER` | DateTime |
+| `CHECKBOX` | Boolean |
+| `RADIOBUTTONS` | Boolean, Enumeration |
+| `DROPDOWN` | Enumeration |
+
+With `-p`, `check --references` reports a mismatch as **MDL-WIDGET39**, judging the
+attribute at the end of an association path and on the generalization that declares
+it. It also reports a bare association bound where an attribute belongs
+(`Attribute: Order_Customer`), which mxbuild answers with CE1613 and which stops
+`mx check` from reporting anything else. An enumeration takes `RADIOBUTTONS` or
+`COMBOBOX`.
+
+The classic drop-down (`DROPDOWN`, stored as `Forms$DropDown`) is not supported by
+the React client: on a project whose Web UI setting is `OptimizedClient: Yes`
+(`show settings`), mxbuild reports CE0582 and `check --references` reports
+**MDL-WIDGET40**. Use `COMBOBOX` over the same attribute. Under `No` and
+`MigrationMode` the drop-down builds, and nothing is reported.
+
 ### [TEXTBOX](#textbox)
 
 Single-line text input. The most common input widget:
@@ -10893,6 +10941,20 @@ list in mxcli:
   spelling, exactly as `DESCRIBE WIDGET` reports them.
 - **The body containers** `attribute` (an object list, one entry per repetition)
   and `tagcontentcontainer` (a child slot, holding widgets).
+
+A property whose type in the widget’s definition is **Expression** — an HTML
+element attribute’s `attributeValueExpression`, a chart series’
+`dynamicBarColor` — takes a Mendix expression written as-is:
+
+```
+attribute a1 (attributeName: 'data-hot', attributeValueType: 'expression',
+              attributeValueExpression: if $currentObject/Hot then 'hot' else 'cold')
+
+```
+
+The same unquoted expression on a property of any other type (a text template,
+a plain value) is refused by `check` as **MDL-WIDGET42** rather than written
+empty.
 
 ### [Finding the names](#finding-the-names)
 
@@ -12365,7 +12427,9 @@ DESCRIBE SECURITY MATRIX IN Shop;
 
 # [Microflow, Page, and Nanoflow Access](#microflow-page-and-nanoflow-access)
 
-Document-level access controls which module roles can execute microflows and nanoflows or view pages. Without an explicit grant, a document is inaccessible to all roles.
+Document-level access controls which module roles can execute microflows and nanoflows or view pages. GRANT adds roles and REVOKE removes them; neither replaces the list.
+
+A new document’s starting access depends on its module. In a module with no module roles, mxcli creates `<Module>.User` and grants every new page, microflow and nanoflow to it (`exec` prints `access: granted to auto-created role <Module>.User …` under the create), and a later GRANT adds to that rather than replacing it — revoke `<Module>.User` to narrow access. In a module with roles of its own, a new document has no allowed roles until you grant some. See [GRANT](#default-access-of-a-new-page-microflow-or-nanoflow).
 
 ## [Microflow Access](#microflow-access)
 
@@ -18090,6 +18154,14 @@ silent:
 - **One `@test` per block.** Because the `/` is what ends a test, omitting it
   merges two tests into one. That is refused by name rather than resolved, since
   either resolution runs one of the two and drops the other.
+- **A file may start with the language header** `mdl 1;`, before any doc
+  comment, exactly as a script does ([Language Versions](#language-versions-and-migration)).
+  Every test body in the file is then read as mdl 1 by `mxcli test`, `mxcli check` and the editor; without it the bodies are mdl 0. The `/` lines stay:
+  they are the test format’s separators, not MDL terminators. In a `.test.md`
+  file the header is the first line inside each `mdl-test` block, and the
+  blocks of one file must agree. A suite runs as one script, so `mxcli test`
+  refuses files on different versions — `mxcli fmt --upgrade -w` adds the
+  header to the rest.
 
 ## [`.test.md`](#testmd)
 
@@ -28334,6 +28406,25 @@ The page access form grants view permission on a page to one or more module role
 ### [Nanoflow Access](#nanoflow-access-2)
 
 The nanoflow access form grants execute permission on a nanoflow to one or more module roles.
+
+### [Default access of a new page, microflow or nanoflow](#default-access-of-a-new-page-microflow-or-nanoflow)
+
+Document grants are **additive** too: a GRANT adds roles to the document’s allowed roles and never removes one. That matters because of what a newly created document starts with:
+
+- In a module that has **no module roles**, mxcli creates a module role `<Module>.User` (description “Auto-created default role for mxcli document access”) and grants every new page, microflow and nanoflow to it, so the document is not unreachable. `exec` says so under the create:
+  
+  ```
+  Created page Shop.Stub
+    access: granted to auto-created role Shop.User (the module has no other roles; a later grant adds to it — revoke it to narrow access)
+  
+  ```
+  
+  New documents keep going to `<Module>.User` for as long as it is the module’s only role.
+- In a module that **has module roles of its own**, a new document gets **no** allowed roles. Grant them in the same script.
+
+So `grant view on page Shop.Stub to Shop.Admin;` on a page that was created while `Shop.User` was the only role leaves it open to `Shop.User` **and** `Shop.Admin` — every user role mapped to `Shop.User` can still open it. To restrict it, revoke the default: `revoke view on page Shop.Stub from Shop.User;`.
+
+A rewrite keeps the stored roles: `create or modify`, and `drop` followed by `create` of the same name **in one run**. A `create` in a *later* run than the `drop` is a new document and starts again from the defaults above — in a module with its own roles, with no access, which MxBuild reports as CE0106 when a page, nanoflow or navigation uses the flow. `mxcli check -p` reports that case as [MDL-SEC21](#mdl-sec21-a-used-flow-left-without-access-ce0106).
 
 ## [Parameters](#parameters-43)
 
@@ -39143,6 +39234,63 @@ longer needs a placeholder (#843): drop the stub and keep the real statement [MD
 **Solution:** Drop the stub. Since #843 a self-recursive flow is created in one statement, and a script that only references the flow does not need it to exist until it runs. If the stub has to stay, give both files the same header: `mxcli fmt --upgrade -w -p app.mpr` over **all** the files decides the header for the pair together — added to both or to neither — where upgrading the files one at a time could split it.
 
 It is a warning. One file checked alone is not read as a set.
+
+### [MDL-SEC21: A used flow left without access (CE0106)](#mdl-sec21-a-used-flow-left-without-access-ce0106)
+
+```
+✗ microflow Shop.MF_Button has no allowed role but is used from page Shop.P_Main —
+MxBuild reports CE0106 "At least one allowed role must be selected if the microflow
+is used from navigation, a page, a nanoflow or a published service" at security
+level Production. This script creates it as a NEW microflow, ... [MDL-SEC21]
+  → add grant execute on microflow Shop.MF_Button to Shop.Admin; — or, to rebuild a
+    flow that already exists without losing its access, use `create or modify
+    microflow` instead of drop + create
+
+```
+
+**Cause:** With a project (`check -p`), the script leaves a microflow or nanoflow with no allowed module role while a page, snippet, layout, nanoflow, menu document or navigation profile names it. Measured on Mendix 11.14, MxBuild reports CE0106 for each of those uses (even from an unused snippet, menu document or nanoflow), but not for a published REST operation, a microflow called only from another microflow, or an excluded page. The usual way to get there is `drop microflow` in one run and `create microflow` in a later one: the later create is a *new* flow, and a new document in a module that has module roles of its own gets no access. Dropping and recreating in the same run, or using `create or modify`, keeps the stored roles.
+
+**Solution:** Add the `grant execute on microflow …` (or `… on nanoflow …`) the suggestion names, or rebuild the flow with `create or modify` instead of dropping it.
+
+It is an **error at security level Prototype or Production** (the stored level, or the one the script sets) and a warning at Off, where MxBuild does not check it. Only what the script changes is reported: a flow that already had the problem before the script, and that the script does not touch, is left to `mxcli docker check`.
+
+### [MDL-DUPDEF: Element defined twice in one script](#mdl-dupdef-element-defined-twice-in-one-script)
+
+```
+microflow already defined in this script: Sales.ACT_Submit (first defined at
+statement 4) [MDL-DUPDEF]
+
+```
+
+**Cause:** Two plain `create` statements in one script make the same element — same kind, same qualified name — and nothing between them drops or renames the first. `exec` would create the first and refuse the second as “already exists”, after everything before it had been written.
+
+**Solution:** Keep one of the two. To change an element the script already made, use `create or modify` (it is never reported), or `drop` it before re-creating it. A `rename` frees the old name and takes the new one, so `create` after `rename … to New` is reported for `New` and not for the old name.
+
+`check --references` (`-p app.mpr`) adds the project side: a plain `create` of an element the project already has is reported as “already exists in project”, for every create `exec` refuses that way — documents, module and user roles, demo users, configurations.
+
+### [MDL-DUPNAME: Name already taken in the module](#mdl-dupname-name-already-taken-in-the-module)
+
+```
+cannot create nanoflow Sales.ACT_Submit: microflow Sales.ACT_Submit already has
+that name — microflows, nanoflows and rules share one name space per module,
+whatever their folder, and names compare case-insensitively (Mendix CE0122)
+(statement 3) [MDL-DUPNAME]
+
+```
+
+**Cause:** The statement gives an element a name Mendix will not let it share. Measured with `mx check`, three groups of kinds each share one name space per module:
+
+| Kinds | Mendix error |
+| --- | --- |
+| microflows, nanoflows, rules | CE0122 “Duplicate document name” |
+| pages, snippets, layouts | CE0122 “Duplicate document name” |
+| entities (incl. view and external), associations, enumerations | CE0065 “Entities, associations and enumerations cannot share names” |
+
+Every other kind is a name space of its own. A microflow may share its name with a page, constant, enumeration, java action or workflow. Folders do not separate names, and names compare **case-insensitively**: `Sales.act_submit` next to microflow `Sales.ACT_Submit` is a duplicate of the same kind (ako/mxcli#806).
+
+`check` reports the clash between two statements of one script. `check --references` and `exec`’s pre-flight also report a statement that clashes with what the project already holds — a `create`, a `rename … to` or a cross-module `move … to Module`. `exec` refuses it before writing anything. The model it would write does not build, so this holds under every language version, `create or modify` included. `create or modify` of the element that already has the name, spelled as it is stored, still modifies it.
+
+**Solution:** Pick another name, or rename the other element first. To change an existing element, spell its name as it is stored. A different folder does not help.
 
 ### [MDL-DEPRnnn: Deprecated spelling](#mdl-deprnnn-deprecated-spelling)
 
