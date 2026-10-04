@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.24.0 @ 14a0a7c
-Generated: 2026-10-03T07:29:15Z
+Version:   mxcli v0.24.0 @ 2233ce1
+Generated: 2026-10-04T07:41:14Z
 
 ---
 
@@ -3717,7 +3717,8 @@ You can create your own skills to teach the AI about your project’s patterns a
 ```
 
 `mxcli init --sync-skills` only rewrites the skills mxcli itself ships, so your
-own directories survive every upgrade.
+own directories survive every upgrade. It also refreshes the bundled lint rules
+and the mxcli section of `CLAUDE.md` — see [Syncing with Updates](#syncing-with-updates).
 
 A custom skill is a markdown document with two lines of frontmatter. Write the
 body the way you would explain something to a new team member, and write the
@@ -8765,6 +8766,7 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'msg';` | – |
 | DB query | `$Var = EXECUTE DATABASE QUERY Module.Conn.Query;` | Result set |
 | Assignment | `SET $Var = expression;` | – |
+| Change list | `ADD $Item TO $List;` / `REMOVE $Item FROM $List;` / `CLEAR $List;` / `SET $List = $Other;` | – |
 
 # [Control Flow](#control-flow)
 
@@ -15985,27 +15987,61 @@ JOIN CATALOG.ENTITIES e ON a.EntityId = e.Id
 WHERE e.QualifiedName = 'Sales.Customer';
 
 ```
+### [CATALOG.MODULES](#catalogmodules)
+
+One row per module, including System and Marketplace modules.
+
+| Column | Description |
+| --- | --- |
+| `Id` | Module UUID |
+| `Name` | Module name |
+| `Source` | `""` for your own modules and System; `"Marketplace v1.2.3"` for a downloaded module |
+| `AppStoreVersion` | Marketplace version, when downloaded |
+| `Description` | Always empty: a Mendix module has no documentation property |
+| `DomainModelDocumentation` | The module’s domain model’s documentation — the module-level text an author can write |
+
+```
+SELECT Name FROM CATALOG.MODULES
+WHERE Source = '' AND COALESCE(DomainModelDocumentation, '') = '';
+
+```
 ### [CATALOG.ASSOCIATIONS](#catalogassociations)
 
-Information about entity associations.
+Information about entity associations, same-module and cross-module.
 
 | Column | Description |
 | --- | --- |
 | `Id` | Unique identifier |
 | `Name` | Association name |
-| `ParentEntity` | Parent (FROM) entity qualified name |
-| `ChildEntity` | Child (TO) entity qualified name |
-| `AssociationType` | Reference or ReferenceSet |
+| `QualifiedName` | `Module.Association` |
+| `ModuleName` | Module that owns the association |
+| `FromEntity` | FROM entity qualified name (the one that owns the reference) |
+| `ToEntity` | TO entity qualified name; for a cross-module association, the other module’s entity |
+| `AssociationType` | `Reference` or `ReferenceSet` |
+| `Owner` | `Default` or `Both` |
+| `StorageFormat` | `Column` or `Table` |
+| `Description` | Documentation |
+| `ToDeleteBehavior` | Delete behaviour of the TO end — Mendix’s `ChildDeleteBehavior`, the end MDL’s `on delete` clause sets: `DeleteMeButKeepReferences` (default), `DeleteMeAndReferences`, `DeleteMeIfNoReferences` |
+| `FromDeleteBehavior` | Delete behaviour of the FROM end — Mendix’s `ParentDeleteBehavior` (Studio Pro only) |
+| `ToDeleteErrorMessage` / `FromDeleteErrorMessage` | Message shown when a `DeleteMeIfNoReferences` delete on that end is refused |
+
+Mendix’s `Parent`/`Child` pointer names are inverted relative to MDL’s FROM/TO:
+`ParentPointer` is the FROM entity and `ChildPointer` the TO entity, so the
+`Child*` delete behaviour belongs to the TO end. Mendix always stores both ends,
+so an explicitly set behaviour is one that is not the default. System module
+associations have no stored delete behaviour and read as `''`.
 
 ```
-SELECT Name, ParentEntity, ChildEntity, AssociationType
+SELECT QualifiedName, ToDeleteBehavior, FromDeleteBehavior
 FROM CATALOG.ASSOCIATIONS
-WHERE ParentEntity LIKE '%Order%' OR ChildEntity LIKE '%Order%';
+WHERE ToDeleteBehavior <> 'DeleteMeButKeepReferences'
+   OR FromDeleteBehavior <> 'DeleteMeButKeepReferences';
 
 ```
 ### [CATALOG.MICROFLOWS](#catalogmicroflows)
 
-Information about microflows and nanoflows.
+Information about microflows, nanoflows and rules (`CATALOG.NANOFLOWS` is the
+nanoflow subset).
 
 | Column | Description |
 | --- | --- |
@@ -16013,16 +16049,61 @@ Information about microflows and nanoflows.
 | `Name` | Microflow name |
 | `ModuleName` | Module containing the microflow |
 | `QualifiedName` | Full qualified name |
+| `Folder` | Folder path within the module |
+| `MicroflowType` | `MICROFLOW`, `NANOFLOW` or `RULE` |
 | `ReturnType` | Return type of the microflow |
 | `Description` | Documentation text |
-| `Parameters` | Parameter information |
-| `ObjectUsage` | Entities used in the microflow |
+| `ParameterCount` | Number of parameters |
+| `ActivityCount` | Activities at the top level of the flow, excluding start/end events and merges. A loop counts as one |
+| `TotalActivityCount` | `ActivityCount` plus every activity inside a loop, at any depth |
+| `Complexity` | McCabe cyclomatic complexity |
 
 ```
-SELECT Name, ReturnType, Description
+SELECT Name, ReturnType, ActivityCount, TotalActivityCount
 FROM CATALOG.MICROFLOWS
 WHERE ModuleName = 'Sales'
 ORDER BY Name;
+
+```
+### [CATALOG.ACTIVITIES](#catalogactivities)
+
+One row per object in a microflow, nanoflow or rule body — activities, splits,
+merges, events, loops and annotations. Populated by `REFRESH CATALOG FULL`.
+
+**Loop bodies are included.** The objects inside a loop, at any depth, are rows
+too, with `ParentLoopId` naming the loop. Earlier releases left them out; a
+query written then that should keep its old result filters on
+`ParentLoopId = ''`.
+
+| Column | Description |
+| --- | --- |
+| `Id` | The object’s ID |
+| `MicroflowId`, `MicroflowQualifiedName`, `ModuleName` | The flow it belongs to |
+| `Sequence` | Pre-order position in the flow: a loop, then its body, then the loop’s next sibling |
+| `ParentLoopId` | `Id` of the enclosing loop; empty at the top level |
+| `LoopDepth` | Number of enclosing loops; 0 at the top level |
+| `ActivityType` | `ActionActivity`, `ExclusiveSplit`, `InheritanceSplit`, `ExclusiveMerge`, `LoopedActivity`, `Annotation`, `StartEvent`, `EndEvent`, … |
+| `ActionType` | The action of an `ActionActivity`, e.g. `RetrieveAction`, `JavaActionCallAction`, `WebServiceCallAction` |
+| `Name` | `ActionType` for an action activity, otherwise `ActivityType` |
+| `Caption` | The stored caption: an activity’s, a split’s, or an annotation’s text. Empty for events, merges and loops. With `AutoGenerateCaption` it holds Studio Pro’s stored placeholder (often `Activity`) |
+| `AutoGenerateCaption` | 1 when Studio Pro generates the activity’s caption |
+| `Description` | Documentation of an action activity, split or loop |
+| `EntityRef` | Entity of a create object or a database retrieve |
+| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action |
+| `UseRequestTimeout`, `TimeoutExpression` | “Use a timeout” and its seconds, for a REST or web service call |
+| `ConditionExpression` | An exclusive split’s expression |
+| `ConditionRule` | The rule a rule-based split calls |
+| `ErrorHandlingType` | `Rollback`, `Custom`, `CustomWithoutRollBack` (capital B), `Continue` or `Abort` — read from the action for an action activity |
+| `LogLevel`, `LogNodeExpression`, `LogMessage` | A log message action’s level, node expression (`'MyNode'` or `getKey(…)`) and template |
+| `CommitType` | Create/change object: `Yes`, `YesWithoutEvents` or `No` |
+| `WithEvents` | 1 for a commit with events, and a create/change with `CommitType` `Yes` |
+| `RetrieveSource` | `database` or `association` |
+
+```
+-- Database retrieves inside a loop (N+1 queries)
+SELECT MicroflowQualifiedName, EntityRef, LoopDepth
+FROM CATALOG.ACTIVITIES
+WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLoopId <> '';
 
 ```
 ### [CATALOG.PAGES](#catalogpages)
@@ -16033,14 +16114,19 @@ Information about pages and their properties.
 | --- | --- |
 | `Id` | Unique identifier |
 | `Name` | Page name |
-| `ModuleName` | Module containing the page |
 | `QualifiedName` | Full qualified name |
+| `ModuleName` | Module containing the page |
+| `Folder` | Folder path within the module |
+| `Title` | Page title in the project’s default language (else en\_US, else the lowest-sorted non-empty language). Every translation is in `CATALOG.STRINGS` (`StringContext = 'Forms$Page.Title'`) |
 | `URL` | Page URL if configured |
-| `DataSource` | Primary data source |
-| `WidgetTypes` | Types of widgets used |
+| `LayoutRef` | Qualified name of the layout (full build only) |
+| `Description` | Documentation text |
+| `ParameterCount` | Number of page parameters |
+| `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
+| `Excluded` | 1 when the page is excluded from the project |
 
 ```
-SELECT Name, URL, DataSource
+SELECT Name, Title, URL
 FROM CATALOG.PAGES
 WHERE ModuleName = 'Sales'
 ORDER BY Name;
@@ -16050,6 +16136,38 @@ ORDER BY Name;
 Page **templates** are not pages and are not in this table — see
 `CATALOG.PAGE_TEMPLATES`.
 
+### [CATALOG.WIDGETS](#catalogwidgets)
+
+One row per widget **instance** on a page or snippet. Full build only
+(`refresh catalog full`); a fast build leaves the table empty.
+
+| Column | Description |
+| --- | --- |
+| `Id` | The widget’s element ID |
+| `Name` | Widget name |
+| `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget’s id (`com.mendix.widget.web.datagrid.Datagrid`) |
+| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page or snippet holding the widget; `ContainerType` is `PAGE` or `SNIPPET` |
+| `ModuleName`, `Folder` | The container’s module and folder |
+| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget’s own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
+| `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget’s properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
+| `Depth` | Number of ancestors in this table: 0 at the root. A list view **template** is a row of its own, so its widgets are two below the list view. A snippet call is not entered: a snippet’s widgets have their own rows, depth 0 at the snippet root |
+| `Class`, `Style`, `DynamicClasses` | The widget’s Appearance |
+| `ActionType` | Stored type of the primary action — `Action` (buttons), else `OnClickAction` (containers), else `ClickAction` (list views, images): `Forms$DeleteClientAction`, `Forms$MicroflowAction`, `Forms$CallNanoflowClientAction`, `Forms$FormAction` (show page), `Forms$NoAction`, …; empty for a widget without one. A pluggable widget’s actions are not read |
+| `HasConfirmation` | 1 when the primary action asks for confirmation. Only microflow, nanoflow and workflow calls have that setting; a delete action never does |
+
+```
+-- Widgets nested more than five deep, deepest first
+SELECT ContainerQualifiedName, Name, WidgetType, Depth
+FROM CATALOG.WIDGETS
+WHERE Depth > 5
+ORDER BY Depth DESC;
+
+-- Buttons that delete without going through a flow
+SELECT ContainerQualifiedName, Name
+FROM CATALOG.WIDGETS
+WHERE ActionType = 'Forms$DeleteClientAction';
+
+```
 ### [CATALOG.PAGE\_TEMPLATES](#catalogpage_templates)
 
 The starting points Studio Pro’s “new page” dialog offers (`Forms$PageTemplate`).
@@ -16069,6 +16187,29 @@ There is no `DESCRIBE PAGE TEMPLATE`, so a template is indexed but not
 describable — tools that walk a module report it as *unknown*, never as
 unchanged.
 
+### [CATALOG.LAYOUTS](#cataloglayouts)
+
+Page layouts (`Forms$Layout`), including those in Marketplace modules such as
+Atlas\_Core.
+
+| Column | Description |
+| --- | --- |
+| `Id` | Unique identifier |
+| `Name` | Layout name |
+| `QualifiedName` | Full qualified name |
+| `ModuleName` | Module containing the layout |
+| `Folder` | Folder path within the module |
+| `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
+| `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
+| `Description` | Documentation text |
+
+```
+-- pages on a native layout (needs a full build for LayoutRef)
+SELECT p.QualifiedName
+FROM CATALOG.PAGES p JOIN CATALOG.LAYOUTS l ON l.QualifiedName = p.LayoutRef
+WHERE l.Platform = 'Native';
+
+```
 ### [CATALOG.ACCESS\_RULES](#catalogaccess_rules)
 
 Information about entity access rules (available after full refresh).
@@ -17030,6 +17171,12 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **MDL006** | Empty containers – Detects container widgets with no children |
 | **MDL007** | Page navigation security – Checks that pages called from microflows have appropriate access rules |
 
+## [Quality Rules](#quality-rules)
+
+| Rule | Description |
+| --- | --- |
+| **QUAL006** | Required caption without the default language – A tab page caption (page, snippet or layout) with no text in the project’s `DefaultLanguageCode`. MxBuild refuses it with CE4899 “Empty caption. [German, Germany]”. Typically left behind by changing the default language after the pages were written. Error. Measured on Mendix 11.14: of the caption kinds tried (page title, group box, buttons, column header, label, dynamic text, title, enumeration value, menu item, message) only the tab page caption is required; page templates and building blocks are not checked |
+
 ## [Security Rules](#security-rules)
 
 | Rule | Description |
@@ -17077,6 +17224,7 @@ These rules run with `mxcli check` (and the LSP, for real-time diagnostics) rath
 | **MDL-WIDGET01** | `mxcli check` + LSP | Unknown property key on a pluggable widget. The property is not in the widget’s `.def.json`. Catches typos like `optionsSourcType` (missing `e`) before MxBuild does. Suggests the nearest known key. |
 | **MDL-WIDGET02** | `mxcli check --post-migration` | Legacy native widget found on a project that has a pluggable replacement available. Reports each occurrence with the qualified document name, widget instance name, and the recommended pluggable widget. |
 | **MDL-SET01** | `mxcli check` + LSP | Non-integer value for an Integer-typed project setting (`HttpPortNumber`, `ServerPortNumber`, `BcryptCost`, `DefaultTaskParallelism`, `WorkflowEngineParallelism`). These used to be skipped silently while the statement still reported success. |
+| **MDL-I18N01** | `mxcli check -p` | A script that changes `DefaultLanguageCode` leaves a tab page caption — stored in the project, or created by the script before the change — with no text in the new default. MxBuild reports CE4899 “Empty caption”. See [Error Messages](#mdl-i18n01-a-tab-page-caption-without-the-default-language-ce4899). |
 | **MDL-SET02** | `mxcli check` + LSP | Value other than `true` / `false` for a Boolean-typed project setting (`AllowUserMultipleSessions`). Anything else was silently stored as `false`. |
 
 Run `mxcli check --help` for usage. See [Error Messages → MDL-WIDGET01 / MDL-WIDGET02](#mdl-widget01-unknown-pluggable-widget-property) for cause-and-solution detail.
@@ -17329,66 +17477,99 @@ mxcli lint -p app.mpr --list-rules
 ```
 # [Writing Custom Rules](#writing-custom-rules)
 
-You can extend the linting framework by writing custom rules in Starlark, a Python-like language. Custom rules are placed in the `.claude/lint-rules/` directory and are automatically picked up by `mxcli lint`.
+You can extend the linter with your own rules written in Starlark, a Python-like
+language. A rule is a `.star` file in the project’s `.claude/lint-rules/`
+directory; `mxcli lint` (and the `lint` statement) load every file there next to
+the built-in rules.
 
-## [Rule File Structure](#rule-file-structure)
+The complete rule API — every query builtin, every field of the structs they
+return and the values those fields take — is documented in the
+**`write-lint-rules` skill**, `.claude/skills/mendix/write-lint-rules/SKILL.md`,
+which `mxcli init` installs into the project. That file is the reference; this
+page shows the shape of a rule.
 
-Each Starlark rule file defines a rule with metadata and a check function. Place your rule files in `.claude/lint-rules/` with a `.star` extension.
+## [Rule file structure](#rule-file-structure)
 
-## [Getting Started](#getting-started)
-
-1. Create a new `.star` file in `.claude/lint-rules/`
-2. Define the rule metadata (ID, name, description, severity)
-3. Implement the check function that inspects project elements
-4. Run `mxcli lint -p app.mpr` to test your rule
-
-## [Example: Custom Naming Rule](#example-custom-naming-rule)
+A rule file defines its metadata as module-level constants and a `check()`
+function that takes no arguments and returns a list of violations:
 
 ```
 # .claude/lint-rules/custom001_entity_prefix.star
 
-rule_id = "CUSTOM001"
-rule_name = "Entity Prefix Convention"
-rule_description = "All entities should be prefixed with their module abbreviation"
-severity = "warning"
+RULE_ID = "CUSTOM001"
+RULE_NAME = "EntityPrefix"
+DESCRIPTION = "Entity names start with their module's abbreviation"
+CATEGORY = "naming"
+SEVERITY = "warning"            # error, warning, info or hint
 
-def check(context):
-    findings = []
-    for entity in context.entities:
-        # Check if entity name starts with module prefix
-        module_prefix = entity.module_name[:3]
-        if not entity.name.startswith(module_prefix):
-            findings.append({
-                "message": "Entity '%s' should start with module prefix '%s'" % (entity.name, module_prefix),
-                "element": entity.qualified_name,
-            })
-    return findings
+def check():
+    violations = []
+    for entity in entities():
+        prefix = entity.module_name[:3]
+        if not entity.name.startswith(prefix):
+            violations.append(violation(
+                message = "Entity '%s' should start with '%s'" % (entity.name, prefix),
+                location = location(
+                    module = entity.module_name,
+                    document_type = "entity",
+                    document_name = entity.name,
+                ),
+                suggestion = "Rename to %s%s" % (prefix, entity.name),
+            ))
+    return violations
 
 ```
-## [Rule Severity Levels](#rule-severity-levels)
+
+The project is read through builtins rather than a context argument:
+`entities()`, `microflows()`, `pages()`, `widgets()`, `attributes_for(name)`,
+`permissions_for(name)`, `refs_to(name)`, `xpath_expressions()` and more — the
+skill lists them all. `violation(...)` and `location(...)` build the result.
+
+## [Catalog depth](#catalog-depth)
+
+Some builtins read data that only a full catalog build produces (`widgets()`,
+`xpath_expressions()`, `activities_for()`, `permissions()`,
+`permissions_for()`, `refs_to()` / `refs_from()`, a page’s `widget_count`), and
+the graph builtins (`cycles()`, `layer_of()`, …) need the communities build.
+`mxcli lint` detects them in the rule’s source and builds the catalog deep
+enough. If the scan cannot see the call, declare it:
+
+```
+REQUIRES = ["full"]             # or ["communities"]
+
+```
+## [Severity levels](#severity-levels)
 
 | Severity | Description |
 | --- | --- |
-| `error` | Must be fixed; blocks CI pipelines |
-| `warning` | Should be fixed; potential issue |
+| `error` | Must be fixed; fails CI pipelines |
+| `warning` | Should be fixed; potential issue (the default) |
 | `info` | Informational; suggestion for improvement |
+| `hint` | Lowest level; a nudge |
 
-## [Testing Custom Rules](#testing-custom-rules)
+## [Testing custom rules](#testing-custom-rules)
 
 ```
-# Run lint to test your custom rule
-mxcli lint -p app.mpr
-
-# List rules to verify your rule is detected
+# list the rules, including yours
 mxcli lint -p app.mpr --list-rules
 
-```
-## [Best Practices](#best-practices)
+# run them
+mxcli lint -p app.mpr
 
-- Use a unique rule ID prefix (e.g., `CUSTOM001`) to avoid conflicts with built-in rules
-- Include clear, actionable messages that explain what to fix
-- Test rules against a real project before deploying
-- Keep rules focused on a single concern
+```
+
+A rule file that fails to load is reported as skipped with the reason, and a
+rule that raises an error at run time is reported as an `error` violation
+carrying the Starlark message.
+
+## [Best practices](#best-practices)
+
+- Use a unique rule ID prefix (e.g. `CUSTOM001`) to avoid clashing with the
+  built-in rules.
+- Write messages that say what to fix, and set `suggestion` where there is one.
+- Compare fields against the values the skill documents — a comparison against a
+  value the API never returns matches nothing and reports a clean pass.
+- Try the rule on a real project before relying on it.
 
 # [mxcli lint](#mxcli-lint)
 
@@ -17483,6 +17664,18 @@ mxcli lint -p app.mpr --format json | jq 'group_by(.severity) | map({severity: .
 mxcli lint -p app.mpr --format json | jq '[.[] | select(.severity == "error")]'
 
 ```
+## [Rules That Fail](#rules-that-fail)
+
+A Starlark rule that reads a struct field this mxcli does not expose — usually a
+rule written for a newer mxcli — is reported at **info** level as
+`rule <ID> needs a newer mxcli (<detail>)`, not as an error. Any other rule
+failure is an error (`Starlark rule error: …`). A rule’s configured severity in
+`lint-config.yaml` applies to its findings, never to its failure. `mxcli report`
+keeps all rule failures out of the score.
+
+A rule file that does not load at all (for example, one calling a builtin this
+mxcli lacks) is skipped with a warning on stderr.
+
 ## [Exit Codes](#exit-codes)
 
 | Code | Meaning |
@@ -17502,6 +17695,24 @@ The `mxcli report` command generates a scored best practices report for a Mendix
 mxcli report -p app.mpr
 
 ```
+## [Scoring Selected Modules](#scoring-selected-modules)
+
+```
+# score only your own modules
+mxcli report -p app.mpr --modules Sales,Orders
+mxcli report -p app.mpr -m Sales -m Orders
+
+```
+
+`--modules` (`-m`, as on `mxcli lint`) scores the named modules and nothing else:
+the rules skip every other module, and only findings **located in a selected
+module** count toward the score. Findings that belong to no module — project
+security, user-role mappings — are left out, because they would weigh the same
+on every module’s score. The report names the selection under the date, so a
+module score is not read as the project’s. `--exclude` and `excludeModules` in
+`lint-config.yaml` still win over `--modules`; a module named by both is warned
+about and not scored.
+
 ## [Output Formats](#output-formats-2)
 
 ### [Markdown](#markdown)
@@ -17545,6 +17756,19 @@ Each category shows:
 - A score from 0 to 100
 - Number of findings in that category
 - Specific rule violations with affected elements
+
+## [Rules That Could Not Run](#rules-that-could-not-run)
+
+A lint rule that fails is a problem with the tooling, not the project, so it is
+**not counted** in the score, the summary or any category. The report lists it
+in its own section (“Rules That Could Not Run”; `ruleFailures` in JSON).
+
+The common case is a rule written for a newer mxcli — one that reads a field
+this binary’s catalog does not expose. It is reported at info level as
+`rule QUAL004 needs a newer mxcli ("microflow" struct has no .document_noun_title attribute)`.
+Any other failure is reported as a `Starlark rule error`. If the project’s
+tooling was written by a newer mxcli, `mxcli` warns about it on every command;
+see [Syncing with Updates](#the-version-stamp).
 
 ## [Writing Reports to Files](#writing-reports-to-files)
 
@@ -20814,6 +21038,22 @@ mxcli docker build -p app.mpr
 3. **PAD patching** – Applies Platform-Agnostic Deployment patches (Phase 1) to the build output
 4. **Produces artifact** – Generates a deployable Mendix deployment package (MDA file)
 
+## [The Project Is Not Modified](#the-project-is-not-modified)
+
+`mx update-widgets`, `mx check` and MxBuild all write into the project they are
+given: update-widgets rewrites the model (an MPRv1 `.mpr` in place, an MPRv2
+project into MPRv1), mx check compiles the theme into `theme-cache/` and
+`deployment/sass/`, and MxBuild regenerates the `javasource/` proxies, the
+`.launch`, `.classpath` and `.project` files and all of `deployment/`.
+
+So `docker build` copies the project to a temporary directory (in `$TMPDIR`)
+and runs all three there. Widget definitions are normalised on that copy, so the
+build uses the normalised model while the project keeps its own; run
+`mxcli fix widgets` to apply the normalisation to the project. The only thing
+written is the output directory (`.docker/build/` by default, or `-o`). Build
+output, caches and VCS folders (`deployment/`, `.docker/`, `.git/`,
+`node_modules/`, …) are not copied.
+
 ## [PAD Patching](#pad-patching)
 
 PAD (Platform-Agnostic Deployment) patching modifies the build output to be compatible with container-based deployment platforms. This is essential for deploying Mendix applications to Kubernetes, Cloud Foundry, or other container orchestrators.
@@ -20947,7 +21187,7 @@ mxcli docker build -p app.mpr --skip-check
 ```
 ## [Integration with the TUI](#integration-with-the-tui)
 
-When using mxcli in interactive REPL mode, the TUI can auto-check the project on file changes, giving immediate feedback on whether MDL modifications introduced errors.
+When using mxcli in interactive REPL mode, the TUI can auto-check the project on file changes, giving immediate feedback on whether MDL modifications introduced errors. Like `docker check`, it runs `mx check` on a temporary copy, so the project’s `theme-cache/` and `deployment/` are not touched; it does not run update-widgets, so it checks the project as stored. `mxcli eval`’s `mx_check` check does the same.
 
 ## [Related Pages](#related-pages-8)
 
@@ -21452,7 +21692,7 @@ The extension spawns `mxcli lsp --stdio` as a background process and communicate
 | `mdl.mxcliPath` | `mxcli` | Path to the mxcli executable |
 | `mdl.mprPath` | *(auto-discovered)* | Path to `.mpr` file; if empty, the extension searches the workspace |
 
-## [Getting Started](#getting-started-1)
+## [Getting Started](#getting-started)
 
 The fastest way to get started is `mxcli init`, which automatically installs the extension into your project. See [Installation](#installation-1) for details, or jump to specific features:
 
@@ -22328,6 +22568,12 @@ All tools also receive the universal files (`AGENTS.md`, `.ai-context/`).
 4. **Set up dev container** – `.devcontainer/` with Dockerfile and configuration
 5. **Copy mxcli binary** – places the mxcli executable in the project root
 6. **Install VS Code extension** – copies and installs the bundled `.vsix` file
+7. **Create `mdlsource/`** – the directory the generated `CLAUDE.md` tells the assistant to keep MDL scripts in, with a short README (`mxcli new` creates it even with `--skip-init`)
+8. **Stamp the version** – `.ai-context/mxcli-tooling.json` records which mxcli wrote the tooling; see [Syncing with Updates](#the-version-stamp)
+
+`CLAUDE.md` and `AGENTS.md` are written between `<!-- mxcli:begin … -->` and
+`<!-- mxcli:end -->` markers. Notes you add outside the markers survive a
+re-run of `mxcli init` and every `mxcli init --sync-skills`.
 
 ## [Adding a Tool Later](#adding-a-tool-later)
 
@@ -22356,8 +22602,11 @@ These files are shared by all AI tools:
 
 ```
 your-mendix-project/
-├── AGENTS.md                          # Comprehensive AI assistant guide
+├── AGENTS.md                          # Comprehensive AI assistant guide (mxcli section between markers)
+├── mdlsource/                         # MDL scripts, one file per concern
+│   └── README.md
 ├── .ai-context/
+│   ├── mxcli-tooling.json             # Which mxcli wrote this tooling (version stamp)
 │   ├── skills/                        # MDL pattern guides
 │   │   ├── write-microflows.md        # Microflow syntax and patterns
 │   │   ├── create-page.md            # Page/widget syntax reference
@@ -22593,30 +22842,105 @@ These appear as `/mendix:your-custom-command` in the Claude Code interface.
 
 # [Syncing with Updates](#syncing-with-updates)
 
-When you upgrade `mxcli` to a newer version, the skills, commands, and VS Code extension bundled with it may have changed. This page explains how to keep your project’s files in sync.
+When you upgrade `mxcli`, the skills, lint rules and project guidance it ships
+may have changed. A project keeps them in step with the binary through one
+command, which the Claude Code bootstrap script runs on every session start:
 
-## [What Gets Updated](#what-gets-updated)
+```
+mxcli init --sync-skills      # or: mxcli init --sync
 
-| Component | Source of Truth | Sync Target |
+```
+
+It is quiet when everything is already current.
+
+## [What Gets Refreshed](#what-gets-refreshed)
+
+| Component | Refreshed by `--sync-skills` | What is never touched |
 | --- | --- | --- |
-| Skills | `reference/mendix-repl/templates/.claude/skills/` | `.ai-context/skills/` |
-| Commands | `.claude/commands/mendix/` | `.claude/commands/mendix/` |
-| VS Code extension | `vscode-mdl/vscode-mdl-*.vsix` | Installed extension |
-| Lint rules | Bundled Starlark rules | `.claude/lint-rules/` |
+| Skills | `.ai-context/skills/` and `.claude/skills/` | skill directories mxcli does not ship |
+| Lint rules | the bundled rules in `.claude/lint-rules/`, identified by file name | any rule file under another name — your own rules |
+| `CLAUDE.md`, `AGENTS.md` | the part between the `<!-- mxcli:begin … -->` and `<!-- mxcli:end -->` markers | everything outside the markers; a file that does not exist is not created |
+| Version stamp | `.ai-context/mxcli-tooling.json` | — |
+
+A bundled lint rule file belongs to mxcli, like a skill: an edit to it is
+overwritten. To change a bundled rule, copy it under a new file name and rule
+ID, or override its severity or options in `.claude/lint-config.yaml`.
+
+### [The mxcli section of CLAUDE.md and AGENTS.md](#the-mxcli-section-of-claudemd-and-agentsmd)
+
+`mxcli init` writes its content between two markers. Put project notes **outside**
+them — above or below — and every later sync and every re-run of `mxcli init`
+keeps them:
+
+```
+<!-- mxcli:begin — generated by mxcli and refreshed by 'mxcli init --sync-skills'. Edit outside these markers; anything between them is replaced. -->
+# Mendix Project: MyApp
+…
+<!-- mxcli:end -->
+
+## Our conventions
+
+Invoices are immutable once sent.
+
+```
+
+A file written by an mxcli from before the markers cannot be split into mxcli’s
+text and yours, so the sync leaves it alone and prints a note. Run `mxcli init`
+once to adopt the markers: it regenerates the file, so move any notes you had
+added below the end marker afterwards.
+
+## [The Version Stamp](#the-version-stamp)
+
+`mxcli init` and every sync record the mxcli that wrote the tooling in
+`.ai-context/mxcli-tooling.json`:
+
+```
+{
+  "version": "v0.25.0",
+  "built": "2026-10-01T09:12:44Z",
+  "written": "2026-10-03"
+}
+
+```
+
+It is rewritten only when the version changes, so the daily session-start sync
+does not dirty the working tree. Commit it with the rest of the tooling.
+
+**An older binary warns.** Any command that opens the project (`-p`) with a
+binary older than the stamp prints, once and on stderr, both versions and how
+to update. The tooling may use statements, commands or lint-rule fields the
+older binary does not have — `mdl 1;` is a parse error before it existed, and
+a rule reading a newer catalog field fails.
+
+**An older binary does not sync.** `init --sync-skills` from an older binary
+refuses rather than rolling the skills, rules and `CLAUDE.md` back to what it
+knows. Update the binary instead. An explicit `mxcli init` from an older binary
+still runs, after the same warning.
+
+Versions are compared only when the order is certain: two releases by number
+(`v0.24.0` < `v0.25.0`), two nightlies by the date in the tag
+(`nightly-20261002-…`), a release against a nightly by build date. A dev build
+(`v0.24.0-888-g4ba1495f2`, `-dirty`, or no version) is never reported as older.
+
+### [Binaries that predate the stamp](#binaries-that-predate-the-stamp)
+
+A binary can only check a stamp it knows to read. mxcli v0.24.0 and earlier
+open a project stamped by a newer mxcli **without any warning**. For them the
+guard is the bootstrap script, `.claude/bootstrap-mxcli.sh`, which a newer
+`mxcli init` regenerates: before it links the `mxcli` on `PATH` into the
+project it compares that binary’s version with the stamp, and it does not link
+an older one — it downloads `MXCLI_TAG` (default `nightly`) instead. A
+`./mxcli` older than the stamp is replaced the same way, through a temporary
+file, so a `./mxcli` that is a symlink to the `PATH` binary never has the
+download written through it. If the download fails, the older `./mxcli` is
+kept with a warning rather than leaving the project without a binary.
 
 ## [Re-running mxcli init](#re-running-mxcli-init)
 
-The simplest way to sync is to re-run `mxcli init`:
-
-```
-mxcli init /path/to/my-mendix-project
-
-```
-
-This overwrites the generated skill files with the latest versions. **Custom modifications to built-in skill files will be lost.** To preserve customizations:
-
-1. Keep custom skills in separate files (e.g., `my-custom-pattern.md`)
-2. Or use version control to merge changes
+`mxcli init` regenerates everything, including the devcontainer and tool
+configuration files, and keeps project notes outside the `CLAUDE.md` /
+`AGENTS.md` markers. Use it after an upgrade that changed tool configuration;
+for skills, rules and guidance alone, `--sync-skills` is enough.
 
 ## [Build-Time Sync (for mxcli developers)](#build-time-sync-for-mxcli-developers)
 
@@ -22631,19 +22955,11 @@ make sync-vsix      # VS Code extension only
 ```
 ## [Checking Versions](#checking-versions)
 
-To see which version of mxcli and its bundled assets you have:
+```
+mxcli version                          # the binary
+cat .ai-context/mxcli-tooling.json     # the mxcli that wrote the project's tooling
 
 ```
-mxcli version
-
-```
-## [Recommended Workflow](#recommended-workflow)
-
-1. **Keep custom skills separate** from built-in skills so re-syncing does not overwrite them
-2. **Use version control** for your `.ai-context/` and `.claude/` directories
-3. **Re-run `mxcli init`** after upgrading mxcli to pick up new skills and bug fixes
-4. **Review the diff** after syncing to see what changed in the skill files
-
 # [Quick Start](#quick-start-7)
 
 The `modelsdk-go` library provides programmatic access to Mendix projects from Go code. It is the underlying library that powers the `mxcli` CLI tool.
@@ -26246,6 +26562,19 @@ RETRIEVE $List FROM $Parent/Module.AssocName;
 ```
 
 `RETRIEVE ... FIRST` returns a single entity. Without a range, or with `LIMIT`/`OFFSET`, it returns a list. A bare `LIMIT 1` is a list of one (for a script file without the header, see [Language Versions and Migration](#language-versions-and-migration)). Retrieve by association traverses an association from a known object.
+
+**List Changes**
+
+```
+$List = CREATE LIST OF Module.Entity;
+ADD $Item TO $List;
+REMOVE $Item FROM $List;
+CLEAR $List;
+SET $List = $Other;
+
+```
+
+These are the four operations of a Change list activity: Add, Remove, Clear and Replace. `SET` on a list variable is Replace (stored as `Set`), not a Change variable activity, which Mendix allows only on primitive variables (CE7247). All four work in nanoflows too.
 
 **Calls**
 
@@ -36115,10 +36444,42 @@ The catalog uses an in-memory SQLite database with the following table definitio
 ### [MODULES](#modules-5)
 
 ```
-CREATE TABLE MODULES (
-    Name        TEXT PRIMARY KEY,
-    ModuleID    TEXT,
-    SortIndex   INTEGER
+CREATE TABLE modules_data (
+    Id                       TEXT PRIMARY KEY,
+    Name                     TEXT,
+    QualifiedName            TEXT,
+    ModuleName               TEXT,
+    Folder                   TEXT,
+    Description              TEXT,   -- always empty: a module has no documentation
+    Source                   TEXT,   -- '' or 'Marketplace v…'
+    AppStoreVersion          TEXT,
+    AppStoreGuid             TEXT,
+    DomainModelDocumentation TEXT,   -- the module's domain model's documentation
+    ProjectId                TEXT,
+    SnapshotId               TEXT
+);
+
+```
+### [ASSOCIATIONS](#associations-4)
+
+```
+CREATE TABLE associations_data (
+    Id                     TEXT PRIMARY KEY,
+    Name                   TEXT,
+    QualifiedName          TEXT,
+    ModuleName             TEXT,
+    FromEntity             TEXT,   -- Mendix ParentPointer (owns the reference)
+    ToEntity               TEXT,   -- Mendix ChildPointer
+    AssociationType        TEXT,
+    Owner                  TEXT,
+    StorageFormat          TEXT,
+    Description            TEXT,
+    ToDeleteBehavior       TEXT,   -- Mendix DeleteBehavior.ChildDeleteBehavior
+    FromDeleteBehavior     TEXT,   -- Mendix DeleteBehavior.ParentDeleteBehavior
+    ToDeleteErrorMessage   TEXT,   -- ChildErrorMessage text
+    FromDeleteErrorMessage TEXT,   -- ParentErrorMessage text
+    ProjectId              TEXT,
+    SnapshotId             TEXT
 );
 
 ```
@@ -36137,28 +36498,26 @@ CREATE TABLE ENTITIES (
 ```
 ### [MICROFLOWS](#microflows)
 
-```
-CREATE TABLE MICROFLOWS (
-    Name            TEXT PRIMARY KEY,   -- Qualified: Module.Microflow
-    ModuleName      TEXT,
-    MicroflowName   TEXT,
-    ActivityCount   INTEGER,
-    ParameterCount  INTEGER,
-    ReturnType      TEXT,
-    Folder          TEXT,
-    Documentation   TEXT
-);
+Microflows, nanoflows and rules share one table; `NANOFLOWS` is a view of the
+nanoflow rows.
 
 ```
-### [NANOFLOWS](#nanoflows)
-
-```
-CREATE TABLE NANOFLOWS (
-    Name            TEXT PRIMARY KEY,
-    ModuleName      TEXT,
-    NanoflowName    TEXT,
-    ActivityCount   INTEGER,
-    Documentation   TEXT
+CREATE TABLE microflows_data (
+    Id                  TEXT PRIMARY KEY,
+    Name                TEXT,
+    QualifiedName       TEXT,       -- Module.Microflow
+    ModuleName          TEXT,
+    Folder              TEXT,
+    MicroflowType       TEXT,       -- MICROFLOW, NANOFLOW or RULE
+    Description         TEXT,
+    ReturnType          TEXT,
+    ParameterCount      INTEGER,
+    ActivityCount       INTEGER,    -- top level only; a loop counts as one
+    TotalActivityCount  INTEGER,    -- including loop bodies, at any depth
+    Complexity          INTEGER,    -- McCabe
+    Excluded            BOOLEAN,
+    ProjectId           TEXT,
+    SnapshotId          TEXT
 );
 
 ```
@@ -36172,6 +36531,21 @@ CREATE TABLE PAGES (
     Layout      TEXT,
     Url         TEXT,
     Documentation TEXT
+);
+
+```
+### [LAYOUTS](#layouts-1)
+
+```
+CREATE TABLE LAYOUTS (
+    Id            TEXT PRIMARY KEY,
+    Name          TEXT,
+    QualifiedName TEXT,
+    ModuleName    TEXT,
+    Folder        TEXT,
+    LayoutType    TEXT,   -- Responsive / Phone / Tablet / ModalPopup / Default / Popup
+    Platform      TEXT,   -- 'Web' or 'Native' (the content wrapper's type)
+    Description   TEXT
 );
 
 ```
@@ -36242,26 +36616,86 @@ These tables are only populated by `REFRESH CATALOG FULL`.
 
 ### [ACTIVITIES](#activities-1)
 
+One row per object of a flow body, loop bodies included (`ParentLoopId` names
+the enclosing loop; filter on `ParentLoopId = ''` for the top level only).
+
 ```
-CREATE TABLE ACTIVITIES (
-    DocumentName    TEXT,       -- Parent microflow/nanoflow
-    ActivityType    TEXT,       -- e.g., "CreateObjectAction", "CallMicroflowAction"
-    Caption         TEXT,       -- Activity caption/description
-    SortOrder       INTEGER     -- Order within the flow
+CREATE TABLE activities_data (
+    Id                      TEXT PRIMARY KEY,
+    Name                    TEXT,       -- ActionType for an action, else ActivityType
+    Caption                 TEXT,       -- stored caption / annotation text
+    ActivityType            TEXT,       -- e.g. "ActionActivity", "ExclusiveSplit", "LoopedActivity"
+    Sequence                INTEGER,    -- pre-order position within the flow
+    MicroflowId             TEXT,
+    MicroflowQualifiedName  TEXT,
+    ModuleName              TEXT,
+    Folder                  TEXT,
+    EntityRef               TEXT,       -- create object / database retrieve entity
+    ActionType              TEXT,       -- e.g. "RetrieveAction", "MicroflowCallAction"
+    ServiceRef              TEXT,       -- called service (REST, web service, OData)
+    ActionRef               TEXT,       -- operation within it
+    UseRequestTimeout       INTEGER,
+    TimeoutExpression       TEXT,
+    Description             TEXT,       -- documentation
+    ParentLoopId            TEXT,       -- enclosing loop's Id; '' at the top level
+    LoopDepth               INTEGER,    -- 0 at the top level
+    AutoGenerateCaption     INTEGER,
+    ConditionExpression     TEXT,       -- exclusive split expression
+    ConditionRule           TEXT,       -- rule called by a rule-based split
+    ErrorHandlingType       TEXT,       -- Rollback / Custom / CustomWithoutRollBack / Continue / Abort
+    LogLevel                TEXT,
+    LogNodeExpression       TEXT,
+    LogMessage              TEXT,
+    CommitType              TEXT,       -- Yes / YesWithoutEvents / No
+    WithEvents              INTEGER,
+    RetrieveSource          TEXT,       -- database / association
+    ProjectId               TEXT,
+    SnapshotId              TEXT
 );
 
 ```
 ### [WIDGETS](#widgets)
 
+One row per widget instance; written by `refresh catalog full` only.
+
 ```
 CREATE TABLE WIDGETS (
-    DocumentName    TEXT,       -- Parent page/snippet
-    WidgetName      TEXT,       -- Widget instance name
-    WidgetType      TEXT,       -- e.g., "Forms$TextBox", "CustomWidgets$ComboBox"
-    ModuleName      TEXT
+    Id                      TEXT PRIMARY KEY,
+    Name                    TEXT,
+    WidgetType              TEXT,    -- "Forms$TextBox", or a pluggable widget's id
+    ContainerId             TEXT,    -- the page or snippet
+    ContainerQualifiedName  TEXT,
+    ContainerType           TEXT,    -- "PAGE" or "SNIPPET"
+    ModuleName              TEXT,
+    Folder                  TEXT,
+    EntityRef               TEXT,
+    AttributeRef            TEXT,
+    MicroflowRef            TEXT,
+    NanoflowRef             TEXT,
+    PageRef                 TEXT,
+    Description             TEXT,
+    ParentWidgetId          TEXT,    -- nearest catalogued ancestor; '' at the root
+    Depth                   INTEGER, -- catalogued ancestors; 0 at the root
+    Class                   TEXT,    -- Appearance
+    Style                   TEXT,
+    DynamicClasses          TEXT,
+    ActionType              TEXT,    -- $Type of Action / OnClickAction / ClickAction
+    HasConfirmation         INTEGER, -- 1 when that action has a ConfirmationInfo
+    ProjectId               TEXT,
+    SnapshotId              TEXT
 );
 
 ```
+
+The tree columns (schema 19) skip what the walk does not index: the synthetic
+`conditionalVisibilityWidget…` container, layout grid rows and columns, tab
+pages, and a pluggable widget’s properties and object-list items, so a widget in
+a data grid 2 column has the grid as its parent. A list view template is
+indexed (it carries its own entity) and so is a level of its own. The walk does
+not follow a snippet call; the snippet’s widgets are rows of the snippet, depth
+0 at its root. `HasConfirmation` can only be 1 for a microflow, nanoflow or
+workflow call — `Forms$DeleteClientAction` has no confirmation property.
+
 ### [REFS](#refs)
 
 The reference graph: one row per edge. Populated by `refresh catalog full`.
@@ -36295,6 +36729,7 @@ rather than trusting a list here:
 | --- | --- |
 | `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation |
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
+| `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
 | `parameter` | page or flow parameter entity type |
 | `generalize` | entity extends entity |
@@ -36312,6 +36747,14 @@ rather than trusting a list here:
 | `sync` | offline navigation profile synchronizes an entity |
 | `validate` | attribute validation rule uses a regular expression |
 | `widget` | page or snippet uses a pluggable / custom widget |
+
+`change`, `delete` and `commit` act on a *variable*, so the entity is resolved
+within the flow — from a parameter, a create or retrieve output, or a loop
+iterator over one of those. A variable whose entity the flow cannot tell (a
+microflow call’s result, for one) has no edge. `commit` is not in the analysis
+graph: the variable it commits comes from a parameter, create or retrieve that
+already links the flow to the entity (or to the association it was retrieved
+over), so it would mostly double existing edges.
 
 `schedule`, `publish`, `event` and `settings` are **entry points**: something
 outside the call graph runs the microflow, so nothing in the model calls it.
@@ -37765,7 +38208,7 @@ Re-running is free: a second run reports 0 units changed, because [idempotent wr
 | --- | --- | --- |
 | `mxcli fix widgets` | **yes** | the fix — after any headless install |
 | `mxcli fix design-properties` | **yes** | the fix — after any headless install |
-| `mxcli docker check` | no | runs the widget resync under a snapshot so the *check* is not tripped by CE0463; the stored model stays stale |
+| `mxcli docker check` | no | runs the widget resync on a temporary copy so the *check* is not tripped by CE0463; the stored model stays stale (`--no-update-widgets` checks it as stored) |
 | `mxcli widget sync` | yes, partial | reconciles widget schemas in mxcli’s own code; clears 7 of 40 on the reference fixture |
 
 CE6087 is distinct from `CE6083`, which is a *missing* design-property declaration and is fixed by installing everything the package ships — something `install` and `update` already do.
@@ -38442,7 +38885,7 @@ Cross-reference commands require `REFRESH CATALOG FULL` to populate reference da
 | Check syntax | `mxcli check script.mdl` | Parse-only validation |
 | Check references | `mxcli check script.mdl -p app.mpr --references` | With reference validation |
 | Lint project | `mxcli lint -p app.mpr [--format json|sarif]` | 19 built-in + 31 Starlark rules |
-| Report | `mxcli report -p app.mpr [--format markdown|json|html]` | Best practices report |
+| Report | `mxcli report -p app.mpr [--format markdown|json|html] [--modules A,B]` | Best practices report (`--modules` scores only those modules) |
 | Test | `mxcli test tests/ -p app.mpr` | `.test.mdl` / `.test.md` files |
 | Diff script | `mxcli diff -p app.mpr changes.mdl` | Compare script vs project |
 | Diff local | `mxcli diff-local -p app.mpr --ref HEAD` | Git diff for MPR v2 |
@@ -39253,6 +39696,21 @@ level Production. This script creates it as a NEW microflow, ... [MDL-SEC21]
 **Solution:** Add the `grant execute on microflow …` (or `… on nanoflow …`) the suggestion names, or rebuild the flow with `create or modify` instead of dropping it.
 
 It is an **error at security level Prototype or Production** (the stored level, or the one the script sets) and a warning at Off, where MxBuild does not check it. Only what the script changes is reported: a flow that already had the problem before the script, and that the script does not touch, is left to `mxcli docker check`.
+
+### [MDL-I18N01: A tab page caption without the default language (CE4899)](#mdl-i18n01-a-tab-page-caption-without-the-default-language-ce4899)
+
+```
+✗ Administration.Account_Overview: tab page caption tabPage2 ("Local Users") has no
+de_DE text once this script makes de_DE the default language — mxbuild reports
+CE4899 "Empty caption" [MDL-I18N01]
+  → change the default language before creating the document, or give it a de_DE
+    text after the change: `alter page Administration.Account_Overview { set (Caption: '…') on tabPage2; };`
+
+```
+
+**Cause:** With a project (`check -p`), the script changes `DefaultLanguageCode` while a tab page caption has no text in the new default: one stored in the project, or one a `create page` / `create snippet` earlier in the script wrote in the old default. Mendix has no language-neutral text — a caption is stored per language, and a new one under the default at the time. Measured on Mendix 11.14, a tab page caption is the one caption kind MxBuild refuses when the default has no text (CE4899 “Empty caption. [German, Germany]”); a page title, button, label or menu item caption builds and shows the placeholder in Studio Pro instead. A stock app’s `Administration.Account_Overview` has an en\_US-only `tabPage2`, so switching such an app to another default fails the build.
+
+**Solution:** Change the default language before the script creates its pages, or give each caption a text in the new default after the change — `alter page … { set (Caption: '…') on <tab>; };` (or `alter snippet`) writes the default language. `alter settings language (DefaultLanguageCode: …)` prints the list when it runs, and `mxcli lint` reports the project’s existing ones as **QUAL006**. A page the script creates or rewrites *after* the change is written in the new default and is not reported.
 
 ### [MDL-DUPDEF: Element defined twice in one script](#mdl-dupdef-element-defined-twice-in-one-script)
 

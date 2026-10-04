@@ -1,3 +1,7 @@
+## 2026-10-04 -- mxcli v0.24.0 @ 2233ce1
+- +580 / -122 lines
+- Sections changed: .claude/lint-rules/custom001_entity_prefix.star, List rules to verify your rule is detected, Mendix Project: MyApp, Run lint to test your custom rule, [Syncing with Updates](#syncing-with-updates), [Writing Custom Rules](#writing-custom-rules), list the rules, including yours, run them (+39 more)
+
 ## 2026-10-03 -- mxcli v0.24.0 @ 14a0a7c
 - +154 / -6 lines
 - Sections changed: [Microflow, Page, and Nanoflow Access](#microflow-page-and-nanoflow-access), [Any installed widget](#any-installed-widget), [Behaviour changes to know about](#behaviour-changes-to-know-about), [Description](#description-41), [How to migrate a script](#how-to-migrate-a-script), [Input Widgets](#input-widgets-1), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation), [Re-runnable Creates: `or modify` and `if not exists`](#re-runnable-creates-or-modify-and-if-not-exists) (+4 more)
