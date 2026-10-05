@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.24.0 @ 2233ce1
-Generated: 2026-10-04T07:41:14Z
+Version:   mxcli v0.24.0 @ 0c21d62
+Generated: 2026-10-05T08:09:55Z
 
 ---
 
@@ -6435,7 +6435,7 @@ refuse the spelling; until then it only warns.
 
 ### [Changes of meaning (`MDL-V1-*`)](#changes-of-meaning-mdl-v1-)
 
-21 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
+22 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
 
 | Code | Without the header (mdl 0) | Under `mdl 1;` | Decided at | Rewritten by `fmt --upgrade` |
 | --- | --- | --- | --- | --- |
@@ -6459,6 +6459,7 @@ refuse the spelling; until then it only warns.
 | `MDL-V1-SLASH` | a `/` after a statement is accepted as a terminator (SQL\*Plus style) | an error: `;` is the only statement terminator | parse | yes: `fmt --upgrade --header` |
 | `MDL-V1-TEMPLATE` | a message template written as one string literal that spans lines is an expression: the template is `{1}` and the literal its parameter | the template text, as a literal on one line is; a line break in a template is written into the literal | parse | yes: `fmt --upgrade --header` |
 | `MDL-V1-TEMPLATEATTR` | a text-template parameter bound to a non-String attribute (`{1} = $Order.Total`) was stored as `toString($Order/Total)` by earlier mxcli releases | an attribute reference, rendered with the attribute’s formatting, as Studio Pro stores it | exec | no: decided by exec against the project; `check -p` reports it |
+| `MDL-V1-VIEWAUTONUMBER` | a view entity attribute declared `autonumber` over an AutoNumber column passes check, and mxbuild reports CE6770 “View Entity is out of sync with the OQL Query” | a check error that names the attribute and suggests `long`, the type the view gives the column | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-WHILE` | `while <condition>` accepts a body without `begin` and an `end` without `while` | an error: a while loop is `while <condition> begin … end while;`, like `loop … begin … end loop;` | parse | yes: `fmt --upgrade --header` |
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
@@ -13372,11 +13373,11 @@ a few hundred distinct source strings, so one file per language stays practical.
 ## [Statements](#statements)
 
 ```
-DESCRIBE TRANSLATIONS [IN <Module>] FOR <lang>;
+DESCRIBE TRANSLATIONS [IN <Module> | WITHOUT MARKETPLACE] FOR <lang>;
 
-CREATE            TRANSLATIONS [IN <Module>] FOR <lang> ( '<source>' AS '<target>', ... );
-CREATE OR MODIFY  TRANSLATIONS [IN <Module>] FOR <lang> ( ... );
-CREATE OR REPLACE TRANSLATIONS [IN <Module>] FOR <lang> ( ... );
+CREATE            TRANSLATIONS [IN <Module> | WITHOUT MARKETPLACE] FOR <lang> ( '<source>' AS '<target>', ... );
+CREATE OR MODIFY  TRANSLATIONS [IN <Module> | WITHOUT MARKETPLACE] FOR <lang> ( ... );
+CREATE OR REPLACE TRANSLATIONS [IN <Module> | WITHOUT MARKETPLACE] FOR <lang> ( ... );
 
 ```
 
@@ -13391,6 +13392,37 @@ name.
 
 `IN <Module>` scopes both directions, and under `OR REPLACE` it **bounds the
 deletion** — without it, per-module files would wipe each other on every run.
+
+### [Marketplace modules](#marketplace-modules)
+
+Without `IN`, a run reaches the **whole project**, Marketplace modules included —
+and with them the Atlas page templates and building blocks. On a stock app,
+`'Cancel' AS 'Annuleren'` set 50 translations in 38 documents, 35 of them in
+Marketplace modules. A module update replaces a Marketplace module’s contents, so
+those translations are lost at the next update and show up as unexpected diffs
+until then. The run warns, with a count per module:
+
+```
+Warning: 47 of these translation change(s) landed in 35 document(s) of Marketplace
+modules (Atlas_Web_Content 13, FeedbackModule 2, WorkflowCommons 20; 14 of the documents are page templates or building blocks).
+
+```
+
+`WITHOUT MARKETPLACE` keeps the run in your own modules, and names the file’s
+entries that also occur in the modules it skipped. Under `OR REPLACE` it also
+keeps the deletion out of them. `DESCRIBE` accepts it too, and emits it, so the
+described file round-trips:
+
+```
+mdl 1;
+describe translations without marketplace for nl_NL;
+create or modify translations without marketplace for nl_NL ( 'Cancel' as 'Annuleren' );
+
+```
+
+Naming a Marketplace module with `IN <Module>` is taken as meaning it, and does
+not warn. The default stays the whole project: what an existing script writes
+does not change underneath it.
 
 ## [A translation is only built if its language is enabled](#a-translation-is-only-built-if-its-language-is-enabled)
 
@@ -14828,6 +14860,13 @@ Declarations inside a dark block (`prefers-color-scheme: dark`, `.theme-dark`,
 `[data-theme="dark"]`) seed the dark palette; everything else seeds the light
 one. Tokens the design does not name keep the base theme’s value, so a
 three-colour design still yields a complete, working palette.
+
+A design with **no block for the base theme’s other variant** — only a base
+palette — leaves that variant exactly as the base theme ships it, and `create`
+prints a note naming the mixin. The base palette describes one variant: copying
+its light ground and ink into the dark palette, whose other surfaces stay dark,
+gave an unreadable mix. Add a `prefers-color-scheme: dark` (or `light`, for a
+dark-first base such as console) block to seed it.
 
 `mxcli theme show signal` prints the vocabulary. A `--mxt-*` name the base theme
 does not declare is **an error**, not an extra: nothing would read it, so the
@@ -20134,7 +20173,8 @@ the container on every change (~30–60 s). `run --local` instead:
 | entity / view entity / association | runtime restart + DDL | ~9 s |
 
 The metamodel catalog (entities/associations) is reconciled only at runtime startup,
-so structural changes need a restart; behavioural changes do not.
+so structural changes need a restart; behavioural changes do not. A restart drops
+every browser session — `--watch` prints `browser sessions were dropped; log in again` when it happens, so a browser test knows to sign in before its next step.
 
 ## [What it does](#what-it-does-1)
 
@@ -20173,6 +20213,10 @@ so structural changes need a restart; behavioural changes do not.
     
     ```
 
+At start, `run --local` warns (without stopping) when the project’s git state
+would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
+“dubious ownership”. See [Working Outside Studio Pro](#working-outside-studio-pro).
+
 ## [Flags](#flags-3)
 
 | Flag | Default | Purpose |
@@ -20182,6 +20226,7 @@ so structural changes need a restart; behavioural changes do not.
 | `--hub-secret` | — | Shared auth (`user:pass`) matching an **open** hub’s `--secret` |
 | *(hub API key)* | — | For a **GitHub-authenticated** hub: get one from `https://<hub>/cli`, set `MXCLI_HUB_KEY` (see below) |
 | `--watch` | off | Rebuild + hot-apply on every project change |
+| `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build (e.g. `10m`); on timeout the tail of `deployment/log/web-client-build.log` is printed |
 | `--ensure-db` | off | Provision local Postgres + the app database if missing (fresh-session bootstrap) |
 | `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
 | `--app-port` | 8080 | App HTTP port |
@@ -21130,6 +21175,11 @@ mxcli docker check -p app.mpr
 
 If the project has errors, the command exits with a non-zero status code.
 
+Before `mx check` it also warns, without failing, about two problems `mx check`
+cannot see: an MPR v2 `ContentsHash` index that disagrees with the `.mxunit`
+files (`mxcli fix hashes`), and git states that make Studio Pro 11.13 fail to
+open the project. See [Working Outside Studio Pro](#working-outside-studio-pro).
+
 ## [Auto-Download](#auto-download)
 
 If mxbuild is not installed locally, you can download it first:
@@ -21648,6 +21698,80 @@ connected version supports. See also
   each statement costs in tool calls, and why running through mxcli is far cheaper
   for an LLM than driving Studio Pro’s MCP server directly.
 - [Capabilities Overview](#capabilities-overview).
+
+# [Working Outside Studio Pro](#working-outside-studio-pro)
+
+A project edited with mxcli, git and an editor is sometimes opened in Studio Pro
+afterwards. Two kinds of state that Studio Pro depends on are invisible to
+`mx check`, and mxcli checks both.
+
+## [The ContentsHash index: `mxcli fix hashes`](#the-contentshash-index-mxcli-fix-hashes)
+
+In an MPR v2 project (Mendix 10.18 and later) the `.mpr` file indexes every
+`mprcontents/**/*.mxunit` file by its hash: `Unit.ContentsHash` is
+`base64(SHA-256(file))`. mxcli’s writer and Studio Pro keep the two in step.
+Anything else that changes a `.mxunit` does not: restoring a unit with
+`git checkout`, `git restore`, a revert or a merge leaves the index describing
+bytes that are no longer on disk. `mx check` and MxBuild read the files and do
+not notice; Studio Pro uses the index to decide what changed.
+
+```
+mxcli fix hashes -p app.mpr            # verify; exits 1 when something is off
+mxcli fix hashes -p app.mpr --repair   # rewrite mismatched hashes from the files
+
+```
+
+| Reported | Meaning | `--repair` |
+| --- | --- | --- |
+| `MISMATCH` | the file’s hash differs from the stored one | rewrites the stored hash from the file |
+| `MISSING` | the `.mpr` indexes a unit whose file does not exist | reported only — restore the file |
+| `ORPHAN` | a `.mxunit` file no unit in the `.mpr` indexes | reported only — `mxcli diag --check-units --fix` removes it |
+
+The repair treats the files as the source of truth and never changes them. It
+updates every hash in one SQLite transaction, and, like every mxcli write, is
+refused while Studio Pro has the project open (the `.mpr.lock` beside it). An
+MPR v1 project keeps unit contents inside the `.mpr`, has no index to drift,
+and the command says so.
+
+`mxcli exec` and `mxcli docker check` run the verify too and print a one-line
+warning when it finds a mismatch or a missing file. It never fails them;
+measured on a 900-unit project, the whole verify takes about 0.2 s.
+
+## [Git states that crash Studio Pro](#git-states-that-crash-studio-pro)
+
+Studio Pro 11.13 fails to open a project with *“Unable to find ‘system’
+property in ‘system’”* when the project folder is a git repository and
+
+- the checked-out branch has **no upstream** — remedy:
+  `git push -u origin <branch>` before opening the project (or
+  `git remote add origin <url>` first, if the repository has no remote); or
+- git reports **“detected dubious ownership”** — typical for a folder shared
+  between the host and a devcontainer, owned by a different user on each side.
+  Remedy, on the machine that runs Studio Pro:
+  `git config --global --add safe.directory <path>`.
+
+`mxcli docker check`, `mxcli run --local` and `mxcli diag -p app.mpr` warn about
+both. The warnings are advice and never fail a command. They are silent:
+
+- outside a git repository, or when git is not installed;
+- on a **detached HEAD** — how CI systems and `git checkout <sha>` leave a
+  repository; there is no branch to push, and nobody opens such a checkout in
+  Studio Pro;
+- when the `CI` environment variable is set, or `MXCLI_NO_GIT_WARNINGS=1`.
+
+Dubious ownership is judged by the git mxcli runs. Inside a devcontainer that is
+the container’s git, which may see ownership differently from the host’s Studio
+Pro — so a clean report from inside the container does not rule it out on the
+host.
+
+## [One report: `mxcli diag -p`](#one-report-mxcli-diag--p)
+
+```
+mxcli diag -p app.mpr
+
+```
+
+prints mxcli’s diagnostics followed by a *Project* section with both checks.
 
 # [VS Code Extension](#vs-code-extension)
 
@@ -29185,8 +29309,8 @@ Mendix applications can have multiple navigation profiles (Responsive, Tablet, P
 
 ```
 CREATE OR REPLACE NAVIGATION profile
-    HOME PAGE module.PageName
-    [ HOME PAGE module.PageName FOR UserRole ]
+    HOME { PAGE module.PageName | MICROFLOW module.Flow | NANOFLOW module.Flow }
+    [ HOME { PAGE | MICROFLOW | NANOFLOW } module.Name FOR UserRole ]
     [ LOGIN PAGE module.PageName ]
     [ NOT FOUND PAGE module.PageName ]
     [ ON SYNC ERROR { THROW | CONTINUE } ]
@@ -29243,6 +29367,13 @@ The navigation profile type — see [Profile Types](#profile-types-1). One of
 
 The default home page for the profile. Required. The page must already exist.
 
+[`HOME MICROFLOW module.Flow` / `HOME NANOFLOW module.Flow`](#home-microflow-moduleflow--home-nanoflow-moduleflow)
+
+A flow run as the home instead of a page: a microflow on a web profile, a
+nanoflow on a native one. Each is refused on the other kind of profile
+(`HOME MICROFLOW` on a native profile, which DESCRIBE used to print for its
+nanoflow home, still runs with a warning).
+
 [`HOME PAGE module.PageName FOR UserRole`](#home-page-modulepagename-for-userrole)
 
 Optional role-specific home page. Users with this role see a different home page than the default. Multiple role-specific home pages can be specified.
@@ -29263,7 +29394,7 @@ Optional menu structure. Contains `MENU ITEM` and nested `MENU` entries. An empt
 
 [`MENU ITEM 'label' ( OnClick: action, Icon: icon )`](#menu-item-label--onclick-action-icon-icon-)
 
-A leaf menu item. `OnClick` is `SHOW PAGE module.PageName`, `CALL MICROFLOW module.Microflow` or `SIGN OUT`; `Icon` is `Module.Collection.icon`, `GLYPH n` or `IMAGE Module.Images.name`. Both are optional.
+A leaf menu item. `OnClick` is `SHOW PAGE module.PageName`, `CALL MICROFLOW module.Microflow`, `CALL NANOFLOW module.Nanoflow`, `OPEN LINK 'url'`, `CREATE OBJECT module.Entity [THEN SHOW PAGE module.PageName]`, `SIGN OUT` or `NOTHING`, with a button action’s `WITH ( … )` settings; `Icon` is `Module.Collection.icon`, `GLYPH n` or `IMAGE Module.Images.name`. Both are optional. DESCRIBE prints every stored action this way, and flags what it cannot spell (a page title override, a link type other than Web), which a rewrite keeps while the item is unchanged.
 
 [`MENU 'label' [( Icon: icon )] { ... }`](#menu-label--icon-icon----)
 
@@ -29348,16 +29479,15 @@ CREATE OR MODIFY NAVIGATION Responsive
 
 ```
 
-Native mobile navigation:
+Native mobile navigation. A native profile’s home is a page or a nanoflow
+(`HOME NANOFLOW`); mxcli writes its home pages and `SYNC` block only, and refuses a
+`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE` and `ON SYNC ERROR`
+on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
 
 ```
 CREATE OR MODIFY NAVIGATION NativePhone
-    HOME PAGE Mobile.Dashboard
-    {
-        MENU ITEM 'Home' ( OnClick: SHOW PAGE Mobile.Dashboard )
-        MENU ITEM 'Tasks' ( OnClick: SHOW PAGE Mobile.TaskList )
-        MENU ITEM 'Profile' ( OnClick: SHOW PAGE Mobile.UserProfile )
-    };
+    HOME NANOFLOW Mobile.NAV_Home
+    HOME PAGE Mobile.Dashboard FOR User;
 
 ```
 ## [See Also](#see-also-82)
@@ -29448,7 +29578,7 @@ DROP MENU module.name
 Where each `menu_item` is one of:
 
 ```
-MENU ITEM 'caption' [ ( [ OnClick: SHOW PAGE module.page | CALL MICROFLOW module.microflow | SIGN OUT ] [, Icon: module.collection.icon ] ) ]
+MENU ITEM 'caption' [ ( [ OnClick: action ] [, Icon: module.collection.icon ] ) ]
 MENU 'caption' [ ( Icon: module.collection.icon ) ] { nested_items }
 
 ```
@@ -29489,9 +29619,16 @@ Optional. Places the document in the named module folder, creating missing folde
 The item’s label, in single quotes.
 [`OnClick:`](#onclick)
 Optional action run when the item is clicked, in the words a page action uses:
-`show page M.P`, `call microflow M.F` or `sign out`. An item without one is
-inert (stored as `Forms$NoAction`), which is normal for an item that only
-groups sub-items.
+`show page M.P`, `call microflow M.F`, `call nanoflow M.N`,
+`open link 'https://…'`, `create object M.E [then show page M.P]`, `sign out`
+or `nothing` — the action expression a button’s `Action:` takes, with its
+`with ( … )` settings (progress bar and message, confirmation, asynchronous,
+form validations, disabled during action). Save, delete, close page and
+complete task are refused: a menu item has no object to act on. An item
+without one is inert (stored as `Forms$NoAction`), which is normal for an
+item that only groups sub-items. A page title override or a link type other
+than Web has no spelling; describe flags it, and a rewrite keeps it while the
+item’s caption and action are unchanged.
 [`Icon:`](#icon)
 Optional icon, given as a qualified name into an icon collection — not a string.
 Hyphenated segments are double-quoted: `Atlas_Core.Atlas."layout-2"`.
@@ -39803,6 +39940,28 @@ $n        = count $Approved;
 
 The same applies to both operands of `union`/`intersect`/`subtract`.
 
+### [MDL-JSONNUM01: A locale-dependent number in hand-built JSON](#mdl-jsonnum01-a-locale-dependent-number-in-hand-built-json)
+
+```
+set '$Json' builds JSON with formatDecimal(…) and no locale: it formats in the user's
+language, so a Dutch user gets '12,50' and the JSON is invalid for them only [MDL-JSONNUM01]
+
+```
+
+**Cause:** `formatDecimal(x, '0.00')` without a locale argument formats in the *current user’s* language. The microflow writes `12.50` for an English user and `12,50` for a Dutch one, so JSON built by concatenation (a chart’s data, an API payload) is invalid only for some users — typically not the author. An underscore locale tag (`'nl_NL'`, `'en_US'`) is silently ignored and falls back to the user’s language; only the hyphenated form applies. Measured on Mendix 11.13.
+
+The rule is info and heuristic: it fires when the same `+` concatenation has a string literal containing `{` or `":`. A display string such as `'Total: ' + formatDecimal(…)` is not flagged.
+
+**Solution:** Use `toString(round(x, 2))`, which always writes a `.` and never an exponent, or pass a hyphenated locale.
+
+```
+-- WRONG
+set $Json = $Json + ',"v":' + formatDecimal($R/Total, '0.00') + '}';
+-- RIGHT
+set $Json = $Json + ',"v":' + toString(round($R/Total, 2)) + '}';
+set $Json = $Json + ',"v":' + formatDecimal($R/Total, '0.00', 'en-US') + '}';
+
+```
 ### [Mismatched input](#mismatched-input)
 
 ```

@@ -1,3 +1,7 @@
+## 2026-10-05 -- mxcli v0.24.0 @ 0c21d62
+- +179 / -20 lines
+- Sections changed: [Working Outside Studio Pro](#working-outside-studio-pro), [A theme this project owns](#a-theme-this-project-owns), [Examples](#examples-57), [Flags](#flags-3), [Git states that crash Studio Pro](#git-states-that-crash-studio-pro), [One report: `mxcli diag -p`](#one-report-mxcli-diag--p), [Parameters](#parameters-46), [Parameters](#parameters-48) (+10 more)
+
 ## 2026-10-04 -- mxcli v0.24.0 @ 2233ce1
 - +580 / -122 lines
 - Sections changed: .claude/lint-rules/custom001_entity_prefix.star, List rules to verify your rule is detected, Mendix Project: MyApp, Run lint to test your custom rule, [Syncing with Updates](#syncing-with-updates), [Writing Custom Rules](#writing-custom-rules), list the rules, including yours, run them (+39 more)
