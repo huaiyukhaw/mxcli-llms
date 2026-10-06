@@ -1,0 +1,1 @@
+# [CREATE MESSAGE DEFINITION COLLECTION](#create-message-definition-collection)

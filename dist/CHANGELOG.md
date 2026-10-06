@@ -1,3 +1,7 @@
+## 2026-10-06 -- mxcli v0.25.0 @ 42e86b6
+- +670 / -136 lines
+- Sections changed: Browser-based UI verification, Skip the app health check, [CREATE MESSAGE DEFINITION COLLECTION](#create-message-definition-collection), [CREATE MESSAGE DEFINITION](#create-message-definition), [Measuring Agent Sessions](#measuring-agent-sessions), [mxcli run –local](#mxcli-run-local), [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop), [CLI Commands](#cli-commands-1) (+153 more)
+
 ## 2026-10-05 -- mxcli v0.24.0 @ 0c21d62
 - +179 / -20 lines
 - Sections changed: [Working Outside Studio Pro](#working-outside-studio-pro), [A theme this project owns](#a-theme-this-project-owns), [Examples](#examples-57), [Flags](#flags-3), [Git states that crash Studio Pro](#git-states-that-crash-studio-pro), [One report: `mxcli diag -p`](#one-report-mxcli-diag--p), [Parameters](#parameters-46), [Parameters](#parameters-48) (+10 more)

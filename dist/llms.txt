@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.24.0 @ 0c21d62 | Generated: 2026-10-05T08:09:55Z
+Version: mxcli v0.25.0 @ 42e86b6 | Generated: 2026-10-06T08:28:29Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -165,6 +165,8 @@ live in the javadoc comment above a test’s…
 - [Local Dev Loop](https://www.mxcli.org/tools/run-local.html)
 - [Bootstrap Prompt](https://www.mxcli.org/tools/bootstrap-prompt.html)
 - [Debug Microflows](https://www.mxcli.org/tools/debug-microflows.html)
+- [Measuring Agent Sessions](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/session-report.md): An agent session’s cost is roughly model calls × conversation size : every
+model call re-reads the whole conversation, and every…
 - [Docker Integration](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/docker.md): mxcli provides Docker integration for building, running, and validating Mendix applications without a local Mendix installation…
 - [mxcli docker build](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/docker-build.md): The mxcli docker build command builds a Mendix application using mxbuild in Docker, including support for PAD (Platform-Agnostic…
 - [mxcli docker check](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/docker-check.md): The mxcli docker check command validates a Mendix project without building it. It runs the Mendix mx check tool against the…
@@ -269,6 +271,8 @@ equivalent of Studio Pro’s Update security button…
 - [OData and Integration Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/odata/index.md): Statements for managing OData services, external entities, and browsing service contracts.
 - [Integration Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/index.md): Statements for managing JSON structures, import mappings, export mappings, and data transformers.
 - [CREATE JSON STRUCTURE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-json-structure.md)
+- [CREATE MESSAGE DEFINITION COLLECTION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-message-definition-collection.md)
+- [CREATE MESSAGE DEFINITION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-message-definition.md)
 - [CREATE IMPORT MAPPING](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-import-mapping.md)
 - [CREATE EXPORT MAPPING](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-export-mapping.md)
 - [CREATE DATA TRANSFORMER](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/integration/create-data-transformer.md)
