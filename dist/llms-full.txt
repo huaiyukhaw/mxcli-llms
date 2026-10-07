@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ 42e86b6
-Generated: 2026-10-06T08:28:29Z
+Version:   mxcli v0.25.0 @ a924d11
+Generated: 2026-10-07T08:03:57Z
 
 ---
 
@@ -4177,10 +4177,10 @@ Calling external APIs from microflows – GET, POST, authentication, and error h
 CREATE MICROFLOW Integration.FetchWebpage ()
 RETURNS String AS $Content
 BEGIN
-  $Content = CALL REST SERVICE GET 'https://example.com/api/status'
-    HEADER Accept = 'application/json'
-    TIMEOUT 30
-    RETURNS String;
+  $Content = CALL REST SERVICE GET 'https://example.com/api/status' (
+    Headers: ('Accept': 'application/json'),
+    Timeout: 30,
+  ) RETURNS String;
   RETURN $Content;
 END;
 
@@ -4197,10 +4197,10 @@ BEGIN
   $Response = CALL REST SERVICE GET 'https://api.example.com/search?q={1}&page={2}' WITH (
     {1} = urlEncode($Query),
     {2} = toString($Page)
-  )
-    HEADER Accept = 'application/json'
-    TIMEOUT 60
-    RETURNS String;
+  ) (
+    Headers: ('Accept': 'application/json'),
+    Timeout: 60,
+  ) RETURNS String;
   RETURN $Response;
 END;
 
@@ -4214,14 +4214,14 @@ CREATE MICROFLOW Integration.CreateCustomer (
 )
 RETURNS String AS $Response
 BEGIN
-  $Response = CALL REST SERVICE POST 'https://api.example.com/customers'
-    HEADER 'Content-Type' = 'application/json'
-    BODY '{{"name": "{1}", "email": "{2}"}' WITH (
+  $Response = CALL REST SERVICE POST 'https://api.example.com/customers' (
+    Headers: ('Content-Type': 'application/json'),
+    Body: TEMPLATE '{{"name": "{1}", "email": "{2}"}' WITH (
       {1} = $Name,
       {2} = $Email
-    )
-    TIMEOUT 30
-    RETURNS String;
+    ),
+    Timeout: 30,
+  ) RETURNS String;
   RETURN $Response;
 END;
 
@@ -4239,11 +4239,11 @@ CREATE MICROFLOW Integration.UploadDocument (
 RETURNS Boolean AS $Ok
 BEGIN
   DECLARE $Ok Boolean = false;
-  $Response = CALL REST SERVICE POST 'https://api.example.com/documents'
-    HEADER 'ContentType' = 'application/pdf'
-    BODY BINARY $Doc/Contents
-    TIMEOUT 300
-    RETURNS response;
+  $Response = CALL REST SERVICE POST 'https://api.example.com/documents' (
+    Headers: ('ContentType': 'application/pdf'),
+    Body: BINARY $Doc/Contents,
+    Timeout: 300,
+  ) RETURNS response;
   SET $Ok = $Response/StatusCode = 200;
   RETURN $Ok;
 END;
@@ -4270,11 +4270,11 @@ CREATE MICROFLOW Integration.FetchSecureData (
 )
 RETURNS String AS $Response
 BEGIN
-  $Response = CALL REST SERVICE GET 'https://api.example.com/secure/data'
-    HEADER Accept = 'application/json'
-    AUTH BASIC $Username PASSWORD $Password
-    TIMEOUT 30
-    RETURNS String;
+  $Response = CALL REST SERVICE GET 'https://api.example.com/secure/data' (
+    Headers: ('Accept': 'application/json'),
+    Authentication: BASIC (Username: $Username, Password: $Password),
+    Timeout: 30,
+  ) RETURNS String;
   RETURN $Response;
 END;
 
@@ -4291,10 +4291,10 @@ RETURNS Boolean AS $Success
 BEGIN
   DECLARE $Success Boolean = false;
 
-  $Response = CALL REST SERVICE GET $Url
-    HEADER Accept = 'application/json'
-    TIMEOUT 30
-    RETURNS String
+  $Response = CALL REST SERVICE GET $Url (
+    Headers: ('Accept': 'application/json'),
+    Timeout: 30,
+  ) RETURNS String
     ON ERROR WITHOUT ROLLBACK BEGIN
       LOG ERROR NODE 'Integration' 'API call failed: ' + $Url;
       RETURN false;
@@ -5717,6 +5717,32 @@ Each keyword has one spelling, and a page action uses the words a microflow uses
 
 `show entity X` and `show association X` are not `mdl 1`: `describe entity X` prints the definition as MDL, and `list entities in M` / `list associations in M` print the summary columns. `show version`, `show status`, `show connections` and `show catalog status` report the session, not the model: they are session commands (R7), typed at the REPL.
 
+## [Activity Settings](#activity-settings)
+
+A microflow or nanoflow activity says what it does in words, and lists its
+settings in one property list ([ADR-0013](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0013-activity-settings-property-list.md)):
+
+- **Words** carry the action and its data flow: the verb, the result variable
+  (`$x =`), the main operand (the method and URL, the called document, the
+  object), `returns …` and `on error …`.
+- **One `( Key: value, … )` list after the main operand** carries what a Studio
+  Pro user sets in the activity’s properties dialog: headers, authentication,
+  timeout, request body. `:` sets a setting, `=` binds a value, trailing commas
+  are allowed, and an unknown key is an error.
+
+```
+$Html = call rest service get 'https://example.com' (
+  Headers: ('Accept': 'text/html'),
+  Timeout: 300,
+) returns String;
+
+```
+
+The keys are named as the matching document property is (`Headers`,
+`Authentication`, `Timeout`, as on a consumed REST service). An activity with
+one or two settings that read naturally as words keeps its clauses —
+`log info node 'App' 'text'`, `show message 'Saved' type Information`.
+
 ## [Document Type Names](#document-type-names)
 
 Document types are named as Studio Pro names them: `consumed rest service(s)`, `consumed odata service(s)`, `published odata service(s)`, `task queue(s)`, `alter app security …`, `alter settings runtime …`, `list image collections` / `list icon collections` / `list message definition collections`, `ai model(s)` (the agent editor’s model document), and `create json structure M.J sample '…'`.
@@ -6464,7 +6490,7 @@ refuse the spelling; until then it only warns.
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
-85 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+86 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 | --- | --- | --- | --- | --- |
@@ -6553,6 +6579,7 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR555` | `alter settings model …` | `alter settings runtime …` | yes: section name: `model` becomes `runtime` | mdl 2 |
 | `MDL-DEPR710` | `create user role R (M.A, …) [manage all roles]` | `create user role R ( ModuleRoles: (M.A, …), ManageAllRoles: true, … )` | yes: user role properties: the role list becomes `ModuleRoles: (…)` in a ( Key: value ) list, and `manage all roles` becomes `ManageAllRoles: true` | mdl 2 |
 | `MDL-DEPR711` | `Headers: ('Authorization': 'Bearer ' + $Token) / ('X-Key': $Key)` | `Headers: ('Authorization': 'Bearer {Token}') / ('X-Key': '{Key}')` | yes: header value as a template: `'text' + $P` becomes `'text{P}'` | mdl 2 |
+| `MDL-DEPR720` | `call rest service <method> <url> [header N = v …] [auth basic $u password $p] [body …] [timeout n] returns …` | `call rest service <method> <url> (Headers: ('N': v), Authentication: basic (Username: $u, Password: $p), Body: …, Timeout: n) returns …` | yes: activity settings as one property list (ADR-0013): `header N = v` becomes `Headers: ('N': v)`, `auth basic $u password $p` becomes `Authentication: basic (Username: $u, Password: $p)`, `body '…'` becomes `Body: template '…'`, `body binary|mapping …` becomes `Body: binary|mapping …`, `timeout n` becomes `Timeout: n` | mdl 2 |
 
 # [Data Types](#data-types)
 
@@ -8720,6 +8747,56 @@ LOG INFO NODE 'OrderProcessing' 'Order created: ' + $Order/OrderNumber;
 LOG ERROR NODE 'PaymentGateway' 'Payment failed for order ' + $Order/OrderNumber;
 
 ```
+## [Email](#email)
+
+### [SEND EMAIL](#send-email)
+
+Sends mail over SMTP with the built-in **Send Email** activity (Studio Pro 11.13+,
+beta) — no Email Connector module needed. Microflows only.
+
+```
+SEND EMAIL (
+  From: @Shop.MailSender,
+  To: $Order/CustomerEmail,
+  Cc: 'archive@example.com',
+  Subject: 'Order {1} confirmed' WITH ({1} = $Order/OrderNumber),
+  Body: TEMPLATE 'Hi {1}, your order ships soon.' WITH ({1} = $Order/CustomerName),
+  HtmlBody: TEMPLATE '<p>Your order ships soon.</p>',
+  Headers: ('X-Correlation-Id': 'order-confirmation'),
+  Attachment: $Invoice,
+  Host: @Shop.SmtpHost,
+  Port: @Shop.SmtpPort,
+  SecurityType: SSL,
+  CheckServerIdentity: true,
+  ConnectionTimeout: 30000,
+  Authentication: BASIC (Username: @Shop.SmtpUser, Password: @Shop.SmtpPassword),
+) ON ERROR WITHOUT ROLLBACK BEGIN
+  LOG ERROR NODE 'Mail' 'Sending failed';
+END ERROR;
+
+```
+
+The activity’s settings are one property list, as for `CALL REST SERVICE`
+([Activity Settings](#mdl-basics)); the order of the keys does not matter. `From`,
+`Host`, `Port` and at least one of `To`, `Cc` and `Bcc` are required — mxbuild
+reports a missing one as CE0166.
+
+- **Addresses, host, port, user and password** are expressions. All are String
+  except `Port`, which is Integer or Long. Prefer constants for the connection
+  settings, and never a literal password.
+- **Subject** is a text template, as in `LOG`; **Body** and **HtmlBody** take
+  `template '…'`, as a REST body does. Placeholders `{1}`, `{2}` … are filled by
+  String expressions in `WITH`. Any other expression is stored as the template `'{1}'`.
+- **Headers** are plain strings: the name holds letters, digits and hyphens.
+- **Attachment** is a `System.FileDocument` variable, a list of them, or a
+  specialization.
+- **Defaults**, which `DESCRIBE` leaves out: `SecurityType: tls`,
+  `ConnectionTimeout: 20000` (milliseconds), no `CheckServerIdentity` (it applies
+  to SSL only), no authentication.
+
+Studio Pro’s *Test Email* tab is an editor tool and is not part of MDL; rewriting
+the microflow stores it empty.
+
 ## [Database Query Execution](#database-query-execution)
 
 ### [EXECUTE DATABASE QUERY](#execute-database-query)
@@ -8766,6 +8843,7 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Validation | `VALIDATION FEEDBACK $Var/Attr MESSAGE 'msg';` | – |
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'msg';` | – |
 | DB query | `$Var = EXECUTE DATABASE QUERY Module.Conn.Query;` | Result set |
+| Send email | `SEND EMAIL (From: …, To: …, Subject: '…', Host: …, Port: …);` (11.13+) | – |
 | Assignment | `SET $Var = expression;` | – |
 | Change list | `ADD $Item TO $List;` / `REMOVE $Item FROM $List;` / `CLEAR $List;` / `SET $List = $Other;` | – |
 
@@ -40473,6 +40551,24 @@ $n        = count $Approved;
 ```
 
 The same applies to both operands of `union`/`intersect`/`subtract`.
+
+### [MDL-EMAIL02 / 03: A `send email` setting Studio Pro would not allow](#mdl-email02--03-a-send-email-setting-studio-pro-would-not-allow)
+
+```
+send email: CheckServerIdentity has no effect without SecurityType: ssl (it is TLS) [MDL-EMAIL02]
+send email: header name "Bad Name!" may contain only letters, digits and hyphens [MDL-EMAIL03]
+
+```
+
+**Cause:** Studio Pro enables *Check Server Identity* only for SSL (MDL-EMAIL02),
+and restricts a custom header to a name of letters, digits and hyphens and a
+single-line, non-empty value (MDL-EMAIL03). mxbuild 11.15 accepts both, which is
+why they are warnings: a script is the only way to store them, and the flag is
+ignored or the header fails only when a mail is sent.
+
+**Solution:** `SecurityType: ssl, CheckServerIdentity: true`, or drop
+`CheckServerIdentity`; rename the header, e.g.
+`Headers: ('X-Correlation-Id': 'value')`.
 
 ### [MDL-JSONNUM01: A locale-dependent number in hand-built JSON](#mdl-jsonnum01-a-locale-dependent-number-in-hand-built-json)
 

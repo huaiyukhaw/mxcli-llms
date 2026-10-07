@@ -1,3 +1,7 @@
+## 2026-10-07 -- mxcli v0.25.0 @ a924d11
+- +125 / -29 lines
+- Sections changed: [Activity Settings](#activity-settings), [Basic Authentication](#basic-authentication), [Email](#email), [Error Handling](#error-handling-1), [GET with URL Parameters](#get-with-url-parameters), [One Verb per Job](#one-verb-per-job), [POST a Binary Body (File Upload)](#post-a-binary-body-file-upload), [POST with JSON Body](#post-with-json-body) (+4 more)
+
 ## 2026-10-06 -- mxcli v0.25.0 @ 42e86b6
 - +670 / -136 lines
 - Sections changed: Browser-based UI verification, Skip the app health check, [CREATE MESSAGE DEFINITION COLLECTION](#create-message-definition-collection), [CREATE MESSAGE DEFINITION](#create-message-definition), [Measuring Agent Sessions](#measuring-agent-sessions), [mxcli run –local](#mxcli-run-local), [After bootstrap — the inner loop](#after-bootstrap--the-inner-loop), [CLI Commands](#cli-commands-1) (+153 more)
