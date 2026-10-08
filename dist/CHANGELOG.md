@@ -1,3 +1,7 @@
+## 2026-10-08 -- mxcli v0.25.0 @ 313c7ef
+- +126 / -11 lines
+- Sections changed: [Convention Rules](#convention-rules), [Core Tables](#core-tables), [Depth levels](#depth-levels), [Description](#description-35), [Full Refresh Tables](#full-refresh-tables), [OData Clients, Services & External Entities](#odata-clients-services--external-entities), [Pages](#pages-5), [Publishing a REST API](#publishing-a-rest-api) (+2 more)
+
 ## 2026-10-07 -- mxcli v0.25.0 @ a924d11
 - +125 / -29 lines
 - Sections changed: [Activity Settings](#activity-settings), [Basic Authentication](#basic-authentication), [Email](#email), [Error Handling](#error-handling-1), [GET with URL Parameters](#get-with-url-parameters), [One Verb per Job](#one-verb-per-job), [POST a Binary Body (File Upload)](#post-a-binary-body-file-upload), [POST with JSON Body](#post-with-json-body) (+4 more)

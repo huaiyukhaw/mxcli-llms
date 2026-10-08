@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ a924d11
-Generated: 2026-10-07T08:03:57Z
+Version:   mxcli v0.25.0 @ 313c7ef
+Generated: 2026-10-08T08:20:17Z
 
 ---
 
@@ -1954,6 +1954,8 @@ MyFirstModule
 ```
 
 Depth 3 is verbose but gives you the most complete picture without running individual DESCRIBE commands.
+
+At depths 2 and 3 each page also lists its outermost data widgets, the ones that set up a data context, for example `Page MyFirstModule.Customer_Edit [DataView<Customer>]`. A data widget nested inside another one is not listed. The widget index is built only by `REFRESH CATALOG FULL`, so on a default catalog pages print without the list.
 
 ## [Filtering by module](#filtering-by-module-1)
 
@@ -4526,6 +4528,52 @@ CREATE OR MODIFY PUBLISHED REST SERVICE Module.OrderAPI (
 };
 
 ```
+### [Authentication](#authentication)
+
+`Authentication` sets how a caller authenticates — Studio Pro’s **Requires
+authentication** and its methods:
+
+```
+mdl 1;
+CREATE OR MODIFY PUBLISHED REST SERVICE Module.OrderAPI (
+  Path: 'rest/orders/v1',
+  Version: '1.0.0',
+  ServiceName: 'Order API',
+  Authentication: (basic, session, microflow Module.PRS_Authenticate)
+)
+{
+  RESOURCE 'orders' {
+    GET '' MICROFLOW Module.PRS_GetAllOrders;
+  }
+};
+GRANT ACCESS ON PUBLISHED REST SERVICE Module.OrderAPI TO Module.User;
+
+ALTER PUBLISHED REST SERVICE Module.OrderAPI SET (Authentication: (session));
+ALTER PUBLISHED REST SERVICE Module.OrderAPI SET (Authentication: none);
+
+```
+
+| Method | Studio Pro |
+| --- | --- |
+| `basic` | Username and password |
+| `session` | Active session |
+| `microflow Module.Name` | Custom, with that authentication microflow |
+| `none` (instead of a list) | Requires authentication: No |
+
+- The methods are stored **in the order written**, as Studio Pro stores them in
+  the order they were ticked; `describe` prints the stored order.
+- **Left out**, `CREATE OR MODIFY` and `ALTER` keep the service’s stored
+  setting. A new service without it requires no authentication. `describe`
+  does not print `none`.
+- The **authentication microflow** returns `System.User` — empty means “not
+  authenticated” — and its parameters can only be a `System.HttpRequest` and a
+  `System.HttpResponse`, matched by type (none at all is fine). `exec` and
+  `check --references` refuse anything else as **MDL-REST04** (Mendix: CE0334,
+  CE0336).
+- With authentication on, the service needs at least one allowed module role
+  (`GRANT ACCESS …`), or `mx check` reports CE0338. Custom authentication also
+  needs app security on (CE6600). Roles without authentication are accepted.
+
 ### [Multiple Resources](#multiple-resources)
 
 ```
@@ -6490,7 +6538,7 @@ refuse the spelling; until then it only warns.
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
-86 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+87 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 | --- | --- | --- | --- | --- |
@@ -6558,6 +6606,7 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR136` | `create constant M.C type T default v [exposed to client]` | `create constant M.C ( Type: T, DefaultValue: v, ExposedToClient: true )` | yes: constant properties: `type T default v exposed to client` becomes `( Type: T, DefaultValue: v, ExposedToClient: true )` | mdl 2 |
 | `MDL-DEPR137` | `create demo user 'u' password 'p' [entity M.E] (Role, …)` | `create demo user 'u' ( Password: 'p', Entity: M.E, UserRoles: (Role, …) )` | yes: demo user properties: `password 'p' entity M.E (R1, R2)` becomes `( Password: 'p', Entity: M.E, UserRoles: (R1, R2) )` | mdl 2 |
 | `MDL-DEPR138` | `create constant M.C … private` | `create constant M.C …` | yes: constant’s `private` modifier away: it is deleted | mdl 1 |
+| `MDL-DEPR139` | `create published odata service M.S ( … ) authentication basic, session, microflow M.F` | `create published odata service M.S ( …, Authentication: (basic, session, microflow M.F) )` | yes: published OData authentication: the trailing `authentication m1, m2` clause becomes the last property, `Authentication: (m1, m2)` | mdl 2 |
 | `MDL-DEPR140` | `alter workflow M.W set display 'x' / set description … / set export level … / set due date … / set overview page … / set parameter $P: M.E` | `alter workflow M.W { set ( Display: 'x', Description: …, ExportLevel: …, DueDate: …, OverviewPage: …, Parameter: $P: M.E ); }` | yes: property as `set ( Key: value )`, inside the statement’s { } | mdl 2 |
 | `MDL-DEPR141` | `alter workflow M.W set activity X page M.P / description … / targeting … / due date …` | `alter workflow M.W { set ( Page: M.P, Description: …, Targeting: …, DueDate: … ) on X; }` | yes: `set activity X <prop> v` as `set ( Key: v ) on X`, inside the statement’s { } | mdl 2 |
 | `MDL-DEPR142` | `alter workflow M.W insert after X <activity>;` | `alter workflow M.W { insert after X { <activity>; } }` | yes: inserted activity in { }, inside the statement’s { } | mdl 2 |
@@ -16205,8 +16254,9 @@ query written then that should keep its old result filters on
 | `Caption` | The stored caption: an activity’s, a split’s, or an annotation’s text. Empty for events, merges and loops. With `AutoGenerateCaption` it holds Studio Pro’s stored placeholder (often `Activity`) |
 | `AutoGenerateCaption` | 1 when Studio Pro generates the activity’s caption |
 | `Description` | Documentation of an action activity, split or loop |
-| `EntityRef` | Entity of a create object or a database retrieve |
-| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action |
+| `EntityRef` | Entity of a create object, a database retrieve, or a delete (the deleted variable’s entity, when the flow types it) |
+| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty |
+| `QueueRef` | Task queue a microflow or Java action call runs in; empty when it runs in place |
 | `UseRequestTimeout`, `TimeoutExpression` | “Use a timeout” and its seconds, for a REST or web service call |
 | `ConditionExpression` | An exclusive split’s expression |
 | `ConditionRule` | The rule a rule-based split calls |
@@ -16221,6 +16271,11 @@ query written then that should keep its old result filters on
 SELECT MicroflowQualifiedName, EntityRef, LoopDepth
 FROM CATALOG.ACTIVITIES
 WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLoopId <> '';
+
+-- Microflows called from inside a loop, synchronously (a queued call runs outside it)
+SELECT MicroflowQualifiedName, ActionRef
+FROM CATALOG.ACTIVITIES
+WHERE ActionType = 'MicroflowCallAction' AND ParentLoopId <> '' AND QueueRef = '';
 
 ```
 ### [CATALOG.PAGES](#catalogpages)
@@ -17306,11 +17361,12 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 
 | Rule | Description |
 | --- | --- |
-| **CONV011** | No commit in loop – Detects COMMIT statements inside LOOP blocks (performance anti-pattern) |
+| **CONV011** | No commit in loop – Detects COMMIT statements, and CREATE / CHANGE with a COMMIT clause, inside LOOP blocks (performance anti-pattern) |
 | **CONV012** | Exclusive split captions – Checks that decision branches have meaningful captions |
 | **CONV013** | Error handling on external calls – Ensures external service calls have error handling |
 | **CONV014** | No continue error handling – Warns against using CONTINUE error handling without logging |
 | **MDL-FLOW01** | Un-describable branch structure – Decision branches that re-enter each other’s paths, so `DESCRIBE MICROFLOW` cannot render them as nested `IF`s without changing what they mean |
+| **MDL-MAP04** | First over an object-rooted import mapping – An `import from mapping` or `rest call … returns mapping` activity already in the model stores Studio Pro’s *First* (`ForceSingleOccurrence` or `Range.SingleObject`) over a mapping that returns one object. `mx check` reports 0 errors; the activity throws `key not found: Path(QName(None,),None,)` when it runs. `mxcli check` refuses the same statement in a script under the same ID; this finds activities written before that check existed, or with `exec --no-check`. A list-rooted mapping’s *First* is legitimate and is not reported |
 
 ## [Running Built-in Rules](#running-built-in-rules)
 
@@ -28405,7 +28461,28 @@ Inserts new widgets immediately before or after a named widget within its parent
 
 Appends new widgets as the **last children** of a named container. This is the only way to fill an **empty** container, and the natural way to add a widget to a container or data view without needing a sibling to anchor to. Widgets inserted into a data view take that data view’s entity as their context.
 
-Supported on simple containers (container/DivContainer, data view, group box, scroll-container region). A layout grid (rows/columns) and tab container have no single child list — insert relative to a widget inside the target column or tab instead.
+Supported on simple containers (container/DivContainer, data view, group box, tab page, scroll-container region). A layout grid (rows/columns) has no single child list — insert relative to a widget inside the target column instead. A tab container’s children are tab pages; see below.
+
+### [Adding Tab Pages](#adding-tab-pages)
+
+A tab container holds tab pages, and only tab pages. `INSERT INTO` the tab
+container appends one; `INSERT BEFORE` / `INSERT AFTER` a tab page places it next
+to that sibling. The container keeps its default tab.
+
+```
+mdl 1;
+alter page ModT.TabsPage {
+  insert after tpOne { tabpage tpTwo (Caption: 'Two') { dynamictext txtTwo (Content: 'two') } }
+};
+alter page ModT.TabsPage {
+  insert into tabsMain { tabpage tpThree (Caption: 'Three') { dynamictext txtThree (Content: 'three') } }
+};
+
+```
+
+A tab page cannot go next to an ordinary widget or inside another tab page, and
+one `INSERT` cannot mix tab pages with widgets. Dropping, replacing or reordering
+tab pages still needs `CREATE OR MODIFY PAGE`.
 
 ### [DROP](#drop-2)
 
@@ -37377,10 +37454,10 @@ CREATE TABLE activities_data (
     MicroflowQualifiedName  TEXT,
     ModuleName              TEXT,
     Folder                  TEXT,
-    EntityRef               TEXT,       -- create object / database retrieve entity
+    EntityRef               TEXT,       -- create object / database retrieve / delete entity
     ActionType              TEXT,       -- e.g. "RetrieveAction", "MicroflowCallAction"
     ServiceRef              TEXT,       -- called service (REST, web service, OData)
-    ActionRef               TEXT,       -- operation within it
+    ActionRef               TEXT,       -- operation within it, or the called microflow/nanoflow/Java/JavaScript action
     UseRequestTimeout       INTEGER,
     TimeoutExpression       TEXT,
     Description             TEXT,       -- documentation
@@ -37396,6 +37473,7 @@ CREATE TABLE activities_data (
     CommitType              TEXT,       -- Yes / YesWithoutEvents / No
     WithEvents              INTEGER,
     RetrieveSource          TEXT,       -- database / association
+    QueueRef                TEXT,       -- task queue a microflow/Java action call runs in
     ProjectId               TEXT,
     SnapshotId              TEXT
 );
@@ -39199,9 +39277,9 @@ CREATE PUBLISHED ODATA SERVICE MyModule.CustomerAPI (
   Path: '/odata/customers',
   Version: '1.0.0',
   ODataVersion: OData4,
-  Namespace: 'MyModule.Customers'
+  Namespace: 'MyModule.Customers',
+  Authentication: (basic, session)
 )
-AUTHENTICATION Basic, Session
 {
   PUBLISH ENTITY MyModule.Customer AS 'Customers' (
     ReadMode: SOURCE,
@@ -39464,8 +39542,8 @@ MDL uses explicit property declarations for pages:
 | `Hidable` | `yes`, `hidden`, `no` | `yes` | `Hidable: no` |
 | `ColumnWidth` | `autoFill`, `autoFit`, `manual` | `autoFill` | `ColumnWidth: manual` |
 | `Size` | integer (px) | `1` | `Size: 200` |
-| `Visible` | expression string | `true` | `Visible: '$showColumn'` (page variable, not $currentObject) |
-| `DynamicCellClass` | expression string | (empty) | `DynamicCellClass: if(...) then ... else ...` |
+| `Visible` | expression | `true` | `Visible: $showColumn` — evaluated once for the grid: a page variable or parameter, never `$currentObject` (MDL-WIDGET43, CE0117) |
+| `DynamicCellClass` | expression | (empty) | `DynamicCellClass: if $currentObject/Stock < 10 then 'text-danger' else ''` |
 | `Tooltip` | text string | (empty) | `Tooltip: 'Price in USD'` |
 
 **Page Example:**
@@ -40551,6 +40629,43 @@ $n        = count $Approved;
 ```
 
 The same applies to both operands of `union`/`intersect`/`subtract`.
+
+### [MDL-SET01: `set` on an object variable](#mdl-set01-set-on-an-object-variable)
+
+```
+cannot set object variable '$Cursor' (G46.Group): Mendix has no action that reassigns an
+object variable — Change variable takes only a primitive, and mxbuild rejects it with
+CE7247 "Variable 'Cursor' does not have a primitive type". [MDL-SET01]
+
+```
+
+**Cause:** `set $Var = …` is a Change variable activity, which takes only a primitive
+variable; on a list it is a Change list Replace. Mendix has no activity that reassigns an
+object variable, so the statement used to be written as a Change variable and fail the build
+with CE7247 (mendixlabs/mxcli#1323). It comes up naturally when walking a parent chain with
+`set $Cursor = $Next` in a `while` loop. On a parameter mxbuild words the same code
+`"Parameter 'X' cannot be changed."`.
+
+Plain `check` reports it for the objects it can see without a project — entity parameters,
+`create`, `retrieve … first`, loop iterators, casts, `head`. Whether an association retrieve
+is an object or a list depends on the association, so that case is reported by
+`check --references` and `exec`.
+
+**Solution:** Return the new object from a sub-microflow (recursion for a chain walk),
+retrieve it into a new variable, or change the object’s members with `change $Obj (…)`.
+
+The same rule refuses `set` on a **parameter** of any type but a list, in a microflow, a
+nanoflow or a rule:
+
+```
+cannot set parameter '$N' (Integer): a Change variable cannot target a parameter, and
+mxbuild rejects it with CE7247 "Parameter 'N' cannot be changed". [MDL-SET01]
+
+```
+
+Copy the parameter into a variable and change that (`declare $Value Integer = $N;`). A list
+parameter is not refused — `set $L = $M` on one is a Change list Replace, which builds — and
+neither is a member change, `set $Param/Attr = …`.
 
 ### [MDL-EMAIL02 / 03: A `send email` setting Studio Pro would not allow](#mdl-email02--03-a-send-email-setting-studio-pro-would-not-allow)
 
