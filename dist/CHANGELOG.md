@@ -1,3 +1,7 @@
+## 2026-10-09 -- mxcli v0.25.0 @ 5c321d0
+- +192 / -84 lines
+- Sections changed: [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-2), [Add a Page Parameter](#add-a-page-parameter), [Add a Page Variable](#add-a-page-variable), [Commit metadata: `mxcli git note`](#commit-metadata-mxcli-git-note), [Parameters](#parameters-1), [Parameters](#parameters-10), [Parameters](#parameters-11), [Parameters](#parameters-12) (+83 more)
+
 ## 2026-10-08 -- mxcli v0.25.0 @ 313c7ef
 - +126 / -11 lines
 - Sections changed: [Convention Rules](#convention-rules), [Core Tables](#core-tables), [Depth levels](#depth-levels), [Description](#description-35), [Full Refresh Tables](#full-refresh-tables), [OData Clients, Services & External Entities](#odata-clients-services--external-entities), [Pages](#pages-5), [Publishing a REST API](#publishing-a-rest-api) (+2 more)

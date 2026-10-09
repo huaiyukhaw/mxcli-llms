@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ 313c7ef
-Generated: 2026-10-08T08:20:17Z
+Version:   mxcli v0.25.0 @ 5c321d0
+Generated: 2026-10-09T08:22:38Z
 
 ---
 
@@ -4896,6 +4896,18 @@ ALTER PAGE CRM.Customer_Edit {
 ```
 ALTER PAGE CRM.ProductOverview {
   ADD Variables $showStockColumn: Boolean = 'if (3 < 4) then true else false'
+};
+
+```
+## [Add a Page Parameter](#add-a-page-parameter)
+
+Add a parameter to an existing page without rewriting it. The page has a URL,
+so the new parameter gets a segment in the same statement:
+
+```
+ALTER PAGE CRM.Customer_Edit {
+  SET (Url: 'customer-edit/{Customer}/{Order}');
+  ADD Parameters $Order: CRM.Order
 };
 
 ```
@@ -11685,6 +11697,34 @@ ALTER PAGE Module.EditPage {
 };
 
 ```
+## [Parameters](#parameters-1)
+
+Add or remove a page or snippet parameter without rewriting the page. A
+parameter is declared exactly as in `CREATE PAGE`’s `Params:` — an entity or a
+primitive (`String`, `Integer`, `Long`, `Decimal`, `Boolean`, `DateTime`). A
+snippet parameter must be an entity (MDL087; mxbuild reports CE0046).
+
+```
+mdl 1;
+-- A page with a Url needs a {Name} segment for every parameter (CE5601), so
+-- set the URL in the same statement. A page with no Url needs no SET.
+ALTER PAGE Module.Customer_Edit {
+  SET (Url: 'customer-edit/{Customer}/{Order}');
+  ADD Parameters $Order: Module.Order;
+};
+
+-- Remove a parameter. Refused while a data source or an expression on the
+-- page still uses it.
+ALTER PAGE Module.Customer_Edit {
+  DROP Parameters $Order;
+};
+
+```
+
+Callers are not updated: a page that opens this one, or a page that places
+this snippet, has to pass the new parameter, and `mxcli docker check` reports
+the ones that do not.
+
 ## [Combining Operations](#combining-operations)
 
 Multiple operations can be combined in a single ALTER statement. They are applied in order:
@@ -18832,6 +18872,20 @@ and **Docker is only needed for the first**:
   (8081/8091) and its own `<project>_test` database, so a `mxcli run --local`
   dev loop can keep serving the same project while tests run.
 
+`--local` provisions that scratch database on PostgreSQL by default. On a machine
+without PostgreSQL — where it would stop with *no local PostgreSQL superuser
+available to create the role/database* — pass `--db-type hsqldb` to boot on the
+runtime’s built-in file database instead: no server and no provisioning. It
+takes the same values as `run --local --db-type` (`postgresql`, the default, or
+`hsqldb`), keeps the `<project>_test` scratch name so it never shares files with
+a `run --local --db-type hsqldb` dev loop, and is refused with `--attach` and on
+the Docker path, which do not boot a database of their own.
+
+```
+mxcli test tests/ -p app.mpr --local --db-type hsqldb
+
+```
+
 A `--local` run boots the app with the same **constant values** `mxcli run --local`
 uses — the project configuration’s shared overrides layered over each constant’s
 default — and prints what it applied. Use `--configuration <name>` to choose
@@ -20111,7 +20165,7 @@ IMPORT FROM <alias> QUERY '<sql>'
   [LIMIT <count>]
 
 ```
-## [Parameters](#parameters-1)
+## [Parameters](#parameters-2)
 
 | Parameter | Description |
 | --- | --- |
@@ -20292,7 +20346,7 @@ The `SQL GENERATE CONNECTOR` command auto-generates Mendix Database Connector MD
 SQL <alias> GENERATE CONNECTOR INTO <module> [TABLES (<table1>, <table2>, ...)] [VIEWS (<view1>, ...)] [EXEC]
 
 ```
-## [Parameters](#parameters-2)
+## [Parameters](#parameters-3)
 
 | Parameter | Description |
 | --- | --- |
@@ -22200,6 +22254,57 @@ mxcli diag -p app.mpr
 ```
 
 prints mxcli’s diagnostics followed by a *Project* section with both checks.
+
+## [Commit metadata: `mxcli git note`](#commit-metadata-mxcli-git-note)
+
+Studio Pro attaches a git note under `refs/notes/mx_metadata` to every commit
+it makes:
+
+```
+{"BranchName":"feature-x","ModelerVersion":"11.13.0",
+ "ModelChanges":[{"Status":"Modified","UnitID":"…","UnitType":"Forms$Page",
+                  "UnitName":"Home_Web","Module":"MyModule"}],
+ "RelatedStories":[],"SolutionVersion":"","MPRFormatVersion":"Version2","HasModelerVersion":true}
+
+```
+
+It reads the note to check that a revision’s Mendix version is compatible and to
+show what the revision changed. A commit made with plain git has none, and
+Studio Pro 11.13 back-fills one with `"(unknown)"` values and no changes.
+
+```
+mxcli git note -p app.mpr            # preview the notes for commits not yet pushed
+mxcli git note -p app.mpr --write    # attach them
+git push origin <branch> refs/notes/mx_metadata
+
+```
+
+The note is computed from the commit: the `.mpr` unit index and the
+`mprcontents` units at the commit and at its parent. With no commit argument it
+covers `@{upstream}..HEAD`, or `HEAD` when the branch has no upstream. A note
+Studio Pro wrote is kept unless you pass `--force`; a placeholder is replaced.
+
+| Status | Meaning |
+| --- | --- |
+| `Added` / `Deleted` | the unit is new / gone. A deleted module is listed once, as its `Projects$ModuleImpl` |
+| `Modified` | the unit’s content changed. A re-serialisation that only mints new element IDs is not a change |
+| `Moved` | the unit moved to another folder (its container in the `.mpr` changed) |
+
+Measured against Studio Pro’s own notes on a Team Server repository: for
+ordinary commits the note is identical, header and change list. For a Mendix
+**version upgrade** the header is identical but the change list is longer than
+Studio Pro’s, because an upgrade re-serialises units in ways only Studio Pro
+knows to ignore. Upgrades are done in Studio Pro, which writes its own note. MPR
+v1 projects are not supported.
+
+**Push the notes ref soon.** `git push` does not push notes, and while the
+project is open Studio Pro fetches every few minutes and force-replaces the local
+`refs/notes/mx_metadata` with the Team Server’s copy, discarding notes that were
+not pushed. If that happens, `mxcli git note --write` again: the discarded notes
+have become placeholders, which it replaces.
+
+The whole workflow (server branches, what to stage, never merging model history
+with git) is in the `teamserver-git` skill that `mxcli init` installs.
 
 # [VS Code Extension](#vs-code-extension)
 
@@ -25182,7 +25287,7 @@ MDL supports both MPR v1 (single `.mpr` SQLite file, Mendix < 10.18) and MPR v2 
 
 Only one project can be open at a time. If a project is already open, close it with `DISCONNECT` before opening another.
 
-## [Parameters](#parameters-3)
+## [Parameters](#parameters-4)
 
 [**path**](#path)
 Path to the `.mpr` file. Can be an absolute path or a path relative to the current working directory. The path must be enclosed in single quotes.
@@ -25226,7 +25331,7 @@ DISCONNECT
 
 Closes the currently open project and releases the file handle. Any uncommitted changes are discarded. After disconnecting, query and mutation statements are unavailable until a new project is opened with `CONNECT LOCAL`.
 
-## [Parameters](#parameters-4)
+## [Parameters](#parameters-5)
 
 This statement takes no parameters.
 
@@ -25300,7 +25405,7 @@ Lists all modules in the current project with their names. This is typically the
 
 Module names returned by this command are used as the `IN <module>` filter for other `SHOW` and `DESCRIBE` statements.
 
-## [Parameters](#parameters-5)
+## [Parameters](#parameters-6)
 
 This statement takes no parameters.
 
@@ -25338,7 +25443,7 @@ Lists entities in the project. Without the `IN` clause, lists all entities acros
 
 `SHOW ENTITY <qualified_name>` printed a summary of one entity. It has no replacement that prints the same thing: use `DESCRIBE ENTITY` for the definition, or this listing for the summary columns. Without a language header it still runs and warns `MDL-V1-SHOWSUMMARY`; under `mdl 1;` it is an error.
 
-## [Parameters](#parameters-6)
+## [Parameters](#parameters-7)
 
 [*module*](#module)
 The name of the module to filter by. Only entities belonging to this module are shown.
@@ -25384,7 +25489,7 @@ Lists microflows or nanoflows in the project. Without the `IN` clause, lists all
 
 Microflows run on the server side and can perform database operations, call external services, and execute Java actions. Nanoflows run on the client side and are used for offline-capable and low-latency logic.
 
-## [Parameters](#parameters-7)
+## [Parameters](#parameters-8)
 
 [*module*](#module-1)
 The name of the module to filter by. Only microflows or nanoflows belonging to this module are shown.
@@ -25437,7 +25542,7 @@ Lists pages or snippets in the project. Without the `IN` clause, lists all pages
 
 Pages are the user interface screens of a Mendix application. Snippets are reusable page fragments that can be embedded in multiple pages via `SNIPPETCALL` widgets.
 
-## [Parameters](#parameters-8)
+## [Parameters](#parameters-9)
 
 [*module*](#module-2)
 The name of the module to filter by. Only pages or snippets belonging to this module are shown.
@@ -25488,7 +25593,7 @@ Lists enumerations in the project. Without the `IN` clause, lists all enumeratio
 
 Enumerations define a fixed set of named values that can be used as attribute types on entities.
 
-## [Parameters](#parameters-9)
+## [Parameters](#parameters-10)
 
 [*module*](#module-3)
 The name of the module to filter by. Only enumerations belonging to this module are shown.
@@ -25527,7 +25632,7 @@ Lists associations in the project. Without the `IN` clause, lists all associatio
 
 The `SHOW ASSOCIATION` variant displays a summary of a single association by its qualified name, including the FROM entity, TO entity, and association type.
 
-## [Parameters](#parameters-10)
+## [Parameters](#parameters-11)
 
 [*module*](#module-4)
 The name of the module to filter by. Only associations belonging to this module are shown.
@@ -25577,7 +25682,7 @@ Constants are named values (strings, integers, booleans, etc.) that can be confi
 
 `LIST CONSTANT VALUES` shows one row per constant per configuration, making it easy to compare constant overrides across configurations (e.g., Default, Acceptance, Production). Each constant’s default value is shown first, followed by any per-configuration overrides.
 
-## [Parameters](#parameters-11)
+## [Parameters](#parameters-12)
 
 [*module*](#module-5)
 The name of the module to filter by. Only constants belonging to this module are shown.
@@ -25628,7 +25733,7 @@ Lists workflows defined in the project. Without the `IN` clause, lists all workf
 
 Workflows model multi-step business processes with user tasks, decisions, parallel paths, and microflow calls.
 
-## [Parameters](#parameters-12)
+## [Parameters](#parameters-13)
 
 [*module*](#module-6)
 The name of the module to filter by. Only workflows belonging to this module are shown.
@@ -25665,7 +25770,7 @@ Lists business event services defined in the project. Without the `IN` clause, l
 
 Business event services enable asynchronous, event-driven communication between Mendix applications using the Mendix Business Events platform.
 
-## [Parameters](#parameters-13)
+## [Parameters](#parameters-14)
 
 [*module*](#module-7)
 The name of the module to filter by. Only business event services belonging to this module are shown.
@@ -25701,7 +25806,7 @@ LIST IMAGE COLLECTIONS IN module;
 
 Lists all image collections in the project. Use `IN module` to filter to a specific module. For full details including embedded images, use `DESCRIBE IMAGE COLLECTION`.
 
-## [Parameters](#parameters-14)
+## [Parameters](#parameters-15)
 
 [**IN module**](#in-module)
 Optional. Restricts the listing to collections in the specified module.
@@ -25743,7 +25848,7 @@ Shows a hierarchical overview of the project structure. The output depth and sco
 
 This is useful for getting a quick birds-eye view of what a project contains without examining each element individually.
 
-## [Parameters](#parameters-15)
+## [Parameters](#parameters-16)
 
 [*DEPTH*](#depth)
 Controls the level of detail in the output. `1` shows one line per module with element counts. `2` (default) shows documents with their signatures. `3` shows full detail including typed attributes and named parameters.
@@ -25798,7 +25903,7 @@ Lists widgets used across pages in the project. This command queries the catalog
 
 This is useful for auditing widget usage, finding pages that use a particular widget type, or planning bulk widget updates.
 
-## [Parameters](#parameters-16)
+## [Parameters](#parameters-17)
 
 [*module*](#module-9)
 The name of the module to filter by. Only widgets on pages belonging to this module are shown.
@@ -25845,7 +25950,7 @@ Shows the complete MDL source for an entity, including its type (persistent, non
 
 This is the primary way to inspect the full definition of an entity before modifying it with `ALTER ENTITY` or recreating it with `CREATE OR MODIFY`.
 
-## [Parameters](#parameters-17)
+## [Parameters](#parameters-18)
 
 [*qualified\_name*](#qualified_name-1)
 A `Module.EntityName` reference identifying the entity to describe. Both the module and entity name are required.
@@ -25902,7 +26007,7 @@ Shows the complete MDL source for a microflow or nanoflow, including parameters,
 
 This is useful for understanding existing logic before modifying it, or for extracting a microflow definition to use as a template.
 
-## [Parameters](#parameters-18)
+## [Parameters](#parameters-19)
 
 [*qualified\_name*](#qualified_name-2)
 A `Module.MicroflowName` or `Module.NanoflowName` reference identifying the flow to describe. Both the module and flow name are required.
@@ -25959,7 +26064,7 @@ Shows the complete MDL source for a page or snippet, including page properties (
 
 This is particularly useful before using `ALTER PAGE` or `ALTER SNIPPET`, as it reveals the widget names needed for targeted modifications.
 
-## [Parameters](#parameters-19)
+## [Parameters](#parameters-20)
 
 [*qualified\_name*](#qualified_name-3)
 A `Module.PageName` or `Module.SnippetName` reference identifying the page or snippet to describe. Both the module and document name are required.
@@ -26018,7 +26123,7 @@ Shows the complete MDL source for an enumeration, including all values with thei
 
 Enumerations define a fixed set of named values used as attribute types on entities.
 
-## [Parameters](#parameters-20)
+## [Parameters](#parameters-21)
 
 [*qualified\_name*](#qualified_name-4)
 A `Module.EnumerationName` reference identifying the enumeration to describe. Both the module and enumeration name are required.
@@ -26063,7 +26168,7 @@ Shows the complete MDL source for an association, including the FROM entity, TO 
 
 Associations define relationships between entities. A `Reference` type is a one-to-many relationship, while `ReferenceSet` is many-to-many.
 
-## [Parameters](#parameters-21)
+## [Parameters](#parameters-22)
 
 [*qualified\_name*](#qualified_name-5)
 A `Module.AssociationName` reference identifying the association to describe. Both the module and association name are required.
@@ -26113,7 +26218,7 @@ Performs a full-text search across all strings, messages, captions, and MDL sour
 
 This command requires the catalog to be populated. If search returns no results, run `REFRESH CATALOG FULL` first. The search is also available as a CLI subcommand: `mxcli search -p app.mpr "keyword" --format names|json`.
 
-## [Parameters](#parameters-22)
+## [Parameters](#parameters-23)
 
 [*keyword*](#keyword)
 The search term to look for. Must be enclosed in single quotes. Matches against entity names, attribute names, microflow activity captions, page titles, widget labels, string constants, log messages, and MDL source text.
@@ -26243,7 +26348,7 @@ The `@Position(x, y)` annotation controls the entity’s visual position in the 
 
 One or more `INDEX` clauses may follow the attribute list to create database indexes. Each index lists one or more columns with an optional sort direction (`ASC` or `DESC`, defaulting to `ASC`).
 
-## [Parameters](#parameters-23)
+## [Parameters](#parameters-24)
 
 [**OR MODIFY**](#or-modify)
 Makes the statement idempotent. If the entity already exists, its definition is updated to match. New attributes are added and existing attributes are modified. Without this clause, creating a duplicate entity is an error.
@@ -26477,7 +26582,7 @@ The `ADD INDEX` and `DROP INDEX` operations manage database indexes. `ADD INDEX`
 
 The `SET DOCUMENTATION` operation replaces the entity’s documentation string.
 
-## [Parameters](#parameters-24)
+## [Parameters](#parameters-25)
 
 [**module.name**](#modulename-1)
 The qualified name of the entity to modify, in the form `Module.EntityName`.
@@ -26585,7 +26690,7 @@ Associations that reference the dropped entity are **not** automatically removed
 
 Use `LIST IMPACT OF Module.EntityName` to check which microflows, pages, and associations reference the entity before dropping it.
 
-## [Parameters](#parameters-25)
+## [Parameters](#parameters-26)
 
 [**module.name**](#modulename-2)
 The qualified name of the entity to remove, in the form `Module.EntityName`.
@@ -26636,7 +26741,7 @@ If `OR MODIFY` is specified, the statement is idempotent. If the enumeration alr
 
 A documentation comment (`/** ... */`) placed before the statement is preserved as the enumeration’s documentation.
 
-## [Parameters](#parameters-26)
+## [Parameters](#parameters-27)
 
 [**OR MODIFY**](#or-modify-1)
 Makes the statement idempotent. If the enumeration already exists, its values are replaced with the new definition. Without this clause, creating a duplicate enumeration is an error.
@@ -26719,7 +26824,7 @@ DROP ENUMERATION module.name
 
 Use `LIST IMPACT OF Module.EnumName` to check which entities and attributes reference the enumeration before dropping it.
 
-## [Parameters](#parameters-27)
+## [Parameters](#parameters-28)
 
 [**module.name**](#modulename-4)
 The qualified name of the enumeration to remove, in the form `Module.EnumerationName`.
@@ -26790,7 +26895,7 @@ If `OR MODIFY` is specified, the statement is idempotent: if the association alr
 
 A documentation comment (`/** ... */`) placed before the statement is preserved as the association’s documentation.
 
-## [Parameters](#parameters-28)
+## [Parameters](#parameters-29)
 
 [**OR MODIFY**](#or-modify-2)
 Makes the statement idempotent. If the association already exists, its properties are updated. Without this clause, creating a duplicate association is an error.
@@ -26883,7 +26988,7 @@ DROP ASSOCIATION module.name
 
 After dropping an association, any microflows, pages, or access rules that traverse it will become invalid. Use `LIST IMPACT OF Module.AssociationName` to check references before dropping.
 
-## [Parameters](#parameters-29)
+## [Parameters](#parameters-30)
 
 [**module.name**](#modulename-6)
 The qualified name of the association to remove, in the form `Module.AssociationName`.
@@ -26938,7 +27043,7 @@ Constant values can also be overridden per deployment configuration using `ALTER
 
 There is no `PRIVATE` modifier. Older scripts wrote one after the value; it was never stored and protected nothing. Without the `mdl 1;` header it still parses, does nothing and warns `MDL-DEPR138`, and `mxcli fmt --upgrade` deletes it; under `mdl 1;` it is an error. To keep a secret out of the model, leave `DefaultValue` empty and set the value per machine with `mxcli constant set Module.Name <value>`.
 
-## [Parameters](#parameters-30)
+## [Parameters](#parameters-31)
 
 [**OR MODIFY**](#or-modify-3)
 Makes the statement idempotent. If the constant already exists, its definition is updated. Without this clause, creating a duplicate constant is an error.
@@ -27231,7 +27336,7 @@ or written with `@start` — is treated as placed on purpose. It survives a rewr
 that does not mention it, and `DESCRIBE` emits an `@start` line for it so the
 description reproduces the flow exactly. An explicit `@start` overrides both.
 
-## [Parameters](#parameters-31)
+## [Parameters](#parameters-32)
 
 [`module.Name`](#modulename-8)
 The qualified name of the microflow (`Module.MicroflowName`). The module must already exist.
@@ -27421,7 +27526,7 @@ Available activities in nanoflows include:
 
 These work identically to [CREATE MICROFLOW](#create-microflow). See that page for full details on types, annotations, and folder placement.
 
-## [Parameters](#parameters-32)
+## [Parameters](#parameters-33)
 
 [`module.Name`](#modulename-9)
 The qualified name of the nanoflow (`Module.NanoflowName`). The module must already exist.
@@ -27501,7 +27606,7 @@ Removes a microflow or nanoflow from the project. The microflow or nanoflow must
 
 Dropping a microflow or nanoflow does not automatically update references to it from other microflows, pages, navigation, or security rules. Use `LIST IMPACT OF module.Name` before dropping to identify all references that will break.
 
-## [Parameters](#parameters-33)
+## [Parameters](#parameters-34)
 
 [`module.Name`](#modulename-10)
 The qualified name of the microflow or nanoflow to drop (`Module.MicroflowName` or `Module.NanoflowName`).
@@ -27567,7 +27672,7 @@ Java actions support generic entity handling through type parameters. A paramete
 
 The optional `EXPOSED AS` clause makes the action visible in the Studio Pro toolbox under the specified category, allowing modelers to use it directly in microflows.
 
-## [Parameters](#parameters-34)
+## [Parameters](#parameters-35)
 
 [`module.Name`](#modulename-11)
 The qualified name of the Java action.
@@ -27728,7 +27833,7 @@ The optional `PLATFORM` clause restricts where the action runs: `Web`, `Native`,
 The optional `EXPOSED AS` clause makes the action visible in the Studio Pro
 toolbox under the given category.
 
-## [Parameters](#parameters-35)
+## [Parameters](#parameters-36)
 
 [`module.Name`](#modulename-12)
 The qualified name of the JavaScript action.
@@ -28062,7 +28167,7 @@ These properties are available on most widget types:
 | `Visible` | Visibility expression | `Visible: '$showField'` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ('Spacing top': 'Large')` |
 
-## [Parameters](#parameters-36)
+## [Parameters](#parameters-37)
 
 [`module.Name`](#modulename-13)
 The qualified name of the page (`Module.PageName`). The module must already exist.
@@ -28278,7 +28383,7 @@ Snippets can optionally declare parameters. When a snippet has parameters, the `
 
 The optional `Folder` property places the snippet in a subfolder within the module.
 
-## [Parameters](#parameters-37)
+## [Parameters](#parameters-38)
 
 [`module.Name`](#modulename-14)
 
@@ -28522,7 +28627,7 @@ Not supported for snippets (snippets don’t have layouts).
 
 Adds or removes page-level variables. Page variables are typed values with default expressions, available for conditional visibility and dynamic behavior.
 
-## [Parameters](#parameters-38)
+## [Parameters](#parameters-39)
 
 [`module.Name`](#modulename-15)
 The qualified name of the page or snippet to modify. Must already exist.
@@ -28666,7 +28771,7 @@ Removes a page or snippet from the project. The page or snippet must exist; othe
 
 Dropping a page or snippet does not automatically update references to it from microflows (e.g., `SHOW PAGE`), navigation menus, other pages (`SNIPPETCALL`), or security rules. Use `LIST IMPACT OF module.Name` before dropping to identify all references that will break.
 
-## [Parameters](#parameters-39)
+## [Parameters](#parameters-40)
 
 [`module.Name`](#modulename-16)
 The qualified name of the page or snippet to drop (`Module.PageName` or `Module.SnippetName`).
@@ -28767,7 +28872,7 @@ emitted as a comment ending `-- NOT re-executable`, naming exactly what a
 re-run would drop (`Atlas_Core.Atlas_SideBar`, for instance, loses both of its
 `Forms$SidebarToggleButton` widgets).
 
-## [Parameters](#parameters-40)
+## [Parameters](#parameters-41)
 
 [`module.Name`](#modulename-17)
 
@@ -29149,7 +29254,7 @@ Each module role belongs to exactly one module. The role name must be unique wit
 
 If the module does not exist, the statement returns an error.
 
-## [Parameters](#parameters-41)
+## [Parameters](#parameters-42)
 
 [`module.RoleName`](#modulerolename)
 Qualified name consisting of the module name and the new role name, separated by a dot. The module must already exist.
@@ -29209,7 +29314,7 @@ The properties are a `( Key: value )` list. Every property is optional, and so i
 
 The positional form `CREATE USER ROLE Name (module.Role, ...) [MANAGE ALL ROLES]` is deprecated (MDL-DEPR710). It still parses, and `mxcli fmt --upgrade` rewrites it.
 
-## [Parameters](#parameters-42)
+## [Parameters](#parameters-43)
 
 [`Name`](#name)
 The name of the user role. Not module-qualified. Must be unique among all user roles in the project.
@@ -29328,7 +29433,7 @@ So `grant view on page Shop.Stub to Shop.Admin;` on a page that was created whil
 
 A rewrite keeps the stored roles: `create or modify`, and `drop` followed by `create` of the same name **in one run**. A `create` in a *later* run than the `drop` is a new document and starts again from the defaults above — in a module with its own roles, with no access, which MxBuild reports as CE0106 when a page, nanoflow or navigation uses the flow. `mxcli check -p` reports that case as [MDL-SEC21](#mdl-sec21-a-used-flow-left-without-access-ce0106).
 
-## [Parameters](#parameters-43)
+## [Parameters](#parameters-44)
 
 [`module.Role`](#modulerole)
 The module role receiving the access grant. Must be a qualified name (`Module.RoleName`).
@@ -29499,7 +29604,7 @@ Removes view permission on a page from one or more module roles.
 
 Removes execute permission on a nanoflow from one or more module roles.
 
-## [Parameters](#parameters-44)
+## [Parameters](#parameters-45)
 
 [`module.Role`](#modulerole-1)
 The module role losing access. Must be a qualified name (`Module.RoleName`).
@@ -29595,7 +29700,7 @@ The properties are a `( Key: value )` list, with the names Studio Pro gives them
 
 The optional `Entity` property specifies which entity (a specialization of `System.User`) stores the demo user. If omitted, the system auto-detects the unique `System.User` subtype in the project (typically `Administration.Account`).
 
-## [Parameters](#parameters-45)
+## [Parameters](#parameters-46)
 
 [`'username'`](#username)
 The login name for the demo user. Enclosed in single quotes.
@@ -29804,7 +29909,7 @@ Each `MENU ITEM` specifies a label and, in its property list, an action and an i
 
 The old spelling — `MENU ( MENU ITEM 'Home' PAGE M.Home; … )` — still parses and warns (MDL-DEPR121, MDL-DEPR122); `mxcli fmt --upgrade` rewrites it.
 
-## [Parameters](#parameters-46)
+## [Parameters](#parameters-47)
 
 [`profile`](#profile)
 
@@ -29976,7 +30081,7 @@ Displays home page assignments across all navigation profiles, including role-sp
 
 Outputs the full MDL representation of one or all navigation profiles. The output is round-trippable – it can be re-executed with `CREATE OR REPLACE NAVIGATION` to recreate the profile.
 
-## [Parameters](#parameters-47)
+## [Parameters](#parameters-48)
 
 [`profile`](#profile-1)
 Optional. One of: `Responsive`, `Tablet`, `Phone`, `NativePhone`. When omitted, all profiles are shown.
@@ -30058,7 +30163,7 @@ are preserved, so menu widgets pointing at it keep working.
 describe → edit → exec is the normal editing loop, and describe → exec → describe is
 a fixed point.
 
-## [Parameters](#parameters-48)
+## [Parameters](#parameters-49)
 
 [`module.name`](#modulename-20)
 Qualified name of the menu document.
@@ -30292,7 +30397,7 @@ USER TASK name 'caption'
     BOUNDARY EVENT NON INTERRUPTING TIMER addMinutes([%CurrentDateTime%], 30) { activities }
 
 ```
-## [Parameters](#parameters-49)
+## [Parameters](#parameters-50)
 
 [`module.Name`](#modulename-21)
 Qualified name of the workflow (`Module.WorkflowName`).
@@ -30381,7 +30486,7 @@ Removes a workflow from the project. The workflow is identified by its qualified
 
 Any references to the dropped workflow (e.g., CALL WORKFLOW activities in other workflows, or navigation entries) will become broken and should be updated or removed.
 
-## [Parameters](#parameters-50)
+## [Parameters](#parameters-51)
 
 [`module.Name`](#modulename-22)
 The qualified name of the workflow to drop (`Module.WorkflowName`).
@@ -30591,7 +30696,7 @@ If `OR MODIFY` is specified and the JSON structure already exists, it is updated
 
 The optional `CUSTOM_NAME_MAP` clause overrides the attribute names generated from JSON keys. This is useful when JSON keys contain characters that are not valid Mendix attribute names, or when you want a more descriptive name.
 
-## [Parameters](#parameters-51)
+## [Parameters](#parameters-52)
 
 [`module.Name`](#modulename-23)
 The qualified name of the JSON structure.
@@ -30993,7 +31098,7 @@ The association must be defined such that the child entity owns the foreign key 
 
 If `OR MODIFY` is specified and the mapping already exists, it is updated in place. The document UUID is preserved, which protects runtime microflow references that call `IMPORT FROM MAPPING`.
 
-## [Parameters](#parameters-52)
+## [Parameters](#parameters-53)
 
 [`module.Name`](#modulename-24)
 
@@ -31188,7 +31293,7 @@ For arrays, Studio Pro’s domain model convention is to use an intermediate con
 
 If `OR MODIFY` is specified and the mapping already exists, it is updated in place. The document UUID is preserved, which protects runtime microflow references that call `EXPORT TO MAPPING`.
 
-## [Parameters](#parameters-53)
+## [Parameters](#parameters-54)
 
 [`module.Name`](#modulename-25)
 
@@ -31343,7 +31448,7 @@ JSLT is a JSON transformation language designed for structural reshaping. Common
 
 The `SOURCE` clause provides a representative input document. Mendix uses it to validate the transformation at design time. The actual runtime input may differ in values but must match the structure.
 
-## [Parameters](#parameters-54)
+## [Parameters](#parameters-55)
 
 [`module.Name`](#modulename-26)
 The qualified name of the data transformer.
@@ -31491,7 +31596,7 @@ At runtime, the `ASU_AgentEditor` after-startup microflow reads the constant val
 
 If `OR MODIFY` is specified and the model already exists, its properties are updated in place. The document UUID is preserved.
 
-## [Parameters](#parameters-55)
+## [Parameters](#parameters-56)
 
 [`module.Name`](#modulename-27)
 The qualified name of the model document.
@@ -31576,7 +31681,7 @@ Knowledge bases are used inside `CREATE AGENT` body blocks to attach retrieval c
 
 If `OR MODIFY` is specified and the knowledge base already exists, its properties are updated in place. The document UUID is preserved.
 
-## [Parameters](#parameters-56)
+## [Parameters](#parameters-57)
 
 [`module.Name`](#modulename-28)
 The qualified name of the knowledge base document.
@@ -31638,7 +31743,7 @@ Consumed MCP services are referenced inside `CREATE AGENT` body blocks using the
 
 If `OR MODIFY` is specified and the service already exists, its properties are updated in place. The document UUID is preserved.
 
-## [Parameters](#parameters-57)
+## [Parameters](#parameters-58)
 
 [`module.Name`](#modulename-29)
 The qualified name of the consumed MCP service document.
@@ -31752,7 +31857,7 @@ Each attachment is a child of the agent, so its properties are in `( )`. The old
 
 If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved.
 
-## [Parameters](#parameters-58)
+## [Parameters](#parameters-59)
 
 [`module.Name`](#modulename-30)
 The qualified name of the agent document.
@@ -31938,7 +32043,7 @@ Each message defines zero or more attributes with the following supported types:
 
 The optional `ENTITY` clause on a message links the message to a Mendix entity. For SUBSCRIBE messages, incoming events are mapped to instances of this entity. For PUBLISH messages, entity instances are serialized into outgoing events.
 
-## [Parameters](#parameters-59)
+## [Parameters](#parameters-60)
 
 [`module.Name`](#modulename-31)
 Qualified name of the business event service (`Module.ServiceName`).
@@ -32022,7 +32127,7 @@ Removes a business event service from the project. The service is identified by 
 
 Dropping a service removes all its message definitions and operation implementations. Any microflows that reference the dropped service’s messages will need to be updated.
 
-## [Parameters](#parameters-60)
+## [Parameters](#parameters-61)
 
 [`module.Name`](#modulename-32)
 The qualified name of the business event service to drop (`Module.ServiceName`).
@@ -32065,7 +32170,7 @@ CREATE [OR MODIFY] IMAGE COLLECTION module.name
 
 Creates a new image collection in the specified module. `OR MODIFY` updates an existing collection in-place, preserving its UUID so that widget references remain valid. `OR REPLACE` is accepted as a synonym for `OR MODIFY`. Image collections bundle images (icons, logos, graphics) within a module. Images can be loaded from the filesystem during creation, with the format detected automatically from the file extension.
 
-## [Parameters](#parameters-61)
+## [Parameters](#parameters-62)
 
 [**module.name**](#modulename-33)
 The qualified name of the collection (e.g., `MyModule.AppIcons`).
@@ -32133,7 +32238,7 @@ DROP IMAGE COLLECTION module.name;
 
 Removes an image collection and all its embedded images from the module.
 
-## [Parameters](#parameters-62)
+## [Parameters](#parameters-63)
 
 [**module.name**](#modulename-34)
 The qualified name of the collection to drop (e.g., `MyModule.AppIcons`).
@@ -32171,7 +32276,7 @@ DESCRIBE IMAGE COLLECTION module.name;
 
 In the TUI, images are rendered inline when the terminal supports it (Kitty, iTerm2, Sixel).
 
-## [Parameters](#parameters-63)
+## [Parameters](#parameters-64)
 
 [**IN module**](#in-module-1)
 Filters the listing to a single module.
@@ -32236,7 +32341,7 @@ With the `FULL` option, the rebuild additionally populates cross-reference table
 
 The catalog is cached between sessions. If the project has not changed, repeated `REFRESH CATALOG` calls reuse the cached data. Use `FORCE` to bypass the cache and rebuild unconditionally – useful after external changes to the MPR file.
 
-## [Parameters](#parameters-64)
+## [Parameters](#parameters-65)
 
 [**FULL**](#full)
 Include cross-references, widgets, strings, source text, and permissions in the catalog. Required for callers/callees analysis and full-text search.
@@ -32315,7 +32420,7 @@ The following tables require `REFRESH CATALOG FULL`:
 | `CATALOG.STRINGS` | All string values in the project |
 | `CATALOG.SOURCE` | Source text of microflows, pages, etc. |
 
-## [Parameters](#parameters-65)
+## [Parameters](#parameters-66)
 
 [**columns**](#columns)
 Column names or expressions to select. Use `*` for all columns, or specify individual column names. Supports SQL functions like `COUNT()`, `SUM()`, `GROUP_CONCAT()`.
@@ -32407,7 +32512,7 @@ These commands require `REFRESH CATALOG FULL` to have been run beforehand. Witho
 
 By default, only direct (one-hop) relationships are shown. With the `TRANSITIVE` option, the command follows the call chain recursively to show the full transitive closure – all indirect callers or callees at any depth.
 
-## [Parameters](#parameters-66)
+## [Parameters](#parameters-67)
 
 [**qualified\_name**](#qualified_name-6)
 The fully qualified name of the element to analyze (e.g., `Module.MicroflowName`, `Module.EntityName`). Works with microflows, nanoflows, pages, snippets, entities, and other referenceable elements.
@@ -32493,7 +32598,7 @@ Results list each (source, kind) once, and the `IMPACT` summary counts distinct 
 
 When nothing is found, the message says what was searched. An attribute named only through a variable in a free-text expression (`$Order/Total`), and an enumeration value used only as a decision branch, are not resolved by the catalog, so an empty result for an attribute or a value tells you to run `SEARCH` before treating it as unused.
 
-## [Parameters](#parameters-67)
+## [Parameters](#parameters-68)
 
 [**qualified\_name**](#qualified_name-7)
 The fully qualified name of the element to analyze (e.g., `Module.EntityName`, `Module.MicroflowName`, `Module.Entity.Attribute`, `Module.Enum.Value`).
@@ -32567,7 +32672,7 @@ Lists all available catalog tables along with their column names and types. This
 
 The output includes both basic tables (populated by `REFRESH CATALOG`) and extended tables (populated by `REFRESH CATALOG FULL`). Tables that require a full refresh are marked accordingly.
 
-## [Parameters](#parameters-68)
+## [Parameters](#parameters-69)
 
 This statement takes no parameters.
 
@@ -32627,7 +32732,7 @@ Supported database drivers:
 | `oracle` | `ora` | `oracle://user:pass@host:1521/service` |
 | `sqlserver` | `mssql` | `sqlserver://user:pass@host:1433?database=dbname` |
 
-## [Parameters](#parameters-69)
+## [Parameters](#parameters-70)
 
 [**driver**](#driver)
 The database driver to use. One of `postgres` (or `pg`, `postgresql`), `oracle` (or `ora`), or `sqlserver` (or `mssql`).
@@ -32686,7 +32791,7 @@ Closes an external database connection identified by the given alias. After disc
 
 Use `SQL CONNECTIONS` to see which connections are currently active before disconnecting.
 
-## [Parameters](#parameters-70)
+## [Parameters](#parameters-71)
 
 [**alias**](#alias-1)
 The alias of the connection to close. Must match an active connection established with `SQL CONNECT`.
@@ -32741,7 +32846,7 @@ Executes a SQL query or schema discovery command against an external database co
 
 The schema discovery commands query `information_schema` internally and work consistently across PostgreSQL, Oracle, and SQL Server.
 
-## [Parameters](#parameters-71)
+## [Parameters](#parameters-72)
 
 [**alias**](#alias-2)
 The connection alias established with `SQL CONNECT`.
@@ -32819,7 +32924,7 @@ By default, all user tables are included. Use `TABLES (...)` and `VIEWS (...)` t
 
 The type mapping from SQL types to Mendix types is handled automatically (e.g., `VARCHAR` becomes `String`, `INTEGER` becomes `Integer`, `TIMESTAMP` becomes `DateTime`).
 
-## [Parameters](#parameters-72)
+## [Parameters](#parameters-73)
 
 [**alias**](#alias-3)
 The connection alias established with `SQL CONNECT`.
@@ -32896,7 +33001,7 @@ The import pipeline handles:
 
 The target Mendix application database is auto-detected from the project’s database configuration. The import connects directly to the application’s PostgreSQL database.
 
-## [Parameters](#parameters-73)
+## [Parameters](#parameters-74)
 
 [**alias**](#alias-4)
 The external database connection alias established with `SQL CONNECT`.
@@ -33000,7 +33105,7 @@ The available settings categories are:
 | `LANGUAGE` | Localization settings: DefaultLanguageCode and available languages. |
 | `WORKFLOWS` | Workflow engine settings: UserEntity, DefaultTaskParallelism, etc. |
 
-## [Parameters](#parameters-74)
+## [Parameters](#parameters-75)
 
 [**category** (DESCRIBE only)](#category-describe-only)
 One of `MODEL`, `CONFIGURATION`, `CONSTANT`, `LANGUAGE`, or `WORKFLOWS`. If omitted, all categories are shown.
@@ -33098,7 +33203,7 @@ used for workflow tasks and default task parallelism, and the **workflow
 groups** — the named buckets under App Settings ▸ Workflows ▸ Groups that a user
 task’s group targeting selects from. Groups need Mendix **11.2** or later.
 
-## [Parameters](#parameters-75)
+## [Parameters](#parameters-76)
 
 [**key**](#key)
 The setting name to modify. Available keys depend on the category.
@@ -33289,7 +33394,7 @@ CREATE MODULE module_name
 
 Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with default settings and an empty domain model.
 
-## [Parameters](#parameters-76)
+## [Parameters](#parameters-77)
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
@@ -33328,7 +33433,7 @@ Creates a folder within a module for organizing documents such as pages, microfl
 
 Note: Folders can also be created implicitly by specifying a `FOLDER` clause when creating a microflow or a `Folder` property when creating a page.
 
-## [Parameters](#parameters-77)
+## [Parameters](#parameters-78)
 
 [**module\_name**](#module_name-1)
 The name of the module in which to create the folder.
@@ -33389,7 +33494,7 @@ Removes an empty folder from a module. The folder must contain no documents (pag
 
 Nested folder paths use the `/` separator. Only the leaf folder is deleted; parent folders are not affected.
 
-## [Parameters](#parameters-78)
+## [Parameters](#parameters-79)
 
 [**folder\_path**](#folder_path-1)
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
@@ -33453,7 +33558,7 @@ A `FOLDER` clause on `CREATE OR MODIFY` moves an existing document as well, so a
 script that already creates a document does not need a separate `MOVE` to place
 it.
 
-## [Parameters](#parameters-79)
+## [Parameters](#parameters-80)
 
 [**document\_type**](#document_type)
 The type of document to move:
@@ -33584,7 +33689,7 @@ The source folder is identified using the standard qualified name syntax: `Modul
 
 Target folders are created automatically if they don’t exist.
 
-## [Parameters](#parameters-80)
+## [Parameters](#parameters-81)
 
 [**qualified\_name**](#qualified_name-9)
 The source folder in `Module.FolderName` format. Use double quotes for paths with `/` or special characters.
@@ -33670,7 +33775,7 @@ document. These are the same dependencies shown in Studio Pro under
 
 Multiple actions can be chained in a single `ALTER MODULE` statement.
 
-## [Parameters](#parameters-81)
+## [Parameters](#parameters-82)
 
 [**module\_name**](#module_name-5)
 The name of the module to modify.
@@ -33778,7 +33883,7 @@ project, optionally filtered to a single module. `DESCRIBE JAR DEPENDENCY`
 outputs the full definition of a single dependency as a re-executable
 `ALTER MODULE … ADD JAR DEPENDENCY` statement.
 
-## [Parameters](#parameters-82)
+## [Parameters](#parameters-83)
 
 [**IN module**](#in-module-2)
 Filters the listing to a single module.
@@ -33867,7 +33972,7 @@ SET variable = value
 
 Sets a session variable that controls REPL behavior. Session variables persist for the duration of the session and are reset when the REPL exits. Variable names are case-insensitive.
 
-## [Parameters](#parameters-83)
+## [Parameters](#parameters-84)
 
 [**variable**](#variable)
 The name of the session variable to set.
@@ -33917,7 +34022,7 @@ STATUS
 
 Displays the current session status including the connection state, the open project path, the Mendix version of the project, the MPR format version, and the values of any session variables. This is useful for confirming which project is loaded and verifying session configuration.
 
-## [Parameters](#parameters-84)
+## [Parameters](#parameters-85)
 
 This statement takes no parameters.
 
@@ -39379,6 +39484,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Set security level | `ALTER APP SECURITY ( SecurityLevel: OFF|PROTOTYPE|PRODUCTION );` |  |
 | Toggle demo users | `ALTER APP SECURITY ( EnableDemoUsers: TRUE|FALSE );` |  |
 | Toggle guest access | `ALTER APP SECURITY ( EnableGuestAccess: TRUE, GuestUserRole: UserRole );` / `( EnableGuestAccess: FALSE )` | Anonymous users; role required (CE0133) |
+| Rename admin user | `ALTER APP SECURITY ( AdminUserName: 'appadmin' );` | Default `MxAdmin`; the password is not settable from MDL |
 | Create demo user | `CREATE DEMO USER 'name' ( Password: 'pass', [Entity: Module.Entity,] UserRoles: (UserRole, ...) );` | The clause form `PASSWORD … (…)` warns MDL-DEPR137 |
 | Drop demo user | `DROP DEMO USER [IF EXISTS] 'name';` | `IF EXISTS` makes a cleanup script re-runnable |
 
@@ -39595,6 +39701,8 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 | Pluggable prop | `SET ('showLabel': false) ON cbStatus` | Quoted name for pluggable widgets |
 | Add variable | `ADD Variables $name: Type = 'expr'` | Add a page variable |
 | Drop variable | `DROP Variables $name` | Remove a page variable |
+| Add parameter | `ADD Parameters $name: Type` | Add a page/snippet parameter (entity or primitive; snippet: entity only). A page with a `Url` needs a `{name}` segment — `SET (Url: …)` in the same statement |
+| Drop parameter | `DROP Parameters $name` | Remove a parameter; refused while the page still uses it |
 
 **Supported SET properties:** Caption, Label, ButtonStyle, Class, Style, Editable, Visible, Name, and quoted pluggable widget properties. Page-level (no `ON` clause, case-sensitive): Title, Class, Style, PopupWidth, PopupHeight, PopupResizable.
 
