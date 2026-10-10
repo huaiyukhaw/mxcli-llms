@@ -1,3 +1,7 @@
+## 2026-10-10 -- mxcli v0.25.0 @ 22d9ea6
+- +135 / -103 lines
+- Sections changed: Find widget by API name, Search by storage name, [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-2), [Add a Page Variable](#add-a-page-variable), [Annotations](#annotations), [BSON Storage Names vs Qualified Names](#bson-storage-names-vs-qualified-names), [CREATE ENTITY](#create-entity), [CREATE OR MODIFY](#create-or-modify) (+37 more)
+
 ## 2026-10-09 -- mxcli v0.25.0 @ 5c321d0
 - +192 / -84 lines
 - Sections changed: [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-2), [Add a Page Parameter](#add-a-page-parameter), [Add a Page Variable](#add-a-page-variable), [Commit metadata: `mxcli git note`](#commit-metadata-mxcli-git-note), [Parameters](#parameters-1), [Parameters](#parameters-10), [Parameters](#parameters-11), [Parameters](#parameters-12) (+83 more)

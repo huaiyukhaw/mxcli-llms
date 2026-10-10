@@ -13,7 +13,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 | Drop widgets | `DROP name1, name2` | Remove widgets by name |
 | Replace widget | `REPLACE widgetName WITH { widgets }` | Replace widget subtree |
 | Pluggable prop | `SET ('showLabel': false) ON cbStatus` | Quoted name for pluggable widgets |
-| Add variable | `ADD Variables $name: Type = 'expr'` | Add a page variable |
+| Add variable | `ADD Variables $name: Type = <expr>` | Add a page variable |
 | Drop variable | `DROP Variables $name` | Remove a page variable |
 | Add parameter | `ADD Parameters $name: Type` | Add a page/snippet parameter (entity or primitive; snippet: entity only). A page with a `Url` needs a `{name}` segment — `SET (Url: …)` in the same statement |
 | Drop parameter | `DROP Parameters $name` | Remove a parameter; refused while the page still uses it |

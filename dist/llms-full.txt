@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ 5c321d0
-Generated: 2026-10-09T08:22:38Z
+Version:   mxcli v0.25.0 @ 22d9ea6
+Generated: 2026-10-10T08:00:05Z
 
 ---
 
@@ -1620,7 +1620,7 @@ DESCRIBE ENTITY MyFirstModule.Order;
 ```
 mdl 1;
 CREATE PERSISTENT ENTITY MyFirstModule.Order (
-  OrderNumber: AutoNumber,
+  OrderNumber: AutoNumber DEFAULT 1,
   OrderDate: DateTime,
   TotalAmount: Decimal,
   Status: MyFirstModule.OrderStatus
@@ -2217,7 +2217,7 @@ CREATE PERSISTENT ENTITY MyModule.Product (
     Quantity: Integer,
     Weight: Long,
     IsActive: Boolean DEFAULT true,
-    CreatedDate: DateTime,
+    ReleaseDate: DateTime,
     Status: MyModule.ProductStatus
 );
 
@@ -3646,8 +3646,8 @@ The core MDL syntax for the topic, with all available options and keywords:
 ```
 -- From write-microflows.md:
 CREATE MICROFLOW Module.Name(
-    $param: EntityType
-) RETURNS ReturnType AS $result
+    $param: Module.Entity
+) RETURNS Boolean AS $result
 BEGIN
     -- activities here
 END;
@@ -4031,7 +4031,7 @@ CREATE PERSISTENT ENTITY CRM.ContactLog (
   /** Date and time of the interaction */
   ContactDate: DateTime NOT NULL,
   /** Type of interaction */
-  Type: Enumeration(CRM.ContactType) DEFAULT 'Email',
+  ContactType: Enumeration(CRM.ContactType) DEFAULT 'Email',
   /** Summary of what was discussed */
   Summary: String(2000) NOT NULL ERROR MESSAGE 'Summary is required',
   /** Follow-up needed? */
@@ -4049,6 +4049,7 @@ CREATE ASSOCIATION CRM.ContactLog_Customer
 The two-microflow pattern: a validation microflow returns field-level feedback, and an action microflow calls it before saving.
 
 ```
+mdl 1;
 CREATE MICROFLOW CRM.VAL_Customer ($Customer: CRM.Customer)
 RETURNS Boolean AS $IsValid
 BEGIN
@@ -4059,7 +4060,7 @@ BEGIN
     VALIDATION FEEDBACK $Customer/Name MESSAGE 'Name cannot be empty';
   END IF;
 
-  IF $Customer/Email != empty AND NOT contains($Customer/Email, '@') THEN
+  IF $Customer/Email != empty AND not(contains($Customer/Email, '@')) THEN
     SET $IsValid = false;
     VALIDATION FEEDBACK $Customer/Email MESSAGE 'Enter a valid email address';
   END IF;
@@ -4071,12 +4072,11 @@ BEGIN
 
   RETURN $IsValid;
 END;
-/
 
 CREATE MICROFLOW CRM.ACT_Customer_Save ($Customer: CRM.Customer)
 RETURNS Boolean AS $IsValid
 BEGIN
-  $IsValid = CALL MICROFLOW CRM.VAL_Customer(param = $Customer);
+  $IsValid = CALL MICROFLOW CRM.VAL_Customer(Customer = $Customer);
 
   IF $IsValid THEN
     COMMIT $Customer;
@@ -4085,31 +4085,13 @@ BEGIN
 
   RETURN $IsValid;
 END;
-/
 
 ```
 ## [Pages](#pages-1)
 
 ```
 mdl 1;
--- Overview page with data grid
-CREATE PAGE CRM.Customer_Overview (
-  Title: 'Customers',
-  Layout: Atlas_Core.Atlas_Default
-) {
-  DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
-    COLUMN (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
-    COLUMN (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
-    COLUMN (Attribute: Phone, Caption: 'Phone')
-    COLUMN (Attribute: Status, Caption: 'Status')
-    COLUMN (Attribute: IsActive, Caption: 'Active')
-    CONTROLBAR {
-      ACTIONBUTTON btnNew (Caption: 'New', Action: SHOW PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
-    }
-  }
-};
-
--- NewEdit page with validation
+-- NewEdit page with validation (first: the overview opens it)
 CREATE PAGE CRM.Customer_NewEdit (
   Params: ( $Customer: CRM.Customer ),
   Title: 'Customer',
@@ -4133,6 +4115,23 @@ CREATE PAGE CRM.Customer_NewEdit (
           }
         }
       }
+    }
+  }
+};
+
+-- Overview page with data grid
+CREATE PAGE CRM.Customer_Overview (
+  Title: 'Customers',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  DATAGRID dgCustomers (DataSource: DATABASE CRM.Customer, Selection: Single) {
+    COLUMN (Attribute: Name, Caption: 'Name') { TEXTFILTER fName }
+    COLUMN (Attribute: Email, Caption: 'Email') { TEXTFILTER fEmail }
+    COLUMN (Attribute: Phone, Caption: 'Phone')
+    COLUMN (Attribute: Status, Caption: 'Status')
+    COLUMN (Attribute: IsActive, Caption: 'Active')
+    CONTROLBAR {
+      ACTIONBUTTON btnNew (Caption: 'New', Action: CREATE OBJECT CRM.Customer THEN SHOW PAGE CRM.Customer_NewEdit, ButtonStyle: Primary)
     }
   }
 };
@@ -4164,8 +4163,8 @@ CREATE OR MODIFY USER ROLE CRMUser ( ModuleRoles: (System.User, CRM.User) );
 CREATE OR MODIFY USER ROLE CRMAdmin ( ModuleRoles: (System.User, CRM.Admin) );
 
 -- Demo users for testing
-CREATE OR MODIFY DEMO USER 'crm_user' ( Password: 'Password1!', UserRoles: (CRMUser) );
-CREATE OR MODIFY DEMO USER 'crm_admin' ( Password: 'Password1!', UserRoles: (CRMAdmin) );
+CREATE OR MODIFY DEMO USER 'crm_user' ( Password: 'CrmPassword1!', UserRoles: (CRMUser) );
+CREATE OR MODIFY DEMO USER 'crm_admin' ( Password: 'CrmPassword1!', UserRoles: (CRMAdmin) );
 ALTER APP SECURITY ( EnableDemoUsers: TRUE );
 
 ```
@@ -4895,7 +4894,7 @@ ALTER PAGE CRM.Customer_Edit {
 
 ```
 ALTER PAGE CRM.ProductOverview {
-  ADD Variables $showStockColumn: Boolean = 'if (3 < 4) then true else false'
+  ADD Variables $showStockColumn: Boolean = if (3 < 4) then true else false
 };
 
 ```
@@ -5744,7 +5743,7 @@ mdl 1;
 CREATE MODULE OrderManagement;
 
 CREATE PERSISTENT ENTITY Sales.Order (
-  OrderId: AutoNumber NOT NULL UNIQUE,
+  OrderId: AutoNumber NOT NULL UNIQUE DEFAULT 1,
   OrderDate: DateTime NOT NULL,
 )
 INDEX (OrderDate DESC);
@@ -6550,7 +6549,7 @@ refuse the spelling; until then it only warns.
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
-87 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+88 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 | --- | --- | --- | --- | --- |
@@ -6582,11 +6581,12 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR073` | `message definition collection M.C ( definition D for M.E ( A, M.E_B/M.B ( C ) ) )` | `message definition collection M.C { definition D for M.E { A, M.E_B/M.B { C } } }` | yes: message trees: each parenthesised definition list and member tree moves into { } | mdl 2 |
 | `MDL-DEPR074` | `alter microflow M.F { insert after $X { … } }` | `alter microflow M.F { insert after $X begin … end; }` | yes: fragment’s braces: `{` becomes `begin` and `}` becomes `end` | mdl 2 |
 | `MDL-DEPR080` | `decision '<expression>' / timer '<expression>' / due date '<expression>'` | `decision <expression> / timer <expression> / due date <expression>` | yes: expression out of its string: `decision '$Ctx/Total > 1000'` becomes `decision $Ctx/Total > 1000` | mdl 2 |
-| `MDL-DEPR081` | `Visible: [<expression>] / Editable: [<expression>]` | `Visible: <expression> / Editable: <expression>` | yes: brackets into the expression they store: `Visible: [Active]` becomes `Visible: $currentObject/Active` | mdl 2 |
+| `MDL-DEPR081` | `Visible: [<expression>] / Editable: [<expression>]` | `Visible: <expression> / Editable: <expression>, each attribute as $currentObject/Attr` | yes: brackets into the expression they store: `Visible: [Active]` becomes `Visible: $currentObject/Active` | mdl 2 |
 | `MDL-DEPR082` | `revoke M.Role on M.E [(rights)]` | `revoke rights|all on entity M.E from M.Role` | yes: rights (or `all` when none are listed) before `on entity`, roles after `from`: `revoke R on M.E (write *)` becomes `revoke write * on entity M.E from R`, `revoke R on M.E` becomes `revoke all on entity M.E from R` | mdl 2 |
 | `MDL-DEPR083` | `Username: $Const` | `Username: @Module.Const` | yes: `$Const` becomes `@<the service's module>.Const` | mdl 2 |
 | `MDL-DEPR084` | `Key: Module.Const` | `Key: @Module.Const` | yes: `@` before the constant’s name | mdl 2 |
 | `MDL-DEPR085` | `alter settings constant 'Module.Const' …` | `alter settings constant @Module.Const …` | yes: constant’s name out of its string, with `@`: `constant 'M.ApiUrl'` becomes `constant @M.ApiUrl` | mdl 2 |
+| `MDL-DEPR086` | `Variables: ( $name: Type = '<expression>' ) / add variables $name: Type = '<expression>'` | `Variables: ( $name: Type = <expression> ) / add variables $name: Type = <expression>` | yes: default out of its string: `$show: boolean = 'true'` becomes `$show: boolean = true` | mdl 2 |
 | `MDL-DEPR090` | `show page|project security|security matrix|structure|context of …` | `describe page|app security|security matrix|structure|context of …` | yes: verb as `describe`: `show page X` -> `describe page X`, `show project security` -> `describe app security`; the same for `list` on these forms | mdl 2 |
 | `MDL-DEPR091` | `alter user role R remove module roles (…)` | `alter user role R drop module roles (…)` | yes: `remove` → `drop` | mdl 2 |
 | `MDL-DEPR092` | `alter settings language remove '…' / alter settings workflows remove group '…'` | `alter settings language drop '…' / alter settings workflows drop group '…'` | yes: `remove` → `drop` | mdl 2 |
@@ -6661,7 +6661,7 @@ MDL has a type system that maps to the Mendix metamodel attribute types. Every a
 
 ```
 CREATE PERSISTENT ENTITY Demo.AllTypes (
-  Id: AutoNumber NOT NULL UNIQUE DEFAULT 1,
+  ItemNumber: AutoNumber NOT NULL UNIQUE DEFAULT 1,
   Code: String(10) NOT NULL UNIQUE,
   Name: String(200) NOT NULL,
   Description: String(unlimited),
@@ -7295,7 +7295,7 @@ CREATE PERSISTENT ENTITY Sales.Customer (
   /** Whether the account is active */
   IsActive: Boolean DEFAULT TRUE,
   /** Timestamp of account creation */
-  CreatedDate: DateTime,
+  CreatedDate: AutoCreatedDate,
   /** Current lifecycle status */
   Status: Enumeration(Sales.CustomerStatus) DEFAULT 'Active'
 )
@@ -7362,7 +7362,7 @@ Creates the entity if it does not exist, or updates it if it does. New attribute
 
 ```
 CREATE OR MODIFY PERSISTENT ENTITY Sales.Customer (
-  CustomerId: AutoNumber NOT NULL UNIQUE,
+  CustomerId: AutoNumber NOT NULL UNIQUE DEFAULT 1,
   Name: String(200) NOT NULL,
   Email: String(200),
   Phone: String(50)  -- new attribute added on modify
@@ -7375,7 +7375,7 @@ Persistent entities can track who created/modified objects and when. Declare the
 
 ```
 CREATE PERSISTENT ENTITY Sales.Order (
-  OrderNumber: AutoNumber,
+  OrderNumber: AutoNumber DEFAULT 1,
   TotalAmount: Decimal,
   Owner: AutoOwner,
   ChangedBy: AutoChangedBy,
@@ -7437,7 +7437,7 @@ CREATE PERSISTENT ENTITY Sales.Customer (
   IsActive: Boolean DEFAULT TRUE,
 
   /** Timestamp of account creation */
-  CreatedDate: DateTime,
+  CreatedDate: AutoCreatedDate,
 
   /** Current lifecycle status */
   Status: Enumeration(Sales.CustomerStatus) DEFAULT 'Active'
@@ -7804,7 +7804,7 @@ Indexes are placed after the closing parenthesis of the attribute list:
 
 ```
 CREATE PERSISTENT ENTITY Sales.Order (
-  OrderId: AutoNumber NOT NULL UNIQUE,
+  OrderId: AutoNumber NOT NULL UNIQUE DEFAULT 1,
   OrderNumber: String(50) NOT NULL,
   CustomerId: Long,
   OrderDate: DateTime,
@@ -10211,7 +10211,7 @@ CREATE PAGE MyModule.Customer_Edit
 | `Params` | Page parameters (entity objects or primitives) | `Params: ( $Order: Sales.Order, $Qty: Integer )` |
 | `Title` | Page title shown in the browser/tab | `Title: 'Edit Customer'` |
 | `Layout` | Layout to use for the page | `Layout: Atlas_Core.PopupLayout` |
-| `Variables` | Page-level variables for conditional logic | `Variables: ( $show: Boolean = 'true' )` |
+| `Variables` | Page-level variables for conditional logic | `Variables: ( $show: Boolean = true )` |
 | `Class` | CSS class applied to the page (Forms$Appearance) | `Class: 'container-fluid bg-light'` |
 | `Style` | Inline CSS style applied to the page | `Style: 'min-height: 100vh'` |
 
@@ -10339,7 +10339,7 @@ CREATE [OR REPLACE] PAGE <Module>.<Name> [FOLDER '<path>']
   [Params: ( $Param: Module.Entity | Type [, ...] ),]
   Title: '<title>',
   Layout: <Module.LayoutName>
-  [, Variables: ( $name: Type = 'expression' [, ...] )]
+  [, Variables: ( $name: Type = <expression> [, ...] )]
 )
 {
   <widget-tree>
@@ -10418,7 +10418,7 @@ Page variables store local state (booleans, strings, etc.) that can control widg
 (
   Title: 'Product Detail',
   Layout: Atlas_Core.Atlas_Default,
-  Variables: ( $showDetails: Boolean = 'true' )
+  Variables: ( $showDetails: Boolean = true )
 )
 
 ```
@@ -11688,7 +11688,7 @@ Add or remove page-level variables:
 mdl 1;
 -- Add a variable
 ALTER PAGE Module.EditPage {
-  ADD Variables $showAdvanced: Boolean = 'false'
+  ADD Variables $showAdvanced: Boolean = false
 };
 
 -- Remove a variable
@@ -12229,8 +12229,9 @@ CREATE USER ROLE Anonymous ( ModuleRoles: (Shop.Viewer, System.User) );
 
 ALTER APP SECURITY ( EnableGuestAccess: TRUE, GuestUserRole: Anonymous );
 
--- Grant exactly what should be public, and nothing else.
-GRANT read * ON ENTITY Shop.Product TO Anonymous;
+-- Grant exactly what should be public, and nothing else. Access is granted
+-- to a module role (Shop.Viewer), never to the user role itself.
+GRANT read * ON ENTITY Shop.Product TO Shop.Viewer;
 
 ```
 
@@ -12882,8 +12883,8 @@ CREATE MODULE ROLE Shop.Viewer DESCRIPTION 'Read-only access';
 
 -- User roles
 CREATE USER ROLE Administrator ( ModuleRoles: (Shop.Admin, System.Administrator), ManageAllRoles: true );
-CREATE USER ROLE Employee ( ModuleRoles: (Shop.User) );
-CREATE USER ROLE Guest ( ModuleRoles: (Shop.Viewer) );
+CREATE USER ROLE Employee ( ModuleRoles: (Shop.User, System.User) );
+CREATE USER ROLE Guest ( ModuleRoles: (Shop.Viewer, System.User) );
 
 -- Entity access
 GRANT CREATE, DELETE, READ *, WRITE * ON ENTITY Shop.Customer TO Shop.Admin;
@@ -26402,7 +26403,7 @@ CREATE PERSISTENT ENTITY Sales.Customer (
 
     IsActive: Boolean DEFAULT TRUE,
 
-    CreatedDate: DateTime,
+    CreatedDate: AutoCreatedDate,
 
     Status: Enumeration(Sales.CustomerStatus) DEFAULT 'Active'
 )
@@ -26450,7 +26451,7 @@ CREATE NON-PERSISTENT ENTITY Sales.CustomerFilter (
 
 ```
 CREATE OR MODIFY PERSISTENT ENTITY Sales.Customer (
-    CustomerId: AutoNumber NOT NULL UNIQUE,
+    CustomerId: AutoNumber NOT NULL UNIQUE DEFAULT 1,
     Name: String(200) NOT NULL,
     Email: String(200),
     Phone: String(50)
@@ -26492,7 +26493,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 
 ```
 CREATE PERSISTENT ENTITY Sales.Order (
-    OrderId: AutoNumber NOT NULL UNIQUE,
+    OrderId: AutoNumber NOT NULL UNIQUE DEFAULT 1,
     OrderNumber: String(50) NOT NULL UNIQUE,
     CustomerId: Long,
     OrderDate: DateTime,
@@ -27952,7 +27953,7 @@ CREATE [ OR REPLACE ] PAGE module.Name [ FOLDER 'path' ]
     [ Params: ( $param : Module.Entity | Type [, ...] ), ]
     Title: 'title',
     Layout: Module.LayoutName
-    [, Variables: ( $name : type = 'expression' [, ...] ) ]
+    [, Variables: ( $name : type = <expression> [, ...] ) ]
 )
 {
     widget_tree
@@ -28249,7 +28250,9 @@ CREATE PAGE MyModule.Dashboard
             }
             COLUMN (Class: 'col-md-4') {
                 CONTAINER cntStats (Class: 'card') {
-                    DYNAMICTEXT txtCount (Attribute: TotalCount)
+                    DATAVIEW dvStats (DataSource: MICROFLOW MyModule.DS_DashboardStats) {
+                        DYNAMICTEXT txtCount (Attribute: TotalCount)
+                    }
                 }
             }
         }
@@ -28314,7 +28317,7 @@ CREATE PAGE MyModule.AdvancedForm
     Params: ( $Item: MyModule.Item ),
     Title: 'Advanced Form',
     Layout: Atlas_Core.Atlas_Default,
-    Variables: ( $showAdvanced: Boolean = 'false' )
+    Variables: ( $showAdvanced: Boolean = false )
 )
 {
     DATAVIEW dvItem (DataSource: $Item) {
@@ -28381,7 +28384,7 @@ Snippets can optionally declare parameters. When a snippet has parameters, the `
 
 ### [Folder Placement](#folder-placement-1)
 
-The optional `Folder` property places the snippet in a subfolder within the module.
+The optional `FOLDER 'path'` clause, after the name, places the snippet in a subfolder within the module.
 
 ## [Parameters](#parameters-38)
 
@@ -28416,8 +28419,10 @@ CREATE SNIPPET MyModule.CustomerHeader
 )
 {
     CONTAINER cntHeader (Class: 'card-header') {
-        DYNAMICTEXT txtName (Attribute: Name)
-        DYNAMICTEXT txtEmail (Attribute: Email)
+        DATAVIEW dvCustomer (DataSource: $Customer) {
+            DYNAMICTEXT txtName (Attribute: Name)
+            DYNAMICTEXT txtEmail (Attribute: Email)
+        }
     }
 };
 
@@ -28431,10 +28436,12 @@ CREATE SNIPPET MyModule.AddressFields
     Params: ( $Address: MyModule.Address )
 )
 {
-    TEXTBOX txtStreet (Label: 'Street', Attribute: Street)
-    TEXTBOX txtCity (Label: 'City', Attribute: City)
-    TEXTBOX txtZip (Label: 'Zip Code', Attribute: ZipCode)
-    TEXTBOX txtCountry (Label: 'Country', Attribute: Country)
+    DATAVIEW dvAddress (DataSource: $Address) {
+        TEXTBOX txtStreet (Label: 'Street', Attribute: Street)
+        TEXTBOX txtCity (Label: 'City', Attribute: City)
+        TEXTBOX txtZip (Label: 'Zip Code', Attribute: ZipCode)
+        TEXTBOX txtCountry (Label: 'Country', Attribute: Country)
+    }
 };
 
 ```
@@ -28445,7 +28452,7 @@ Snippet without parameters:
 CREATE SNIPPET MyModule.AppFooter
 {
     CONTAINER cntFooter (Class: 'app-footer') {
-        DYNAMICTEXT txtVersion (Attribute: Version)
+        DYNAMICTEXT txtVersion (Content: 'Version 1.0')
     }
 };
 
@@ -28530,7 +28537,7 @@ DROP widgetName1, widgetName2;
 REPLACE widgetName WITH { widget_definitions };
 
 -- Add a page variable
-ADD Variables $name : type = 'expression';
+ADD Variables $name : type = <expression>;
 
 -- Drop a page variable
 DROP Variables $name;
@@ -28695,7 +28702,7 @@ Add and drop page variables:
 ```
 mdl 1;
 ALTER PAGE Sales.Order_Edit {
-    ADD Variables $showAdvanced : Boolean = 'false';
+    ADD Variables $showAdvanced : Boolean = false;
 };
 
 ALTER PAGE Sales.Order_Edit {
@@ -33476,6 +33483,23 @@ CREATE PAGE MyModule.Order_Edit FOLDER 'Orders'
 };
 
 ```
+### [A folder whose name contains `/`](#a-folder-whose-name-contains-)
+
+Studio Pro allows `/` inside a folder name, so in a `FOLDER '…'` path a slash
+that belongs to the name is written `\/` (and a backslash `\\`). This is one
+folder, `Private - String en/de-cryption`, holding `Apis`:
+
+```
+CREATE CONSTANT Encryption.EncryptionKey FOLDER 'Private - String en\/de-cryption/Apis' (
+  Type: String,
+  DefaultValue: ''
+);
+
+```
+
+`DESCRIBE` writes the escape for you, so its output files the document back
+where it was. A backslash before any other character is an ordinary character.
+
 ## [See Also](#see-also-115)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
@@ -34662,7 +34686,6 @@ github.com/mendixlabs/mxcli/
 │   └── package.json         # Extension manifest
 │
 └── reference/               # Reference materials (not Go code)
-    ├── mendixmodellib/      # TypeScript library + reflection data
     ├── mendixmodelsdk/      # TypeScript SDK reference
     └── mdl-grammar/         # Comprehensive MDL grammar reference
 
@@ -35397,19 +35420,17 @@ How Mendix project documents are serialized in BSON format, including the role o
 
 ## [Source of Truth](#source-of-truth)
 
-The authoritative reference for BSON serialization is the **reflection-data** at:
+The authoritative reference for BSON serialization is a document **authored by
+Studio Pro** for the target Mendix version: dump it with `mxcli bson dump` and
+compare.
 
-```
-reference/mendixmodellib/reflection-data/{version}-structures.json
+The vendored metamodel types in `modelsdk/gen/<domain>/` are the reference in
+the tree:
 
-```
+- `types.go`: each type’s BSON `$Type` (the `SetTypeName(...)` call, e.g. `Forms$DivContainer`) and its BSON field names
+- `refs.go`: the reference kind of each pointer property (by name or by ID)
 
-Each structure entry contains:
-
-- `qualifiedName`: The API name (e.g., `Pages$DivContainer`)
-- `storageName`: The BSON `$Type` value (e.g., `Forms$DivContainer`)
-- `defaultSettings`: Required default property values
-- `properties`: Property definitions with types and requirements
+When `modelsdk/gen` and a Studio Pro document disagree, the document wins.
 
 ## [Type Name Mapping](#type-name-mapping)
 
@@ -35672,10 +35693,10 @@ There is no deduplication within a page. A page with 4 ComboBox widgets requires
 
 | Error | Cause | Solution |
 | --- | --- | --- |
-| “The type cache does not contain a type with qualified name X” | Incorrect `$Type` value | Check reflection-data for correct storage name |
+| “The type cache does not contain a type with qualified name X” | Incorrect `$Type` value | Check `modelsdk/gen` or a Studio Pro document for the correct storage name |
 | “No entity configured for the data source” | Missing or incorrect DataView DataSource | Configure `Forms$DataViewSource` with proper EntityRef |
 | CE0463 “widget definition has changed” | Object properties don’t match Type PropertyTypes | Use template Object as base, only modify needed properties |
-| “Project uses features that are no longer supported” | Missing widget default properties | Include all required defaults from reflection-data |
+| “Project uses features that are no longer supported” | Missing widget default properties | Include all defaults Studio Pro writes for the widget |
 
 ## [Files Reference](#files-reference)
 
@@ -35689,7 +35710,7 @@ There is no deduplication within a page. A page with 4 ComboBox widgets requires
 | `modelsdk/codec/decoder.go` | BSON → document (polymorphic types) |
 | `sdk/widgets/loader.go` | Embedded template loading |
 | `sdk/widgets/templates/mendix-11.6/*.json` | Embedded widget templates |
-| `reference/mendixmodellib/reflection-data/*.json` | Type definitions |
+| `modelsdk/gen/*/types.go` | Type definitions and storage names |
 
 # [Storage Names vs Qualified Names](#storage-names-vs-qualified-names-1)
 
@@ -35747,28 +35768,15 @@ Page client actions also have storage name differences:
 When adding new types, always verify the storage name by:
 
 1. **Examining existing MPR files** with the `mx` tool or an SQLite browser
-2. **Checking the reflection data** in `reference/mendixmodellib/reflection-data/`
+2. **Checking the vendored types** in `modelsdk/gen/<domain>/types.go`
 3. **Looking at the read cases** in `mdl/backend/modelsdk/microflow_read_actions.go`
 
-### [Querying Reflection Data](#querying-reflection-data)
+### [Looking Up a Storage Name](#looking-up-a-storage-name)
 
-Use this Python snippet to check widget default settings:
+Each generated type registers its BSON `$Type` with `SetTypeName`:
 
 ```
-import json
-
-with open('reference/mendixmodellib/reflection-data/11.0.0-structures.json') as f:
-    data = json.load(f)
-
-# Find widget by API name
-widget = data.get('Pages$DivContainer', {})
-print('Storage name:', widget.get('storageName'))
-print('Defaults:', json.dumps(widget.get('defaultSettings', {}), indent=2))
-
-# Search by storage name
-for key, val in data.items():
-    if val.get('storageName') == 'Forms$NoAction':
-        print(f'{key}: {val.get("defaultSettings")}')
+grep -rn 'SetTypeName("Forms\$DivContainer")' modelsdk/gen/
 
 ```
 ## [Association Parent/Child Pointer Semantics](#association-parentchild-pointer-semantics)
@@ -35789,7 +35797,7 @@ This affects **entity access rules**: MemberAccess entries for associations must
 
 ## [Key Takeaway](#key-takeaway)
 
-When unsure about the correct BSON structure for a new feature, create a working example in Mendix Studio Pro and compare the generated BSON against a known-good reference. The reflection data at `reference/mendixmodellib/reflection-data/` is the definitive source for storage names and default values.
+When unsure about the correct BSON structure for a new feature, create a working example in Mendix Studio Pro and compare the generated BSON against a known-good reference. A Studio Pro-authored document is the definitive source for storage names and default values.
 
 # [Widget Template System](#widget-template-system)
 
@@ -39379,7 +39387,7 @@ CREATE CONSUMED ODATA SERVICE MyModule.ExternalAPI (
 
 ```
 CREATE PUBLISHED ODATA SERVICE MyModule.CustomerAPI (
-  Path: '/odata/customers',
+  Path: 'odata/customers/',
   Version: '1.0.0',
   ODataVersion: OData4,
   Namespace: 'MyModule.Customers',
@@ -39394,7 +39402,9 @@ CREATE PUBLISHED ODATA SERVICE MyModule.CustomerAPI (
     UsePaging: Yes,
     PageSize: 100
   )
-  EXPOSE (Name, Email, Phone);
+  -- The KEY attribute must be unique on the entity
+  -- (Email: String(200) UNIQUE), or mxbuild reports CE6624.
+  EXPOSE (Email (KEY), Name, Phone);
 };
 
 ```
@@ -39615,7 +39625,7 @@ MDL uses explicit property declarations for pages:
 | Element | Syntax | Example |
 | --- | --- | --- |
 | Page properties | `(Key: value, ...)` | `(Title: 'Edit', Layout: Atlas_Core.Atlas_Default)` |
-| Page variables | `Variables: ( $name: Type = 'expr' )` | `Variables: ( $show: Boolean = 'true' )` |
+| Page variables | `Variables: ( $name: Type = <expr> )` | `Variables: ( $show: Boolean = true )` |
 | Widget name | Required after type | `TEXTBOX txtName (...)` |
 | Attribute binding | `Attribute: AttrName` | `TEXTBOX txt (Label: 'Name', Attribute: Name)` |
 | Variable binding | `DataSource: $Var` | `DATAVIEW dv (DataSource: $Product) { ... }` |
@@ -39699,7 +39709,7 @@ Modify an existing page or snippet’s widget tree in-place without full `CREATE
 | Drop widgets | `DROP name1, name2` | Remove widgets by name |
 | Replace widget | `REPLACE widgetName WITH { widgets }` | Replace widget subtree |
 | Pluggable prop | `SET ('showLabel': false) ON cbStatus` | Quoted name for pluggable widgets |
-| Add variable | `ADD Variables $name: Type = 'expr'` | Add a page variable |
+| Add variable | `ADD Variables $name: Type = <expr>` | Add a page variable |
 | Drop variable | `DROP Variables $name` | Remove a page variable |
 | Add parameter | `ADD Parameters $name: Type` | Add a page/snippet parameter (entity or primitive; snippet: entity only). A page with a `Url` needs a `{name}` segment — `SET (Url: …)` in the same statement |
 | Drop parameter | `DROP Parameters $name` | Remove a parameter; refused while the page still uses it |
@@ -39938,7 +39948,7 @@ MDL does not perform implicit type conversions. Types must match exactly.
 @Position(100, 100)
 CREATE PERSISTENT ENTITY Demo.AllTypes (
   /** Auto-generated ID */
-  Id: AutoNumber NOT NULL UNIQUE DEFAULT 1,
+  ItemNumber: AutoNumber NOT NULL UNIQUE DEFAULT 1,
 
   /** Short text field */
   Code: String(10) NOT NULL UNIQUE,
@@ -40402,7 +40412,7 @@ Mendix uses different “storage names” in BSON `$Type` fields than the “qua
 When adding new types, always verify the storage name by:
 
 1. Examining existing MPR files with the `mx` tool or SQLite browser
-2. Checking the reflection data in the `reference/mendixmodellib/reflection-data/` directory
+2. Checking the vendored types in `modelsdk/gen/<domain>/types.go`
 3. Looking at the read cases in `mdl/backend/modelsdk/microflow_read_actions.go`
 
 ## [Mendix Expression String Escaping](#mendix-expression-string-escaping)
@@ -40460,14 +40470,14 @@ with qualified name DomainModels$Index
 
 **Cause:** The BSON `$Type` field uses the **qualifiedName** instead of the **storageName**. These are often identical, but not always.
 
-**Solution:** Check the metamodel reflection data for the correct storage name:
+**Solution:** Use the correct storage name:
 
 | qualifiedName (wrong) | storageName (correct) |
 | --- | --- |
 | `DomainModels$Entity` | `DomainModels$EntityImpl` |
 | `DomainModels$Index` | `DomainModels$EntityIndex` |
 
-Look up the type in `reference/mendixmodellib/reflection-data/<version>-structures.json` and use the `storageName` field value.
+Look up the type’s `SetTypeName(...)` call in `modelsdk/gen/<domain>/types.go`, or dump a Studio Pro-authored document.
 
 ### [CE0463: Widget definition changed](#ce0463-widget-definition-changed)
 
@@ -40775,6 +40785,28 @@ Copy the parameter into a variable and change that (`declare $Value Integer = $N
 parameter is not refused — `set $L = $M` on one is a Change list Replace, which builds — and
 neither is a member change, `set $Param/Attr = …`.
 
+### [MDL-RETRIEVE02: Retrieve by association over `System.owner` / `System.changedBy`](#mdl-retrieve02-retrieve-by-association-over-systemowner--systemchangedby)
+
+```
+retrieve $u from $task/System.owner: System.owner is not a modelled association, and a
+retrieve by association over it has no entity — mxbuild rejects it with CE0136 "Retrieve
+object must specify the 'Entity' property." [MDL-RETRIEVE02]
+
+```
+
+**Cause:** `owner` and `changedBy` are not associations in any domain model — an entity
+carries them as the *Store owner* / *Store changedBy* flags (`AutoOwner`, `AutoChangedBy`).
+XPath constraints and page paths resolve them, but a retrieve by association does not:
+mxbuild finds the name and derives no entity from it, whether or not the entity stores the
+member (measured on 11.12.2, mendixlabs/mxcli#1358). `check` and `exec` both refuse it.
+
+**Solution:** Retrieve the user from the database by id:
+
+```
+retrieve $u from System.User where [id = $task/System.owner] first;
+retrieve $u from System.User where [id = $task/System.changedBy] first;
+
+```
 ### [MDL-EMAIL02 / 03: A `send email` setting Studio Pro would not allow](#mdl-email02--03-a-send-email-setting-studio-pro-would-not-allow)
 
 ```

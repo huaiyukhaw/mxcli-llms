@@ -5,7 +5,7 @@ MDL uses explicit property declarations for pages:
 | Element | Syntax | Example |
 | --- | --- | --- |
 | Page properties | `(Key: value, ...)` | `(Title: 'Edit', Layout: Atlas_Core.Atlas_Default)` |
-| Page variables | `Variables: ( $name: Type = 'expr' )` | `Variables: ( $show: Boolean = 'true' )` |
+| Page variables | `Variables: ( $name: Type = <expr> )` | `Variables: ( $show: Boolean = true )` |
 | Widget name | Required after type | `TEXTBOX txtName (...)` |
 | Attribute binding | `Attribute: AttrName` | `TEXTBOX txt (Label: 'Name', Attribute: Name)` |
 | Variable binding | `DataSource: $Var` | `DATAVIEW dv (DataSource: $Product) { ... }` |
