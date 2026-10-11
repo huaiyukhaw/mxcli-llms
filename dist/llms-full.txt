@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ 22d9ea6
-Generated: 2026-10-10T08:00:05Z
+Version:   mxcli v0.25.0 @ 59e1b52
+Generated: 2026-10-11T08:12:01Z
 
 ---
 
@@ -314,6 +314,16 @@ integrated into an LLM via **grammar-constrained decoding**, so the model can on
 emit tokens that form valid MDL. The deterministic layer already absorbs the
 complexity (see above); the DSL boundary is what makes constraining the model’s
 output tractable in the first place.
+
+# [The Language Poster](#the-language-poster)
+
+All of mxcli and MDL on one page: the idea, getting started, the CLI map, exploring and querying a project, domain models, microflows, pages, security, running and testing, quality gates, skills, custom widgets, the Marketplace, runtime insight, and working alongside Studio Pro.
+
+**[Open the interactive poster](poster/mxcli-language-poster.html)** – zoom into any panel, or step through it as a 19-panel tour.
+
+[![The mxcli language poster](poster/mxcli-poster-small.png)](poster/mxcli-language-poster.html)
+
+A [full-resolution PNG](poster/mxcli-poster.png) (5498×3380) is available for printing.
 
 # [Mendix Concepts for Newcomers](#mendix-concepts-for-newcomers)
 
@@ -6806,6 +6816,15 @@ ScheduledFor: DateTime
 
 ```
 
+A DateTime is localized (shown in the user’s time zone) by default. For a
+calendar date that must not shift with the time zone, such as a birth date, add
+`NOT LOCALIZED` — see [Constraints](#localized--not-localized-datetime-only):
+
+```
+BirthDate: DateTime NOT LOCALIZED
+
+```
+
 DateTime values include both date and time components. To show only the date, format it on the widget; there is no `Date` type.
 
 ## [No `Date`, `Float` or `Currency`](#no-date-float-or-currency)
@@ -6974,6 +6993,36 @@ Omitting the `DEFAULT` clause means no default value is set:
 OptionalField: String(200)
 
 ```
+## [LOCALIZED / NOT LOCALIZED (DateTime only)](#localized--not-localized-datetime-only)
+
+Studio Pro’s **Localize** setting on a DateTime attribute (`LocalizeDate` in the
+model). A localized DateTime is converted to the user’s time zone when it is
+shown or entered; a non-localized one is not, which is what a calendar date such
+as a birth date needs — otherwise it can show as the day before for a user west
+of UTC.
+
+```
+OrderDate: DateTime,                -- localized (Mendix's default)
+BirthDate: DateTime NOT LOCALIZED,  -- not localized
+
+```
+
+- `LOCALIZED` states the default explicitly. It is mostly useful on `ALTER ENTITY … MODIFY ATTRIBUTE` to switch a non-localized attribute back, the way
+  `NULLABLE` clears `NOT NULL`.
+- On a **new** attribute, no clause means localized.
+- On a **rewrite** — `CREATE OR MODIFY ENTITY` or `MODIFY ATTRIBUTE` — no clause
+  keeps the value already stored (a Studio Pro-authored non-localized attribute
+  stays non-localized); a stated clause wins.
+- On a **view entity** the value follows the OQL source attribute and needs no
+  clause; a stated one overrides it, and a mismatch with the source is CE6770.
+- On any type other than DateTime the clause is an error: there is nowhere to
+  store it.
+- `DESCRIBE ENTITY` prints  `not localized` (right after the type) when the
+  attribute is not localized, and nothing otherwise, so its output round-trips.
+
+The deprecated `Date` type (MDL-DEPR160) is a localized DateTime. For a
+date-only value write `DateTime NOT LOCALIZED`.
+
 ## [Combining Constraints](#combining-constraints)
 
 All three constraints can be used together:
@@ -7018,6 +7067,9 @@ Under the hood, constraints map to Mendix validation rules:
 | --- | --- |
 | `NOT NULL` | `DomainModels$RequiredRuleInfo` |
 | `UNIQUE` | `DomainModels$UniqueRuleInfo` |
+
+`LOCALIZED` / `NOT LOCALIZED` is not a validation rule: it is the
+`LocalizeDate` property of the attribute’s `DomainModels$DateTimeAttributeType`.
 
 ## [See Also](#see-also-2)
 
@@ -7942,6 +7994,21 @@ Clearing a default that is already absent is a no-op, not an error. A
 *calculated* attribute is refused rather than silently converted to a plain
 stored one — that is a different change.
 
+### [DateTime localization](#datetime-localization)
+
+A DateTime that stays a DateTime keeps its stored **Localize** setting unless the
+statement states one, so restating the type does not undo a Studio Pro choice.
+`NOT LOCALIZED` and `LOCALIZED` switch it explicitly:
+
+```
+mdl 1;
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE BirthDate: DateTime NOT LOCALIZED;
+ALTER ENTITY Sales.Customer MODIFY ATTRIBUTE BirthDate: DateTime LOCALIZED;
+
+```
+
+See [Constraints](#localized--not-localized-datetime-only).
+
 ## [RENAME Attributes](#rename-attributes)
 
 Rename an attribute with `RENAME ATTRIBUTE`:
@@ -8766,12 +8833,17 @@ deprecated (MDL-DEPR006, MDL-DEPR007); `mxcli fmt --upgrade` rewrites them.
 
 ### [CLOSE PAGE](#close-page)
 
-Closes the current page:
+Closes the current page, or the given number of pages:
 
 ```
-CLOSE PAGE;
+CLOSE PAGE;      -- the current page
+CLOSE PAGE 2;    -- the current page and the one that opened it
 
 ```
+
+The count is a whole number of at least 1. Mendix stores it as
+`NumberOfPagesToClose`, and `describe` prints it when it is more than one.
+
 ## [Validation](#validation)
 
 ### [VALIDATION FEEDBACK](#validation-feedback)
@@ -8900,7 +8972,7 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Call nanoflow | `$Var = CALL NANOFLOW Module.Name (Param = $val);` | Any type |
 | Call Java action | `$Var = CALL JAVA ACTION Module.Name (Param = val);` | Any type |
 | Show page | `SHOW PAGE Module.Page (Param = $val);` | – |
-| Close page | `CLOSE PAGE;` | – |
+| Close page | `CLOSE PAGE [n];` | – |
 | Validation | `VALIDATION FEEDBACK $Var/Attr MESSAGE 'msg';` | – |
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'msg';` | – |
 | DB query | `$Var = EXECUTE DATABASE QUERY Module.Conn.Query;` | Result set |
@@ -23174,6 +23246,8 @@ mxcli new MyApp --version 11.8.0 --skip-init   # Skip AI tooling setup
 
 This downloads MxBuild, creates a blank Mendix project via `mx create-project`, runs `mxcli init` to set up AI tooling and Dev Container, and downloads the correct Linux mxcli binary for the container. The result is a ready-to-open folder.
 
+Placing that Linux binary is best-effort. If the download fails (no network, a proxy, or a development build with no matching release), `mxcli new` prints a warning and still exits 0, because the project is already complete. Add the binary afterwards with `mxcli setup mxcli --output ./mxcli` in the project directory, adding `--tag <release>` when you’re running a development build.
+
 | Flag | Description |
 | --- | --- |
 | `--version` | Mendix version (required, e.g., `11.8.0`) |
@@ -26291,7 +26365,8 @@ Statements for creating, altering, and dropping domain model elements: entities,
 CREATE [ OR MODIFY ] entity_type ENTITY module.name
     [ EXTENDS parent_module.parent_entity ]
 (
-    attribute_name : data_type [ NOT NULL [ ERROR 'message' ] ]
+    attribute_name : data_type [ NOT LOCALIZED | LOCALIZED ]
+                               [ NOT NULL [ ERROR 'message' ] ]
                                [ UNIQUE [ ERROR 'message' ] ]
                                [ DEFAULT value ]
                                [ CALCULATED [ BY module.microflow ] ]
@@ -26363,6 +26438,8 @@ Establishes generalization (inheritance). The new entity inherits all attributes
 The name of an attribute. Must be a valid identifier and unique within the entity.
 [**data\_type**](#data_type)
 The attribute’s data type. See the table above for all supported types. `String` requires an explicit length argument.
+[**NOT LOCALIZED | LOCALIZED**](#not-localized--localized)
+DateTime only: Studio Pro’s **Localize** setting (`LocalizeDate`). `NOT LOCALIZED` stores and shows the value without time-zone conversion (a calendar date such as a birth date); `LOCALIZED` states the default. On a new attribute no clause means localized; with `OR MODIFY`, no clause keeps the stored value and a stated one wins. On any other type it is an error. See [Constraints](#localized--not-localized-datetime-only).
 [**NOT NULL**](#not-null-1)
 Marks the attribute as required. An optional `ERROR 'message'` clause provides a custom validation message shown when the constraint is violated.
 [**UNIQUE**](#unique-1)
@@ -35070,6 +35147,46 @@ write choke point of **both** the default `modelsdk` engine and the `legacy`
 engine. Which engine ran is an `--engine` flag, and it must not be visible in
 your diff.
 
+## [Every element is written with Studio Pro’s property set](#every-element-is-written-with-studio-pros-property-set)
+
+Before a unit is compared and written, every element in it gets every property
+Studio Pro always writes for its type, filled with the value Mendix itself uses
+when the property is absent. The reason is version control, not validity.
+Mendix’s merge and diff engine compares an element’s property *names* between
+two revisions, and throws when they differ:
+
+```
+System.InvalidOperationException: Objects with ID … of type
+Microflows$LoopedActivity do not have the same properties.
+
+```
+
+A missing key is invisible everywhere else. `mx check`, the build and the
+runtime all fill in the default. So before this, a branch with documents mxcli
+had written could not be merged once Studio Pro had saved one of them (#1373).
+
+The values are measured, not guessed. They live in
+`modelsdk/canon/studiopro_property_defaults.json`. Each one is taken from
+`mx convert -p`, which re-serializes exactly the units that are not canonical
+for its version, the way Studio Pro saves them. Each entry is bounded by the
+Mendix versions it was measured on. A key is never written to a project whose
+version may not declare it, because that would make the document unopenable,
+which is worse than the gap.
+
+The other direction matters as much. A key the project’s version does not
+declare yet is removed before the write if it is empty, which is exactly what
+`mx convert` does. If it holds a value, the write is refused and the error
+names the version it needs. That version comes from the metamodel’s version
+data, copied into `modelsdk/version` by `go generate`, or, for keys that data
+lacks, from `modelsdk/canon/studiopro_property_floors.json`. Writers that derive
+a value for a newer key leave it out on older versions themselves, so the
+refusal only fires for something the statement asked for.
+
+The doctype integration gate measures this on every script. A new gap fails it.
+To record a new measurement into the table, run the gate with
+`MXCLI_PROPERTY_SETS_RECORD=<file>` and then run
+`go run ./internal/propertysets/cmd/propdefaults -record <file>`.
+
 ## [A run of grants is compared as a whole](#a-run-of-grants-is-compared-as-a-whole)
 
 Most statements write the document they change, and that write is compared with
@@ -39426,7 +39543,7 @@ CREATE PUBLISHED ODATA SERVICE MyModule.CustomerAPI (
 | Call microflow | `$Result = CALL MICROFLOW Module.Name (Param = $value);` |  |
 | Call nanoflow | `$Result = CALL NANOFLOW Module.Name (Param = $value);` |  |
 | Show page | `SHOW PAGE Module.PageName (Param = $value);` | `($Param = …)` and `(Param: …)` are deprecated |
-| Close page | `CLOSE PAGE;` |  |
+| Close page | `CLOSE PAGE [n];` | `n` pages, default 1 |
 | Validation | `VALIDATION FEEDBACK $Entity/Attribute MESSAGE 'message';` | Requires attribute path + MESSAGE |
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'message';` |  |
 | Position | `@position(x, y)` | Canvas position (before activity) |
@@ -40155,6 +40272,12 @@ Pluggable widget templates are currently extracted from Mendix 11.6. When used o
 | REST client headers | `Headers: ('Name': 'Value')` | – | – | Yes | Yes | Yes |
 | Database Connector | `CREATE DATABASE CONNECTION` | – | – | – | Yes | Yes |
 | REST client query params | `QUERY $param: Type` | – | – | – | – | Yes |
+
+A REST client operation’s `body: json from $X` is stored as Mendix 11’s JSON
+body (`Rest$JsonBody`) on 11.0+. Mendix 10 has no JSON body, so there it is
+written as the string body Mendix 10 has, holding the same text, and
+`describe` reads it back as `body: template`. Before this, mxcli wrote the JSON
+body on Mendix 10 too, and Studio Pro could not open the project.
 
 ### [Workflows](#workflows-5)
 

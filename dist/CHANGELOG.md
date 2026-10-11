@@ -1,3 +1,7 @@
+## 2026-10-11 -- mxcli v0.25.0 @ 59e1b52
+- +128 / -5 lines
+- Sections changed: [The Language Poster](#the-language-poster), [DateTime](#datetime), [Every element is written with Studio Pro’s property set](#every-element-is-written-with-studio-pros-property-set), [Feature Availability Matrix](#feature-availability-matrix), [LOCALIZED / NOT LOCALIZED (DateTime only)](#localized--not-localized-datetime-only), [Longer-term: smaller local models](#longer-term-smaller-local-models), [MODIFY Attributes](#modify-attributes), [Microflows - Supported Statements](#microflows---supported-statements) (+6 more)
+
 ## 2026-10-10 -- mxcli v0.25.0 @ 22d9ea6
 - +135 / -103 lines
 - Sections changed: Find widget by API name, Search by storage name, [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-2), [Add a Page Variable](#add-a-page-variable), [Annotations](#annotations), [BSON Storage Names vs Qualified Names](#bson-storage-names-vs-qualified-names), [CREATE ENTITY](#create-entity), [CREATE OR MODIFY](#create-or-modify) (+37 more)
