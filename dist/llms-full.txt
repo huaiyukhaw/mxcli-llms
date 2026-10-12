@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.25.0 @ 59e1b52
-Generated: 2026-10-11T08:12:01Z
+Version:   mxcli v0.26.0 @ aa8c25b
+Generated: 2026-10-12T08:28:24Z
 
 ---
 
@@ -5853,7 +5853,7 @@ What `mdl 1` makes strict:
 - A session command — `connect`, `disconnect`, `use`, `set format = …`, `status`, `show version`, `show status`, `show connections`, `show catalog status`, `check`, `build`, `lint`, `debug`, `execute script`, `execute runtime`, `help`, `introspect api` — is an error in a script. Type it at the REPL, or use the command-line flag (`mxcli exec script.mdl -p app.mpr --json`).
 - `DynamicClasses`, `DynamicCellClass` and an OData client’s credential or header value take the expression bare; a quoted value is a Mendix string.
 
-The manual, the skills, `mxcli syntax` and the example scripts are written in the canonical form, and CI holds them to it: `make check-conformance` parses every MDL block in them as `mdl 1` and fails on a deprecated spelling (`mxcli check --deprecations=error` does the same for a script of your own). The design is in [ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md); `mxcli syntax language-header` has the details.
+The manual, the skills, `mxcli syntax` and the example scripts are written in the canonical form, and CI holds them to it: `make check-conformance` parses every MDL block in them as `mdl 1` and fails on a deprecated spelling (`mxcli check --deprecations=error` does the same for a script of your own; add `--v1=error` to also fail on what a headerless script must change before it can carry `mdl 1;`). The design is in [ADR-0011](https://github.com/mendixlabs/mxcli/blob/main/docs/13-decisions/0011-mdl-language-versioning.md); `mxcli syntax language-header` has the details.
 
 ## [Re-runnable Creates: `or modify` and `if not exists`](#re-runnable-creates-or-modify-and-if-not-exists)
 
@@ -6421,6 +6421,11 @@ Without the header a template literal that spans lines and has no parameters is 
    `check -p` reports everything exec would refuse under the header, computed
    by the same code exec uses, so a refusal shows up here and not halfway
    through a run.
+   
+   To gate a script that is meant to be ready for the header — in CI, say —
+   pass `--deprecations=error --v1=error`: the first fails on a deprecated
+   spelling (`MDL-DEPRnnn`), the second on an `MDL-V1-*` warning, which only a
+   headerless script reports. Either alone lets the other through.
 5. **Run it twice.** The first `exec` applies the script; the second must write
    nothing, and report every document unchanged. A second run that writes is a
    script that does not say what the project holds — the upgrade’s job is to
@@ -6499,7 +6504,7 @@ A construct with no mechanical rewrite is reported with the reason, and `fmt` re
 
 `-p app.mpr` also settles a bare `commit $X;` in a `create or modify microflow|nanoflow`, with or without the header. Since mendixlabs/mxcli#895 a bare commit means *with* events, Studio Pro’s default; an older mxcli stored the same statement *without* events. Where the stored flow commits the variable without events, `fmt --upgrade -p app.mpr` writes `commit $X without events;`, so re-running the script keeps what is stored instead of turning the event handlers on (or, inside a loop under `mdl 1`, being refused). A new flow, a new commit, or a stored commit with events is left as written; where the stored flow commits the variable both ways, the statement is left and reported. Without `-p`, `fmt` prints a note (`MDL067`) for each flow with a bare commit.
 
-`-p app.mpr` also tells the upgrade which statements `exec` would refuse once the header is there. Under `mdl 1` a `create or modify microflow|nanoflow` of a stored flow is applied as a patch, and a change the patch cannot make (inside a loop body or an error handler, a redrawn connector, a `return` added) is refused with nothing written; without the header the same statement rebuilds the whole flow (`MDL-V1-REBUILD`). No rewrite keeps that meaning, so `fmt` names each such statement and leaves the header off that file, applying the rest of the upgrade. Change those flows with `alter`, or drop and create them, and upgrade again; `--force-header` adds the header regardless. `mxcli check script.mdl -p app.mpr` reports the same statements (an `MDL-V1-REBUILD` error under `mdl 1`, the warning without the header), computed by the same code as `exec` and `diff`.
+`-p app.mpr` also tells the upgrade which statements `exec` would refuse once the header is there. Under `mdl 1` a `create or modify microflow|nanoflow` of a stored flow is applied as a patch, and a change the patch cannot make (inside a loop body anything but an activity replaced by one of the same kind, an error handler, a redrawn connector, a `return` added) is refused with nothing written; without the header the same statement rebuilds the whole flow (`MDL-V1-REBUILD`). No rewrite keeps that meaning, so `fmt` names each such statement and leaves the header off that file, applying the rest of the upgrade. Change those flows with `alter`, or drop and create them, and upgrade again; `--force-header` adds the header regardless. `mxcli check script.mdl -p app.mpr` reports the same statements (an `MDL-V1-REBUILD` error under `mdl 1`, the warning without the header), computed by the same code as `exec` and `diff`.
 
 ## [Behaviour changes to know about](#behaviour-changes-to-know-about)
 
@@ -17408,7 +17413,7 @@ The linting system provides:
 | Category | Prefix | Focus |
 | --- | --- | --- |
 | MDL | MDL001-MDL007 | Naming conventions, empty microflows, domain model size |
-| Security | SEC001-SEC009 | Access rules, password policy, demo users, PII exposure |
+| Security | SEC001-SEC010 | Access rules, password policy, demo users, PII exposure |
 | Convention | CONV001-CONV019 | Best practice conventions, error handling |
 | Quality | QUAL001-QUAL004 | Complexity, documentation, long microflows |
 | Architecture | ARCH001-ARCH003 | Cross-module data, entity business keys |
@@ -17469,6 +17474,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **SEC001** | Entity access rules – Ensures persistent entities have access rules defined |
 | **SEC002** | Password policy – Checks for secure password configuration |
 | **SEC003** | Demo users – Warns about demo users in production security level |
+| **SEC010** | Unreadable page data – A data grid, gallery, list view or combo box lists an entity that a user role allowed on the page cannot read (including its generalizations and specializations). At Production security it renders empty for that role and nothing else reports it. Info when the role reads only through an XPath-constrained rule; System entities use access measured from a deployed model, so a combo box over System.User gets its own message (it lists only the current user) |
 
 ## [Convention Rules](#convention-rules)
 
@@ -18082,6 +18088,77 @@ if [ "$SCORE" -lt 70 ]; then
 fi
 
 ```
+# [Claude Code Companion](#claude-code-companion)
+
+The mxcli companion is a [Claude Code](https://code.claude.com) mod: a pane inside
+your Claude Code session that shows the Mendix app you are building while the
+agent builds it.
+
+> **Early access.** Mods are an early-access Claude Code feature, and the companion
+> is at its first slice. Its plan is in
+> `docs/11-proposals/proposal-mxcli-companion-mod.md`.
+
+## [What it shows](#what-it-shows)
+
+- **Project** — the app’s structure: modules, their domain model, folders and
+  documents, project security, settings and navigation, as `mxcli project-tree`
+  reports it.
+- **MDL source** — select a document to see its MDL, as `mxcli describe` prints
+  it. Folders and other containers list what they hold instead.
+- **Domain model diagrams** — select a module’s *Domain Model* node in the desktop
+  app or VS Code to see its entities, attributes, associations and
+  generalizations, drawn where Studio Pro places them (`mxcli describe --format svg domainmodel <Module>`). Hover a box for its attributes. The terminal draws
+  no pictures and lists the entities instead.
+
+In a wide pane (90 columns or more) the tree sits on the left and the source on
+the right, like a file explorer; each column pages on its own with its ▲ / ▼
+rows. A narrower pane stacks them.
+
+The tree reloads by itself when the agent changes the model (`mxcli exec`, a
+writing `-c` one-liner, `new`, `rename`, `marketplace`). Press **Refresh** after
+changing the app elsewhere, for example in Studio Pro.
+
+## [Getting it](#getting-it)
+
+`mxcli init` writes the companion to `.claude/skills/mxcli-companion/` in a project
+set up for Claude Code, and `mxcli init --sync-skills` (run by the session hook
+on every start) keeps it current with your mxcli. Claude Code loads it from there
+once you trust the folder; there is nothing to install.
+
+Start Claude Code from the project folder, then type:
+
+```
+/mxcli-project
+
+```
+
+The first time the companion loads in a project, a band above the prompt says it
+is installed and offers **Open Project pane**. It does not come back once you
+open the pane or press **Not now**.
+
+A companion written during the current session — as the bootstrap prompt does —
+loads after `/reload-plugins` or in the next session; Claude Code reads plugins
+at session start.
+
+## [Options](#options-1)
+
+Both are set in Claude Code’s plugin configuration for `mxcli-companion`:
+
+| Option | Default |
+| --- | --- |
+| `mprPath` | the single `.mpr` in the session folder, or one level down; with several, the pane asks |
+| `mxcliPath` | `./mxcli` when present, else `mxcli` on `PATH` |
+
+## [Notes](#notes-3)
+
+- Every click runs mxcli, which reads the model. On a large app a document takes a
+  few seconds the first time; going back to it is instant until the model changes.
+- The companion only reads. It never changes the project.
+- The pane draws on the surface that runs the session. A session started in a
+  terminal and continued from the desktop app over remote control shows the pane
+  in the terminal only.
+- It is for Claude Code only; other tools get what `mxcli init` gives them today.
+
 # [Terminal UI (TUI)](#terminal-ui-tui)
 
 mxcli includes a terminal-based interactive UI for browsing, inspecting, and modifying Mendix projects. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), it provides a ranger/yazi-style Miller column interface directly in the terminal.
@@ -18942,8 +19019,19 @@ and **Docker is only needed for the first**:
 
 - **Docker** — the container path. Requires a running Docker daemon.
 - **`--local`** — mxcli’s own runtime, no daemon involved. It uses its own ports
-  (8081/8091) and its own `<project>_test` database, so a `mxcli run --local`
-  dev loop can keep serving the same project while tests run.
+  (app 8081, admin 8091, mxbuild serve 6544) and its own `<project>_test`
+  database, so a `mxcli run --local` dev loop can keep serving the same project
+  while tests run.
+
+Each port is probed before the project is touched. If one is taken — an editor
+helper on 8081 is the usual suspect — the run stops with the port, what it was
+for, the flag that moves it, and on Linux the process holding it. Move it with
+the same flags `run --local` has (refused with `--attach` and on the Docker path):
+
+```
+mxcli test tests/ -p app.mpr --local --app-port 9081 --admin-port 9091 --serve-port 7544
+
+```
 
 `--local` provisions that scratch database on PostgreSQL by default. On a machine
 without PostgreSQL — where it would stop with *no local PostgreSQL superuser
@@ -19477,7 +19565,7 @@ mxcli playwright check /p/Customer_Overview -p app.mpr \
   page: `out-p-Customer_Overview.png`, …) and prints only its path. Take one when
   the question is about appearance, not to find out whether the page works.
 
-### [Options](#options-1)
+### [Options](#options-2)
 
 | Flag | Default | Description |
 | --- | --- | --- |
@@ -20332,7 +20420,7 @@ IMPORT FROM legacy QUERY 'SELECT name, dept_name FROM employees WHERE active = t
 SQL DISCONNECT legacy;
 
 ```
-## [Notes](#notes-3)
+## [Notes](#notes-4)
 
 - The target entity must already exist in the Mendix project
 - Column types are automatically converted where possible
@@ -21142,7 +21230,11 @@ a longer prompt.
    “what the template ships with”; afterwards every figure is yours plus the
    template’s, with nothing to subtract. See [mxcli report](#mxcli-report) for how to
    read the six category scores.
-7. **Proposes the model in MDL and waits** — module, entities, roles, pages — before
+7. **Hands over and asks what next** — points you at the project explorer (run
+   `/reload-plugins`, then `/mxcli-project`; see [Claude Code Companion](#claude-code-companion))
+   and offers a choice: propose the domain model, import requirements from a
+   document first, open the explorer, or something else.
+8. **Proposes the model in MDL and waits** — module, entities, roles, pages — before
    building anything. Every script it writes, from the first, starts with `mdl 1;`, so
    the project never holds a headerless (`mdl 0`) script to upgrade. Two of those choices it makes deliberately rather than by
    default: a process with steps someone has to act on becomes a **workflow** (state
@@ -21224,6 +21316,11 @@ keep straight.
   file-driven and deterministic. After that, every new session runs the hook
   automatically; you never re-paste the prompt. Miss the script and the hook has
   nothing to run after a reap.
+- **A failed hook does not block the session — so it says so.** The hook runs the
+  script under `|| true`. When `./mxcli run --local --setup --ensure-db` fails (for
+  example “no local PostgreSQL superuser available”), the script prints an
+  `ERROR: the app database was not provisioned: …` banner to stderr with the retry
+  command and the `--db-type hsqldb` alternative, and exits with the failure’s status.
 - **mxcli delivery is an environment concern, not the prompt’s.** The download in
   step 1 is the fragile part in a gated web session (a GitHub release `curl` may be
   blocked), and it is the one thing that cannot move into the skill — the skill is
@@ -22257,8 +22354,8 @@ connected version supports. See also
 # [Working Outside Studio Pro](#working-outside-studio-pro)
 
 A project edited with mxcli, git and an editor is sometimes opened in Studio Pro
-afterwards. Two kinds of state that Studio Pro depends on are invisible to
-`mx check`, and mxcli checks both.
+afterwards. Several kinds of state that Studio Pro depends on are invisible to
+`mx check`, and mxcli checks them.
 
 ## [The ContentsHash index: `mxcli fix hashes`](#the-contentshash-index-mxcli-fix-hashes)
 
@@ -22291,6 +22388,46 @@ and the command says so.
 `mxcli exec` and `mxcli docker check` run the verify too and print a one-line
 warning when it finds a mismatch or a missing file. It never fails them;
 measured on a 900-unit project, the whole verify takes about 0.2 s.
+
+## [Property names Studio Pro’s merge compares: `mxcli fix property-sets`](#property-names-studio-pros-merge-compares-mxcli-fix-property-sets)
+
+Mendix’s diff and merge engine compares two revisions of an element by its
+property **names** before any value, and throws when they differ:
+
+```
+Objects with ID … of type Microflows$RestOperationCallAction do not have the same properties.
+
+```
+
+The model is valid — `mx check`, the build and the runtime fill an absent
+property with its default — but `mx diff`, merging and Studio Pro’s Version
+Control panel fail on it once Studio Pro has saved the document with its full
+property set. Every mxcli write gives a unit the property set Studio Pro writes
+for the project’s Mendix version. A unit written by an older mxcli and not
+rewritten since keeps its gaps; this command reaches those.
+
+```
+mxcli fix property-sets -p app.mpr --dry-run   # list the units that would change; exits 1 when one would
+mxcli fix property-sets -p app.mpr             # write them
+
+```
+
+Each unit’s report counts the keys added (with the value Mendix gives an absent
+one) and the empty keys stripped (properties the project’s version does not
+declare yet). A project user role with no `GUID` — older mxcli wrote them
+without one — gets its own `$ID` as its GUID, the value a role mxcli creates
+now gets; every mxcli write of the security settings does the same. Without
+it the build invents a random GUID each time, so the runtime can only match
+the role’s database row by name. A role that already has a GUID keeps it.
+Nothing else changes: no element `$ID` moves, and no existing `GUID` is
+touched. A second run writes nothing.
+
+The filled GUID protects a later **rename** of the role only in a database
+first synchronised after the fill. A database synchronised before it keeps
+the old random GUID and still finds the role by name, so renaming the role
+there still deletes its row and the user assignments that are not demo users. A unit holding a *value* in a
+key its version does not declare is reported and left alone, and, like every
+mxcli write, the command is refused while Studio Pro has the project open.
 
 ## [Git states that crash Studio Pro](#git-states-that-crash-studio-pro)
 
@@ -23661,7 +23798,9 @@ open a project stamped by a newer mxcli **without any warning**. For them the
 guard is the bootstrap script, `.claude/bootstrap-mxcli.sh`, which a newer
 `mxcli init` regenerates: before it links the `mxcli` on `PATH` into the
 project it compares that binary’s version with the stamp, and it does not link
-an older one — it downloads `MXCLI_TAG` (default `nightly`) instead. A
+an older one — it downloads `MXCLI_TAG` instead. `MXCLI_TAG` defaults to the
+release of the mxcli that generated the script (`vX.Y.Z`), or `nightly` when that
+was a nightly or development build. A
 `./mxcli` older than the stamp is replaced the same way, through a temporary
 file, so a `./mxcli` that is a symlink to the `PATH` binary never has the
 download written through it. If the download fails, the older `./mxcli` is
@@ -26605,7 +26744,7 @@ INDEX (OrderNumber)
 INDEX (OrderDate DESC);
 
 ```
-## [Notes](#notes-4)
+## [Notes](#notes-5)
 
 - `String` requires an explicit length: `String(200)`. Use `String(unlimited)` for unbounded text.
 - `EXTENDS` must appear **before** the opening parenthesis, not after the closing one.
@@ -26742,7 +26881,7 @@ ALTER ENTITY Sales.Customer
     SET POSITION (100, 200);
 
 ```
-## [Notes](#notes-5)
+## [Notes](#notes-6)
 
 - Each `ALTER ENTITY` statement performs a single operation. Chain multiple statements for multiple changes.
 - `RENAME ATTRIBUTE` updates references in microflows, pages and access rules, and rewrites XPath constraints. It does not rewrite microflow expressions (`$obj/Attr`); use `LIST IMPACT OF` to find the documents to check, or build and read the CE0117s.
@@ -26879,7 +27018,7 @@ CREATE PERSISTENT ENTITY Sales.Order (
 );
 
 ```
-## [Notes](#notes-6)
+## [Notes](#notes-7)
 
 - Enumeration values can also be managed incrementally with `ALTER ENUMERATION ... ADD VALUE` and `ALTER ENUMERATION ... REMOVE VALUE`.
 - The `DEFAULT` value on an entity attribute references the enumeration value name as a quoted string (e.g., `DEFAULT 'Draft'`).
@@ -27042,7 +27181,7 @@ CREATE ASSOCIATION HR.Employee_Department
     TYPE Reference;
 
 ```
-## [Notes](#notes-7)
+## [Notes](#notes-8)
 
 - The naming convention `Module.Child_Parent` reflects that the child (TO) entity holds the reference to the parent (FROM) entity. This can be counterintuitive – the `FROM` entity is the parent, and the `TO` entity is the child.
 - Internally, Mendix stores the FROM entity pointer as `ParentPointer` and the TO entity pointer as `ChildPointer`. These BSON field names are inverted relative to what you might expect.
@@ -28068,7 +28207,7 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 
 | Widget | Description | Key Properties |
 | --- | --- | --- |
-| `LAYOUTGRID` | Responsive grid container | `Class`, `Style` |
+| `LAYOUTGRID` | Responsive grid container | `Class`, `Style`, `Width` (`FullWidth` default, `FixedWidth`) |
 | `ROW` | Grid row | `Class` |
 | `COLUMN` | Grid column | `Class` |
 | `CONTAINER` | Generic div container | `Class`, `Style`, `DesignProperties` |
@@ -28087,8 +28226,8 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 
 | Widget | Description | Key Properties |
 | --- | --- | --- |
-| `TEXTBOX` | Single-line text input | `Label`, `Attribute` |
-| `TEXTAREA` | Multi-line text input | `Label`, `Attribute` |
+| `TEXTBOX` | Single-line text input | `Label`, `Attribute`, `Password`, `SubmitBehaviour` (`OnEndEditing` default, `WhileEditing`), `SubmitOnInputDelay` (ms, default 300) |
+| `TEXTAREA` | Multi-line text input | `Label`, `Attribute`, `SubmitBehaviour`, `SubmitOnInputDelay` |
 | `CHECKBOX` | Boolean toggle | `Label`, `Attribute` |
 | `RADIOBUTTONS` | Radio button group | `Label`, `Attribute` |
 | `DATEPICKER` | Date/time selector | `Label`, `Attribute` |
@@ -29085,7 +29224,7 @@ CREATE PAGE MyModule.Dashboard
 };
 
 ```
-## [Notes](#notes-8)
+## [Notes](#notes-9)
 
 - **A layout must declare at least one placeholder.** Without one a page’s
   content has nowhere to go, and the statement is refused:
@@ -29276,7 +29415,7 @@ ALTER PAGE MyModule.Split {
 };
 
 ```
-## [Notes](#notes-9)
+## [Notes](#notes-10)
 
 - `DESCRIBE LAYOUT` emits re-executable MDL, so it is the way to see what a
   layout currently contains before altering it.
@@ -29905,7 +30044,7 @@ From the shell, without writing a script:
 mxcli -p app.mpr -c "update security UserCommons"
 
 ```
-## [Notes](#notes-10)
+## [Notes](#notes-11)
 
 - Reconciling a marketplace module’s rules changes that module, so it shows up in
   `mxcli diff-local` and `mxcli marketplace diff` reads it as a local edit. That
@@ -30323,7 +30462,7 @@ From the command line:
 mxcli describe menu Atlas_Core.Phone_Menu -p app.mpr
 
 ```
-## [Notes](#notes-11)
+## [Notes](#notes-12)
 
 **A menu item cannot open a page that takes a required parameter.** There is nowhere
 to supply the argument, and Mendix rejects the model with **CE1571** (“No argument
@@ -31287,7 +31426,7 @@ CREATE OR MODIFY IMPORT MAPPING MyModule.IMM_Pet
 };
 
 ```
-## [Notes](#notes-12)
+## [Notes](#notes-13)
 
 - The child entity must own the FK (`FROM child TO parent`). Using the wrong association direction causes validation errors at runtime.
 - Arrays in the JSON sample map directly to child entity objects — there is no intermediate container entity (unlike export mappings).
@@ -31488,7 +31627,7 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 };
 
 ```
-## [Notes](#notes-13)
+## [Notes](#notes-14)
 
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
@@ -32048,7 +32187,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 );
 
 ```
-## [Notes](#notes-14)
+## [Notes](#notes-15)
 
 - Agents must be dropped before their referenced models, knowledge bases, and MCP services.
 - The model and knowledge base documents must exist before the agent is created.
@@ -33957,7 +34096,7 @@ ALTER MODULE MyModule
   );
 
 ```
-## [Notes](#notes-15)
+## [Notes](#notes-16)
 
 Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
@@ -40832,6 +40971,8 @@ line 1: `create or replace …` (enumeration) is deprecated; write `create or mo
 
 `check` and `exec` report these as **warnings**. To fail the run on one, for example in CI over documentation and examples, pass `--deprecations=error`.
 
+`--deprecations=error` does not gate the `MDL-V1-*` warnings — what a headerless (`mdl 0`) script still has to change before it can carry `mdl 1;` — so a script can pass it and still not parse under `mdl 1`. `mxcli check --v1=error` fails the run on those; `--deprecations=error --v1=error` together is the full `mdl 1` readiness gate, and `mxcli fmt --upgrade --header` is the fix.
+
 `mxcli help <code>` prints the entry for any `MDL-DEPRnnn` or `MDL-V1-*` code, `mxcli syntax <topic> --deprecated` lists a topic’s old spellings, and [Language Versions and Migration](#language-versions-and-migration) tabulates them all.
 
 The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It holds the code, old form, canonical form, rewrite and removal version of each entry. A spelling is only registered where it means exactly the same as its canonical form. `create or replace view entity`, for example, drops and recreates the view entity, so it is not reported. Likewise `show` is reported as `MDL-DEPR002` only where its canonical form is `list` (plurals, relationship queries and the summary tables), and as `MDL-DEPR090` where it is `describe` with the same output. `show entity X` and `show version` are neither: the first has no mdl 1 statement (`MDL-V1-SHOWSUMMARY`), the second is a session command (`MDL-V1-SESSION`).
@@ -41351,6 +41492,61 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 | --- | --- |
+| October 11, 2026 | [Release: mxcli v0.26.0](#release-mxcli-v0260) |
 | April 23, 2026 | [Introducing mxcli](#introducing-mxcli) |
+
+# [Release: mxcli v0.26.0](#release-mxcli-v0260)
+
+*October 11, 2026*
+
+v0.26.0 makes the documents mxcli writes **mergeable in Studio Pro**. It also adds a **companion Project pane for Claude Code**, makes `describe` → `exec` keep Studio Pro-authored microflows and pages unchanged, and introduces the **mxcli language poster**.
+
+## [The language poster](#the-language-poster-1)
+
+All of mxcli and MDL on one page: the idea, getting started with the bootstrap prompt, the CLI map, exploring and querying a project, domain models, microflows, pages, security, running and testing, the quality gates, skills, custom widgets, the Marketplace, runtime insight, and working alongside Studio Pro.
+
+[![The mxcli language poster](poster/mxcli-poster-small.png)](poster/mxcli-language-poster.html)
+
+**[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
+
+## [What’s new](#whats-new)
+
+**Documents that survive Studio Pro’s merge.** Mendix’s merge and diff engine compares an element’s property *names* between two revisions and throws when they differ. So when mxcli left out a key, or wrote one the project’s Mendix version doesn’t have, the document became unmergeable the first time Studio Pro saved it, even though `mx check`, the build and the runtime were all green. Every element mxcli writes now carries exactly the property set Studio Pro writes for that version. The set comes from a table measured with `mx convert` across Mendix 10.24, 11.6 and 11.12–11.15. For a project an older mxcli already wrote to, run:
+
+```
+mxcli fix property-sets -p app.mpr --dry-run   # see what would change
+mxcli fix property-sets -p app.mpr
+
+```
+
+**The mxcli companion.** A Claude Code mod that `mxcli init` installs. `/mxcli-project` opens a Project pane with the app’s structure and the selected document’s MDL, and it reloads as the agent changes the model.
+
+**Round trips that change nothing.** `describe` → `exec` of Studio Pro-authored microflows now keeps loop back-edges, shared error handlers and dead-end loop branches, which were found on real Marketplace modules. Pages keep their layout grid design properties, alignment and input submit behaviour.
+
+**`check -p` agrees with `exec` more often.** A set of scripts is checked against what the earlier files create. Security statements resolve the roles and documents they name. Several XPath and expression mistakes that only failed at build time are now refused up front.
+
+**New in MDL.** `DateTime not localized`, `close page n`, `add $X to $Obj/Module.Assoc`, module documentation, and `alter app security (AdminUserName: …)`.
+
+**The dev loop.** `mxcli run --local --detach` runs the app as a background service, and `mxcli playwright check` gives a text verdict for a list of pages in one call. `run --local` and `test --local` also work on Windows without Developer Mode, including domain model changes under `--watch`.
+
+## [Upgrading](#upgrading)
+
+Download the `v0.26.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.26.0):
+
+```
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.26.0/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+```
+
+Then refresh a project’s skills, commands and the companion mod with `mxcli init --sync-skills`.
+
+Behaviour changes worth knowing:
+
+- A page or snippet variable’s default is now a bare expression (`= true`, not `= 'true'`). The old form still works and warns **MDL-DEPR086**.
+- A published OData service’s authentication is a property (`Authentication: (basic, session)`), and `call rest service` takes its settings as one property list.
+
+Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHANGELOG.md)
 
 # [Introducing mxcli](#introducing-mxcli)

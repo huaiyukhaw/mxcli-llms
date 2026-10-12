@@ -1,3 +1,7 @@
+## 2026-10-12 -- mxcli v0.26.0 @ aa8c25b
+- +222 / -26 lines
+- Sections changed: [Blog](#blog), [Claude Code Companion](#claude-code-companion), [Release: mxcli v0.26.0](#release-mxcli-v0260), [Working Outside Studio Pro](#working-outside-studio-pro), [Description](#description-33), [Getting it](#getting-it), [How to migrate a script](#how-to-migrate-a-script), [Language Version Header](#language-version-header) (+29 more)
+
 ## 2026-10-11 -- mxcli v0.25.0 @ 59e1b52
 - +128 / -5 lines
 - Sections changed: [The Language Poster](#the-language-poster), [DateTime](#datetime), [Every element is written with Studio Pro’s property set](#every-element-is-written-with-studio-pros-property-set), [Feature Availability Matrix](#feature-availability-matrix), [LOCALIZED / NOT LOCALIZED (DateTime only)](#localized--not-localized-datetime-only), [Longer-term: smaller local models](#longer-term-smaller-local-models), [MODIFY Attributes](#modify-attributes), [Microflows - Supported Statements](#microflows---supported-statements) (+6 more)
