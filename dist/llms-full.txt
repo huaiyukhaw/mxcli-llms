@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.26.0 @ aa8c25b
-Generated: 2026-10-12T08:28:24Z
+Version:   mxcli v0.26.0 @ bd45c47
+Generated: 2026-10-13T08:51:37Z
 
 ---
 
@@ -16559,9 +16559,9 @@ A scheduled event also produces a `schedule` row in `CATALOG.REFS`, so
 `list callers of <microflow>` and the dead-asset analysis both see it. Without
 that edge a microflow run only by a scheduled event looked unreferenced.
 
-### [CATALOG.QUEUES](#catalogqueues)
+### [CATALOG.TASK\_QUEUES](#catalogtask_queues)
 
-Task queues.
+Task queues. (`CATALOG.QUEUES` is the old name, still accepted.)
 
 | Column | Description |
 | --- | --- |
@@ -16573,7 +16573,7 @@ Task queues.
 not assume it parses as an integer.
 
 ```
-select QualifiedName, Parallelism, ClusterWide from CATALOG.QUEUES;
+select QualifiedName, Parallelism, ClusterWide from CATALOG.TASK_QUEUES;
 
 ```
 ### [Offline synchronization](#offline-synchronization-1)
@@ -16692,6 +16692,23 @@ LIST CATALOG TABLES;
 mxcli -p app.mpr -c "LIST CATALOG TABLES"
 
 ```
+### [Renamed tables](#renamed-tables)
+
+The integration and queue tables follow Studio Pro’s document names. The old
+names still answer as aliases, but `LIST CATALOG TABLES` shows only the new ones,
+and `CATALOG.OBJECTS` reports the new `ObjectType` values:
+
+| Table | Old name | `ObjectType` (old) |
+| --- | --- | --- |
+| `CATALOG.CONSUMED_REST_SERVICES` | `REST_CLIENTS` | `CONSUMED_REST_SERVICE` (`REST_CLIENT`) |
+| `CATALOG.CONSUMED_REST_OPERATIONS` | `REST_OPERATIONS` | — |
+| `CATALOG.CONSUMED_ODATA_SERVICES` | `ODATA_CLIENTS` | `CONSUMED_ODATA_SERVICE` (`ODATA_CLIENT`) |
+| `CATALOG.PUBLISHED_ODATA_SERVICES` | `ODATA_SERVICES` | `PUBLISHED_ODATA_SERVICE` (`ODATA_SERVICE`) |
+| `CATALOG.TASK_QUEUES` | `QUEUES` | `TASK_QUEUE` (`QUEUE`) |
+
+A query that filters `OBJECTS` on an old `ObjectType` value returns no rows;
+change it to the new value.
+
 # [SQL Queries](#sql-queries)
 
 The catalog supports standard SQL SELECT syntax for querying project metadata. Queries use the `CATALOG.` prefix to identify catalog tables.
@@ -28715,7 +28732,8 @@ ALTER SNIPPET module.Name {
 `ALTER LAYOUT module.Name { … }` takes the same operations. This is the
 generic ALTER — `set` / `insert` / `replace` / `drop` against a target — which
 every document type shares; a page’s targets are widget names, DataGrid 2
-columns `grid column(Attr)` / `grid column('Caption')`, or a layout region
+columns `grid column(Attr)` / `grid column('Caption')`, navigation list items
+`nav item(widget)` / `nav item('Text')` / `nav item@n`, or a layout region
 `container.top`.
 
 The older spellings still run and warn with a deprecation code:
@@ -28811,6 +28829,52 @@ alter page ModT.TabsPage {
 A tab page cannot go next to an ordinary widget or inside another tab page, and
 one `INSERT` cannot mix tab pages with widgets. Dropping, replacing or reordering
 tab pages still needs `CREATE OR MODIFY PAGE`.
+
+A navigation list holds items, and only items. `INSERT INTO` the list appends
+one and leaves the existing items as they are. The widgets inside an item are
+targets by their own names.
+
+```
+mdl 1;
+alter snippet Shop.Menu {
+  insert into navList1 { item (Action: show page Shop.Home) { dynamictext t2 (Content: 'Second') } }
+};
+alter snippet Shop.Menu {
+  insert after t2 { dynamictext t3 (Content: 'Third') }
+};
+
+```
+### [Navigation List Item Operations](#navigation-list-item-operations)
+
+A navigation list item has no stored name either, so — like a DataGrid 2
+column — it is addressed by what it holds or where it is:
+
+| Address | Means |
+| --- | --- |
+| `nav item(t1)` | the item holding the widget named `t1` |
+| `nav item('Home')` | the item showing the text `Home` (any language) |
+| `nav item@2` | the second item |
+| `nav item('Home')@2` | the second of several items showing `Home` |
+
+An address that matches several items is refused unless `@n` picks one, and a
+miss lists every item’s addresses. Prefer the content forms: a position moves
+when an item is inserted before it.
+
+```
+mdl 1;
+alter snippet Shop.Menu {
+  insert before navList1 item@1 { item (Action: show page Shop.Orders) { dynamictext t0 (Content: 'Orders') } }
+  insert after navList1 item(t1) { item (Action: show page Shop.Home) { dynamictext t5 (Content: 'Home') } }
+  set (Action: show page Shop.Orders) on navList1 item('Home')@2;
+  insert into navList1 item('Orders') { dynamictext t0b (Content: 'All orders') }
+  replace navList1 item(t2) with { item (Action: show page Shop.Home) { dynamictext t2 (Content: 'Second') } }
+  drop navList1 item@3;
+};
+
+```
+
+Only items go next to an item or in its place: `INSERT BEFORE` / `AFTER` an item
+and `REPLACE` of one take `item` blocks, and widgets go `INTO` an item.
 
 ### [DROP](#drop-2)
 
@@ -30838,8 +30902,8 @@ After `REFRESH CATALOG`, the following tables are available for SQL queries:
 
 | Table | Contents |
 | --- | --- |
-| `CATALOG.ODATA_CLIENTS` | Consumed OData services |
-| `CATALOG.ODATA_SERVICES` | Published OData services |
+| `CATALOG.CONSUMED_ODATA_SERVICES` | Consumed OData services (old name: `ODATA_CLIENTS`) |
+| `CATALOG.PUBLISHED_ODATA_SERVICES` | Published OData services (old name: `ODATA_SERVICES`) |
 | `CATALOG.EXTERNAL_ENTITIES` | Imported external entities |
 | `CATALOG.EXTERNAL_ACTIONS` | External actions used in microflows |
 | `CATALOG.CONTRACT_ENTITIES` | Entity types from cached $metadata |
@@ -38603,7 +38667,7 @@ Everything mxcli can do, organized by use case.
 | REST query parameters | Requires Mendix 11.0+ | Build query string manually on 10.x |
 | Concurrent editing | Not supported — a file-based write is refused while Studio Pro has the project open (`<project>.mpr.lock` present) | Close Studio Pro before mxcli writes, or write through it with `--mcp`; `exec --force` overrides |
 | Widget template drift | CE0463 on version mismatch | MPK augmentation handles most cases |
-| Marketplace module update | Existing modules are reported, not updated in place | Update via Studio Pro (preserves local edits and entity IDs) |
+| Marketplace module update | `install` reports an existing module and does not update it | `mxcli marketplace diff` / `update <id> -p app.mpr --to <version>` (preserves entity identity and role grants; local edits are refused or saved with `--save-edits`) |
 | 47 of 52 metamodel domains | Not yet implemented | REST, OData write, etc. pending |
 
 ## [Version Compatibility](#version-compatibility)
@@ -39213,24 +39277,26 @@ If you take that route the command states plainly that the project is now v1.
 
 ## [Updating an existing module](#updating-an-existing-module)
 
-Updating a module that is **already in the project is not done automatically**. `install` detects it, reports the installed and target versions, and stops:
+Updating a module that is **already in the project is not done by `install`**. `install` detects it, reports the installed and target versions, names the command that does the update, and stops:
 
 ```
 Module "DatabaseConnector" is already installed (version 7.0.1).
-Target version: 7.0.3.
-In-place module updates are not applied automatically (they can discard local
-edits and change persistent-entity IDs, which loses data). Update via Studio Pro.
+Target: version 7.0.3.
+It is not updated by install (an update can discard local edits). To update it,
+review what would change, then apply it with entity identity and role grants preserved:
+  mxcli marketplace diff 2888 -p app.mpr --to 7.0.3
+  mxcli marketplace update 2888 -p app.mpr --to 7.0.3
 
 ```
 
-Before you update in Studio Pro, the question worth answering is **whether anyone has edited the module since it was installed** — because the update will not ask. That is what `marketplace diff` is for; see below.
+Before you update, the question worth answering is **whether anyone has edited the module since it was installed** — because the update will not ask. That is what `marketplace diff` is for; see below.
 
 Two reasons make automatic in-place module updates unsafe:
 
 1. **Local edits.** Teams sometimes modify a marketplace module after importing it; a blind re-import would discard those changes.
 2. **Persistent-entity IDs.** A fresh import assigns new entity `$ID`s. The runtime database keys data by entity ID, so re-importing a module with persistent entities would make the runtime treat them as *different* entities — **losing data**.
 
-Studio Pro’s Marketplace **Update** performs an ID-preserving merge that the `mx` CLI does not expose, so module updates are left to Studio Pro for now.
+Studio Pro’s Marketplace **Update** performs an ID-preserving merge that the `mx` CLI does not expose; `marketplace update` (below) is mxcli’s equivalent, as a separate command so that `install` never updates implicitly.
 
 ## [Updating a module (`marketplace update`)](#updating-a-module-marketplace-update)
 

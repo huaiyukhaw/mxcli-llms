@@ -1,3 +1,7 @@
+## 2026-10-13 -- mxcli v0.26.0 @ bd45c47
+- +79 / -13 lines
+- Sections changed: [Catalog Tables](#catalog-tables), [Core Tables](#core-tables), [Description](#description-35), [Known Limitations](#known-limitations), [Listing All Tables](#listing-all-tables), [Synopsis](#synopsis-35), [Updating an existing module](#updating-an-existing-module)
+
 ## 2026-10-12 -- mxcli v0.26.0 @ aa8c25b
 - +222 / -26 lines
 - Sections changed: [Blog](#blog), [Claude Code Companion](#claude-code-companion), [Release: mxcli v0.26.0](#release-mxcli-v0260), [Working Outside Studio Pro](#working-outside-studio-pro), [Description](#description-33), [Getting it](#getting-it), [How to migrate a script](#how-to-migrate-a-script), [Language Version Header](#language-version-header) (+29 more)
