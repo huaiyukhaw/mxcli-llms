@@ -1,3 +1,7 @@
+## 2026-10-14 -- mxcli v0.26.0 @ 78bdfa5
+- +38 / -0 lines
+- Sections changed: [`@throws`](#throws), [mxcli Parser Errors](#mxcli-parser-errors)
+
 ## 2026-10-13 -- mxcli v0.26.0 @ bd45c47
 - +79 / -13 lines
 - Sections changed: [Catalog Tables](#catalog-tables), [Core Tables](#core-tables), [Description](#description-35), [Known Limitations](#known-limitations), [Listing All Tables](#listing-all-tables), [Synopsis](#synopsis-35), [Updating an existing module](#updating-an-existing-module)
