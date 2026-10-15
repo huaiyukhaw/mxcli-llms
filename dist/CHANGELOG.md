@@ -1,3 +1,7 @@
+## 2026-10-15 -- mxcli v0.26.0 @ 52be22e
+- +230 / -41 lines
+- Sections changed: [Full-Text Search](#full-text-search), [Microflow, Page, and Nanoflow Access](#microflow-page-and-nanoflow-access), [Description](#description-19), [Description](#description-28), [Description](#description-31), [Description](#description-33), [Description](#description-41), [Examples](#examples-43) (+14 more)
+
 ## 2026-10-14 -- mxcli v0.26.0 @ 78bdfa5
 - +38 / -0 lines
 - Sections changed: [`@throws`](#throws), [mxcli Parser Errors](#mxcli-parser-errors)

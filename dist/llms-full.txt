@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.26.0 @ 78bdfa5
-Generated: 2026-10-14T07:01:44Z
+Version:   mxcli v0.26.0 @ 52be22e
+Generated: 2026-10-15T06:52:49Z
 
 ---
 
@@ -4575,13 +4575,76 @@ ALTER PUBLISHED REST SERVICE Module.OrderAPI SET (Authentication: none);
   setting. A new service without it requires no authentication. `describe`
   does not print `none`.
 - The **authentication microflow** returns `System.User` — empty means “not
-  authenticated” — and its parameters can only be a `System.HttpRequest` and a
-  `System.HttpResponse`, matched by type (none at all is fine). `exec` and
+  authenticated”. An object parameter can only be a `System.HttpRequest` or a
+  `System.HttpResponse`, matched by type; any other parameter is an
+  **authentication parameter** of the service (below). `exec` and
   `check --references` refuse anything else as **MDL-REST04** (Mendix: CE0334,
   CE0336).
 - With authentication on, the service needs at least one allowed module role
   (`GRANT ACCESS …`), or `mx check` reports CE0338. Custom authentication also
   needs app security on (CE6600). Roles without authentication are accepted.
+
+#### [Authentication parameters](#authentication-parameters)
+
+A custom-authentication microflow can read values of the request as its own
+parameters — a token in a header, a tenant in the query string. Each one is
+bound in an optional list after the microflow (Studio Pro: the service’s
+**Parameters**, Mendix 7.17+):
+
+```
+mdl 1;
+CREATE OR MODIFY MICROFLOW Module.PRS_Authenticate (
+  $HttpRequest: System.HttpRequest, $Token: String, $Tenant: Integer, $Lang: String
+)
+RETURNS System.User AS $User
+BEGIN
+  RETRIEVE $User FROM System.User WHERE [Name = $Token] FIRST;
+  RETURN $User;
+END;
+
+CREATE OR MODIFY PUBLISHED REST SERVICE Module.OrderAPI (
+  Path: 'rest/orders/v1',
+  Version: '1.0.0',
+  ServiceName: 'Order API',
+  Authentication: (
+    basic,
+    microflow Module.PRS_Authenticate (
+      $Token: header 'X-Api-Token',
+      $Tenant: query,
+      $Lang: query 'lang' description 'UI language, defaults to en'
+    )
+  )
+)
+{
+  RESOURCE 'orders' {
+    GET '' MICROFLOW Module.PRS_GetAllOrders;
+  }
+};
+
+```
+
+| Entry part | Meaning |
+| --- | --- |
+| `$Token` | The authentication microflow’s parameter the value is passed to |
+| `query` | `header` | Where the value comes from; nothing else is accepted |
+| `'X-Api-Token'` | The HTTP name, when it is not the parameter’s own name |
+| `description '…'` | Optional |
+
+- The **data type** is never written: it is the microflow parameter’s.
+- A parameter **not listed** is a `query` parameter under its own name, so a
+  microflow with `$Token: String` works with `microflow Module.PRS_Authenticate`
+  alone. `System.HttpRequest` / `System.HttpResponse` are never listed. Without
+  the service parameter Mendix reports CE0336 (“The microflow parameter
+  (‘Token’) is not present in the custom authentication parameter list”).
+- **MDL-REST04** refuses an entry naming a parameter the microflow does not
+  have, a request or response parameter, a kind other than `query` / `header`,
+  and a parameter listed twice.
+- The list follows the microflow: listed entries in the order written, then the
+  unlisted ones in the microflow’s order. Methods without `microflow` clear it.
+  Left out with the rest of `Authentication`, the stored parameters are kept.
+- `describe` prints the list only when the stored parameters are not what
+  `microflow M.F` alone would write — a header, a renamed or described
+  parameter, or another order.
 
 ### [Multiple Resources](#multiple-resources)
 
@@ -6535,7 +6598,7 @@ refuse the spelling; until then it only warns.
 
 ### [Changes of meaning (`MDL-V1-*`)](#changes-of-meaning-mdl-v1-)
 
-22 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
+23 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
 
 | Code | Without the header (mdl 0) | Under `mdl 1;` | Decided at | Rewritten by `fmt --upgrade` |
 | --- | --- | --- | --- | --- |
@@ -6557,6 +6620,7 @@ refuse the spelling; until then it only warns.
 | `MDL-V1-SET` | `$x = <expression>` without `set` changes the variable | an error: a reassignment is written `set $x = <expression>;` | parse | yes: `fmt --upgrade --header` |
 | `MDL-V1-SHOWSUMMARY` | `show entity X` / `show association X` prints a summary of the element | an error: `show` is dropped (R6) and the summary has no mdl 1 statement; write `describe entity X` for the definition, or `list entities in M` / `list associations in M` for the summary | parse | no: blocks `--header`; `show entity X` / `show association X` print a summary no mdl 1 statement prints: `describe` prints the definition as MDL and `list entities` / `list associations` the summary columns, so either would change the script’s output; choose one by hand |
 | `MDL-V1-SLASH` | a `/` after a statement is accepted as a terminator (SQL\*Plus style) | an error: `;` is the only statement terminator | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-TABPAGEPROP` | A property a tab page cannot store (CaptionParams, Class, Style, …) is accepted and dropped on write | a refusal (MDL-WIDGET44), with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-TEMPLATE` | a message template written as one string literal that spans lines is an expression: the template is `{1}` and the literal its parameter | the template text, as a literal on one line is; a line break in a template is written into the literal | parse | yes: `fmt --upgrade --header` |
 | `MDL-V1-TEMPLATEATTR` | a text-template parameter bound to a non-String attribute (`{1} = $Order.Total`) was stored as `toString($Order/Total)` by earlier mxcli releases | an attribute reference, rendered with the attribute’s formatting, as Studio Pro stores it | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-VIEWAUTONUMBER` | a view entity attribute declared `autonumber` over an AutoNumber column passes check, and mxbuild reports CE6770 “View Entity is out of sync with the OQL Query” | a check error that names the attribute and suggests `long`, the type the view gives the column | exec | no: decided by exec against the project; `check -p` reports it |
@@ -10334,6 +10398,26 @@ mxcli writes one condition per value of the attribute, as Studio Pro does, so a
 value not listed hides the widget. `describe page` emits this form for widgets
 set up that way in Studio Pro.
 
+Studio Pro’s **“Visible for module roles”** restricts a widget to users holding
+one of the named module roles. It is a separate setting, so it combines with an
+expression or attribute condition — the widget then carries two `Visible:` lines:
+
+```
+mdl 1;
+create page MyModule.Request_Review (Title: 'Review', Layout: Atlas_Core.Atlas_Default) {
+  container cntAdmin (Visible: roles (MyModule.Administrator)) {
+    dynamictext txtAdmin (Content: 'Administrators only')
+  }
+  actionbutton btnClose (Caption: 'Close', Action: close page,
+    Visible: false, Visible: roles (MyModule.Administrator, MyModule.Editor))
+};
+
+```
+
+It is accepted on widgets, tab pages and navigation-list items. `mxcli check --references` refuses a role the project (or the script, above the statement)
+does not define. `alter page … set Visible` changes only the condition and keeps
+the stored roles.
+
 ### [Conditional Editability](#conditional-editability)
 
 Input widgets can be conditionally editable:
@@ -10632,7 +10716,7 @@ WIDGET_TYPE widgetName (Property: value, ...) [{ children }]
 | --- | --- |
 | Layout | `LAYOUTGRID`, `ROW`, `COLUMN`, `CONTAINER`, `CUSTOMCONTAINER` |
 | Data | `DATAVIEW`, `LISTVIEW`, `DATAGRID`, `GALLERY` |
-| Input | `TEXTBOX`, `TEXTAREA`, `CHECKBOX`, `RADIOBUTTONS`, `DATEPICKER`, `COMBOBOX` |
+| Input | `TEXTBOX`, `TEXTAREA`, `CHECKBOX`, `RADIOBUTTONS`, `DATEPICKER`, `COMBOBOX`, `FILEMANAGER` |
 | Display | `DYNAMICTEXT`, `IMAGE`, `STATICIMAGE`, `DYNAMICIMAGE` |
 | Action | `ACTIONBUTTON`, `LINKBUTTON` |
 | Navigation | `NAVIGATIONLIST` |
@@ -12677,7 +12761,7 @@ DESCRIBE SECURITY MATRIX IN Shop;
 
 Document-level access controls which module roles can execute microflows and nanoflows or view pages. GRANT adds roles and REVOKE removes them; neither replaces the list.
 
-A new document’s starting access depends on its module. In a module with no module roles, mxcli creates `<Module>.User` and grants every new page, microflow and nanoflow to it (`exec` prints `access: granted to auto-created role <Module>.User …` under the create), and a later GRANT adds to that rather than replacing it — revoke `<Module>.User` to narrow access. In a module with roles of its own, a new document has no allowed roles until you grant some. See [GRANT](#default-access-of-a-new-page-microflow-or-nanoflow).
+A new page, microflow or nanoflow has no allowed roles until you grant some, in every module: mxcli never creates a module role on its own. In a module with no module roles yet, create one first (`create module role <Module>.User;`) and map it into a user role. See [GRANT](#default-access-of-a-new-page-microflow-or-nanoflow).
 
 ## [Microflow Access](#microflow-access)
 
@@ -15263,6 +15347,22 @@ its own. Inside the modules it touches, every entity is repositioned — includi
 any you arranged yourself in Studio Pro. Use `--dry-run` first; it prints every
 move as `Module.Entity (x, y) -> (x, y)` and writes nothing.
 
+To repair a model you arranged by hand, use `--only-overlapping` instead: an
+entity whose box does not collide with another entity or an annotation keeps its
+position, and of two that collide the first in reading order (top to bottom,
+then left to right) stays put while the other moves to the nearest free spot.
+Annotations are obstacles and never move.
+
+```
+$ mxcli layout -p app.mpr --module Sales --only-overlapping --dry-run
+  Sales.Small7  (100, 380) -> (100, 480)
+Sales: 1 of 7 entities would move
+
+```
+
+Studio Pro does not store an entity’s size, so box sizes are estimated from the
+entity’s name and attribute count, generously.
+
 Marketplace modules and `System` are never touched. Naming one explicitly is an
 error rather than a silent skip:
 
@@ -15289,6 +15389,7 @@ a build script:
 | --- | --- |
 | `--module <name>` | Lay out this module (repeatable). Default: every module the project owns. |
 | `--dry-run` | Print the moves, write nothing. |
+| `--only-overlapping` | Move only entities that overlap another entity or an annotation; keep every other position. |
 | `--include-marketplace` | Also lay out Marketplace modules. A module update replaces them, so this is normally pointless. |
 
 ## [When you do want explicit positions](#when-you-do-want-explicit-positions)
@@ -15300,10 +15401,13 @@ layout into MDL.
 
 Two things to know if you place entities yourself:
 
-- The coordinate is the box’s **centre**, not its top-left corner.
-- An entity created with no position takes the next slot in a wrapping grid.
-  That is a default, not a layout: it keeps a large model on screen and stops
-  boxes overlapping, but it knows nothing about which entities are related.
+- The coordinate is the box’s **top-left corner**, not its centre.
+- An entity created with no position takes the next free slot in a wrapping
+  grid — the first slot where its box, at its estimated height, clears every
+  entity and annotation already in the module. That is a default, not a
+  layout: it keeps a large model on screen and stops boxes overlapping, but it
+  knows nothing about which entities are related. View entities, OData external
+  entities and entities imported from a contract are placed the same way.
 
 ## [Default position for an entity with no `@Position`](#default-position-for-an-entity-with-no-position)
 
@@ -15978,7 +16082,7 @@ The graph builtins return empty when the community tables aren’t built, so run
 
 # [Full-Text Search](#full-text-search)
 
-The `SEARCH` command performs full-text search across all strings and source code in a Mendix project. It searches element names, documentation, captions, expressions, and other string content.
+The `SEARCH` command performs full-text search across all strings and source code in a Mendix project. It searches captions, messages, the documentation of project elements (entities, attributes, constants, pages and more), and MDL source.
 
 ## [Syntax](#syntax-5)
 
@@ -16047,16 +16151,38 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 ```
 ## [What Gets Searched](#what-gets-searched)
 
-The search command looks through:
+`SEARCH` looks in two indexes, and says which one a hit came from.
 
-- Element names (entities, microflows, pages, etc.)
-- Documentation comments
-- Attribute names and captions
-- Expression strings in microflows
-- Widget captions and labels
-- Enumeration value captions
-- Log message strings
-- Validation feedback messages
+**Strings** (a full catalog, built automatically):
+
+- Every translatable text: page titles, widget captions and labels, enumeration value captions, button and menu captions, show-message and validation-feedback texts, in every language
+- Log messages and log node names of microflows
+- Page URLs and the paths, resources and operation summaries of published REST services
+- Workflow names, descriptions, task names and activity captions
+- Element names: the qualified name is a searchable column too, so `SEARCH 'Customer'` also returns the rows of elements named Customer that have some indexed text
+- **Documentation of project elements.** A hit’s `ObjectType` names the element and its `StringContext` is `documentation`:
+  
+  | Documented element | `ObjectType` |
+  | --- | --- |
+  | Entity | `ENTITY` |
+  | Attribute (qualified `Module.Entity.Attribute`) | `ATTRIBUTE` |
+  | Association | `ASSOCIATION` |
+  | Enumeration | `ENUMERATION` |
+  | Constant | `CONSTANT` |
+  | Page, snippet, layout, building block, page template | `PAGE`, `SNIPPET`, `LAYOUT`, `BUILDING_BLOCK`, `PAGE_TEMPLATE` |
+  | Microflow, nanoflow, rule | `MICROFLOW`, `NANOFLOW`, `RULE` |
+  | Workflow | `WORKFLOW` |
+  | Java action, JavaScript action | `JAVA_ACTION`, `JAVASCRIPT_ACTION` |
+  | Microflow parameter, Java action parameter (qualified `Module.Flow.Parameter`) | `MICROFLOW_PARAMETER`, `JAVA_ACTION_PARAMETER` |
+  | Consumed and published REST service, business event service | `CONSUMED_REST_SERVICE`, `PUBLISHED_REST_SERVICE`, `BUSINESS_EVENT_SERVICE` |
+  | Import mapping, export mapping, JSON structure, data transformer | `IMPORT_MAPPING`, `EXPORT_MAPPING`, `JSON_STRUCTURE`, `DATA_TRANSFORMER` |
+  | Scheduled event, task queue, regular expression, image and icon collection, menu | `SCHEDULED_EVENT`, `TASK_QUEUE`, `REGULAR_EXPRESSION`, `IMAGE_COLLECTION`, `ICON_COLLECTION`, `MENU` |
+  | Agent, AI model, knowledge base, consumed MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE` |
+  | A module’s domain model documentation | `MODULE`, with `StringContext` `domain_model_documentation` |
+  
+  This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service’s contract entities (written by the remote service, not by the project).
+
+**MDL source** (only after `refresh catalog full source`): microflow, nanoflow and page bodies, expressions and the other definitions as MDL text. Until it is built, a warning on stderr says only strings were searched.
 
 ## [Comparison with Catalog Queries](#comparison-with-catalog-queries)
 
@@ -26453,14 +26579,14 @@ SEARCH '<keyword>'
 ```
 ## [Description](#description-19)
 
-Performs a full-text search across all strings, messages, captions, and MDL source in the project. Uses FTS5 (SQLite full-text search) for fast matching. Returns results grouped by document type and location.
+Performs a full-text search across all strings, messages, captions, the documentation of project elements (entities, attributes, constants, pages and more), and MDL source in the project. Uses FTS5 (SQLite full-text search) for fast matching. Returns results grouped by document type and location.
 
 This command requires the catalog to be populated. If search returns no results, run `REFRESH CATALOG FULL` first. The search is also available as a CLI subcommand: `mxcli search -p app.mpr "keyword" --format names|json`.
 
 ## [Parameters](#parameters-23)
 
 [*keyword*](#keyword)
-The search term to look for. Must be enclosed in single quotes. Matches against entity names, attribute names, microflow activity captions, page titles, widget labels, string constants, log messages, and MDL source text.
+The search term to look for. Must be enclosed in single quotes. Matches against entity names, attribute names, microflow activity captions, page titles, widget labels, string constants, log messages, element documentation, and MDL source text.
 ## [Examples](#examples-31)
 
 Search for a keyword:
@@ -27488,6 +27614,8 @@ Call another microflow, nanoflow, or Java action. Parameters are passed by name.
 
 A flow may call itself: the target resolves to the flow the statement creates, with the return type it declares, so a recursive microflow or nanoflow is written in one statement — no stub created first.
 
+A call may also name a flow the script creates further down, so mutually recursive flows can be written in either order. The call is stored by name; plain `mxcli exec` resolves it against every flow the script declares, because it rolls the whole run back if a statement fails. `exec --continue-on-error`, the REPL and `-c` cannot roll back and refuse such a call: there, create the callee first, or create a stub of it first and `create or modify` it after the caller.
+
 **UI Actions**
 
 ```
@@ -27888,7 +28016,7 @@ DROP MICROFLOW Sales.ACT_CreateOrder;
 ## [Synopsis](#synopsis-31)
 
 ```
-CREATE [ OR MODIFY ] JAVA ACTION module.Name [ FOLDER 'folder_path' ] ( parameters )
+CREATE [ OR MODIFY ] JAVA ACTION module.Name [ < T [, ...] > ] [ FOLDER 'folder_path' ] ( parameters )
     RETURNS type
     [ EXPOSED AS 'caption' IN 'category' ]
     AS $$ java_code $$
@@ -27910,6 +28038,8 @@ If `OR MODIFY` is specified and the Java action already exists, its parameters, 
 
 Java actions support generic entity handling through type parameters. A parameter declared as `ENTITY <pEntity>` creates a type parameter selector – the caller chooses which entity type to use. Other parameters declared as bare `pEntity` (without `ENTITY`) receive instances of the selected entity type.
 
+A type parameter that no `ENTITY <T>` parameter names – one bound by the object the caller passes in – is declared in the header after the action name: `module.Name<T>`. The header also fixes the order of the type parameters when it differs from the order the `ENTITY <T>` parameters would give. An unqualified type that is neither a declared type parameter nor `Microflow`/`Nanoflow` is refused (`MDL-JA01`): it would be written as an entity with no module, which Mendix reports as CE1613.
+
 ### [Exposed Actions](#exposed-actions)
 
 The optional `EXPOSED AS` clause makes the action visible in the Studio Pro toolbox under the specified category, allowing modelers to use it directly in microflows.
@@ -27918,6 +28048,8 @@ The optional `EXPOSED AS` clause makes the action visible in the Studio Pro tool
 
 [`module.Name`](#modulename-11)
 The qualified name of the Java action.
+[`< T [, ...] >`](#-t---)
+Optional. Declares type parameters, in order. Needed only for a type parameter that no `ENTITY <T>` parameter declares; a name that is a keyword or a primitive is quoted (`<"Entity">`).
 [`FOLDER 'folder_path'`](#folder-folder_path)
 Optional. Places the document in the named module folder, creating missing folders in the path. On `CREATE OR MODIFY` this **moves** an existing document; omitting the clause leaves placement alone rather than returning the document to the module root. See [MOVE](#move).
 [`parameters`](#parameters-1-1)
@@ -27967,6 +28099,18 @@ CREATE JAVA ACTION MyModule.JA_Validate (
 EXPOSED AS 'Validate Entity' IN 'Validation'
 AS $$
     return InputObject != null;
+$$;
+
+```
+
+Java action with a type parameter that no entity selector declares – the caller’s object binds it:
+
+```
+CREATE JAVA ACTION MyModule.JA_Describe<pEntity> (
+    InputObject: pEntity NOT NULL
+) RETURNS String
+AS $$
+    return InputObject.toString();
 $$;
 
 ```
@@ -28257,6 +28401,7 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 | `RADIOBUTTONS` | Radio button group | `Label`, `Attribute` |
 | `DATEPICKER` | Date/time selector | `Label`, `Attribute` |
 | `COMBOBOX` | Dropdown selector | `Label`, `Attribute` |
+| `FILEMANAGER` | File upload/download, inside a data view on a `System.FileDocument` specialization | `Label`, `Type` (`Upload`, `Download`, `Both` default), `MaxFileSize` (MB, default 5), `AllowedExtensions`, `ShowFileInBrowser` |
 
 **Display Widgets**
 
@@ -29204,15 +29349,51 @@ passes `mx check`, and renders with **no topbar bar and no sidebar rail**.
 
 Inline CSS on the layout element.
 
-`layouttype`, `class` and `style` are the **only** header properties. Anything
-else is an error rather than an ignored key:
+[`Layout`](#layout-1)
+
+The layout this one is built on — see
+[A layout built on another layout](#a-layout-built-on-another-layout).
+
+`layouttype`, `class`, `style` and `Layout` are the **only** header properties.
+Anything else is an error rather than an ignored key:
 
 ```
 Error: layout MyModule.T1: unknown property "bogus" (a layout header takes
-layouttype, class and style; which placeholder is "main" is set by naming one
-Main, not by a property)
+layouttype, class, style and layout; which placeholder is "main" is set by
+naming one Main, not by a property)
 
 ```
+### [A layout built on another layout](#a-layout-built-on-another-layout)
+
+Studio Pro lets a layout wrap another one rather than have a tree of its own
+(ConversationalUI’s `Layout_MasterBase` wraps `Atlas_Core.Atlas_Default`). Name
+the outer layout with `Layout:` and write the body exactly as a page body:
+`PLACEHOLDER X { … }` fills the outer layout’s placeholder `X`, and bare widgets
+fill its `Main`. The placeholders the new layout declares for its own pages go
+inside those blocks, bodiless as anywhere else in a layout:
+
+```
+CREATE OR MODIFY LAYOUT MyModule.Layout_Framed (
+  layouttype: 'Responsive',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  PLACEHOLDER Main {
+    CONTAINER banner (Class: 'card') {
+      DYNAMICTEXT heading (Content: 'Framed area', RenderMode: H3)
+    }
+    PLACEHOLDER Main
+  }
+};
+
+```
+
+- The layout still needs exactly one declared `Main` (CE0848), counted inside
+  the blocks.
+- A block naming a placeholder the outer layout does not declare is refused;
+  mxbuild would report it as CE1613.
+- Only web layouts can be built on another layout.
+- `DESCRIBE LAYOUT` prints this form, with one block per stored argument.
+
 ### [Region properties](#region-properties)
 
 | Property | Values | Notes |
@@ -29711,22 +29892,21 @@ The nanoflow access form grants execute permission on a nanoflow to one or more 
 
 ### [Default access of a new page, microflow or nanoflow](#default-access-of-a-new-page-microflow-or-nanoflow)
 
-Document grants are **additive** too: a GRANT adds roles to the document’s allowed roles and never removes one. That matters because of what a newly created document starts with:
+Document grants are **additive** too: a GRANT adds roles to the document’s allowed roles and never removes one.
 
-- In a module that has **no module roles**, mxcli creates a module role `<Module>.User` (description “Auto-created default role for mxcli document access”) and grants every new page, microflow and nanoflow to it, so the document is not unreachable. `exec` says so under the create:
-  
-  ```
-  Created page Shop.Stub
-    access: granted to auto-created role Shop.User (the module has no other roles; a later grant adds to it — revoke it to narrow access)
-  
-  ```
-  
-  New documents keep going to `<Module>.User` for as long as it is the module’s only role.
-- In a module that **has module roles of its own**, a new document gets **no** allowed roles. Grant them in the same script.
+A newly created page, microflow or nanoflow starts with **no** allowed roles, whatever its module holds. mxcli never creates a module role on its own: which roles exist, and which documents they open, is the author’s decision. Create the module role, map it into a user role, and grant the document in the same script:
 
-So `grant view on page Shop.Stub to Shop.Admin;` on a page that was created while `Shop.User` was the only role leaves it open to `Shop.User` **and** `Shop.Admin` — every user role mapped to `Shop.User` can still open it. To restrict it, revoke the default: `revoke view on page Shop.Stub from Shop.User;`.
+```
+mdl 1;
+create module role Shop.User;
+create or modify user role Customer ( ModuleRoles: (System.User, Shop.User) );
+grant view on page Shop.Overview to Shop.User;
 
-A rewrite keeps the stored roles: `create or modify`, and `drop` followed by `create` of the same name **in one run**. A `create` in a *later* run than the `drop` is a new document and starts again from the defaults above — in a module with its own roles, with no access, which MxBuild reports as CE0106 when a page, nanoflow or navigation uses the flow. `mxcli check -p` reports that case as [MDL-SEC21](#mdl-sec21-a-used-flow-left-without-access-ce0106).
+```
+
+Earlier versions of mxcli created a `<Module>.User` role (description “Auto-created default role for mxcli document access”) in a module with no module roles and granted every new document to it. A project written by one of those versions still holds that role and those grants; mxcli leaves them as they are. Revoke them (`revoke view on page Shop.Stub from Shop.User;`) or drop the role if you did not intend them.
+
+A rewrite keeps the stored roles: `create or modify`, and `drop` followed by `create` of the same name **in one run**. A `create` in a *later* run than the `drop` is a new document and starts again with no access, which MxBuild reports as CE0106 when a page, nanoflow or navigation uses the flow. `mxcli check -p` reports that case as [MDL-SEC21](#mdl-sec21-a-used-flow-left-without-access-ce0106).
 
 ## [Parameters](#parameters-44)
 
@@ -38072,7 +38252,8 @@ CREATE VIRTUAL TABLE STRINGS USING fts5(
     StringContext,  -- Where it lives. For translatable text this is
                     -- <owner $Type>.<property>, e.g. Forms$ActionButton.Caption.
                     -- Non-translatable strings keep a plain label: page_url,
-                    -- log_node, documentation, rest_path, task_name, ...
+                    -- log_node, log_message, documentation, rest_path,
+                    -- task_name, domain_model_documentation, ...
     Language,       -- Language code, empty for non-translatable strings
     ElementId,      -- The owning element's $ID — what distinguishes an
                     -- enumeration's twelve values from each other
@@ -38087,6 +38268,14 @@ cannot otherwise read is still searchable. That includes Atlas’s design
 templates (`PAGE_TEMPLATE`, `BUILDING_BLOCK`), which are roughly 70% of a stock
 project’s text and never render in a running app — filter them out with
 `ObjectType` when you want only the app’s own strings.
+
+The documentation of an element (an entity, attribute, constant, page, …) is a
+plain string, not a `Texts$Text`, so it is added from the catalog tables that
+already hold it, not by the walk: `StringContext` is `documentation`,
+`ObjectType` names the element (`ENTITY`, `ATTRIBUTE`, `CONSTANT`, `PAGE`, …)
+and `QualifiedName` is the element’s own (`Sales.Order.Total` for an
+attribute). Microflow and workflow documentation is indexed with the same
+labels. See [Full-Text Search](#full-text-search) for the full list.
 
 An empty translation — a text that exists but is not translated yet — is **not**
 a row, so a language’s presence in this table means it is actually translated
@@ -40972,7 +41161,7 @@ level Production. This script creates it as a NEW microflow, ... [MDL-SEC21]
 
 ```
 
-**Cause:** With a project (`check -p`), the script leaves a microflow or nanoflow with no allowed module role while a page, snippet, layout, nanoflow, menu document or navigation profile names it. Measured on Mendix 11.14, MxBuild reports CE0106 for each of those uses (even from an unused snippet, menu document or nanoflow), but not for a published REST operation, a microflow called only from another microflow, or an excluded page. The usual way to get there is `drop microflow` in one run and `create microflow` in a later one: the later create is a *new* flow, and a new document in a module that has module roles of its own gets no access. Dropping and recreating in the same run, or using `create or modify`, keeps the stored roles.
+**Cause:** With a project (`check -p`), the script leaves a microflow or nanoflow with no allowed module role while a page, snippet, layout, nanoflow, menu document or navigation profile names it. Measured on Mendix 11.14, MxBuild reports CE0106 for each of those uses (even from an unused snippet, menu document or nanoflow), but not for a published REST operation, a microflow called only from another microflow, or an excluded page. The usual way to get there is `drop microflow` in one run and `create microflow` in a later one: the later create is a *new* flow, and a new document gets no access. A new flow in a script that creates it and a page using it, with no grant, is the other. Dropping and recreating in the same run, or using `create or modify`, keeps the stored roles.
 
 **Solution:** Add the `grant execute on microflow …` (or `… on nanoflow …`) the suggestion names, or rebuild the flow with `create or modify` instead of dropping it.
 
