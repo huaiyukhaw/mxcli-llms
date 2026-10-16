@@ -1,3 +1,7 @@
+## 2026-10-16 -- mxcli v0.27.0 @ 3d3bb3e
+- +119 / -5 lines
+- Sections changed: Exit 1 when anything matches (0 when nothing does), Refuse the change if a placeholder is left anywhere in the project's text, [Blog](#blog), [Release: mxcli v0.27.0](#release-mxcli-v0270), [Examples](#examples-57), [Failing on a match](#failing-on-a-match), [Flags](#flags-3), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation) (+10 more)
+
 ## 2026-10-15 -- mxcli v0.26.0 @ 52be22e
 - +230 / -41 lines
 - Sections changed: [Full-Text Search](#full-text-search), [Microflow, Page, and Nanoflow Access](#microflow-page-and-nanoflow-access), [Description](#description-19), [Description](#description-28), [Description](#description-31), [Description](#description-33), [Description](#description-41), [Examples](#examples-43) (+14 more)

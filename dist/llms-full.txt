@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.26.0 @ 52be22e
-Generated: 2026-10-15T06:52:49Z
+Version:   mxcli v0.27.0 @ 3d3bb3e
+Generated: 2026-10-16T06:39:59Z
 
 ---
 
@@ -2716,6 +2716,7 @@ This catches everything Level 1 catches, plus:
 - Page layouts that don’t exist in the project
 - Association endpoints pointing to missing entities
 - A plain `create` whose name already exists in the project
+- A statement the project’s Mendix version cannot store (`MDL-VERSION01`, e.g. `create view entity` below 10.18) — the same version gates `exec` refuses with
 
 This is the check you should run before executing a script. It’s fast (reads the project but doesn’t modify it) and catches most mistakes.
 
@@ -11717,6 +11718,11 @@ ALTER PAGE Module.EditPage {
 | --- | --- | --- |
 | `Caption` | Button/link caption | `SET (Caption: 'Submit') ON btnSave` |
 | `Label` | Input field label | `SET (Label: 'Full Name') ON txtName` |
+| `RenderMode` | Dynamic text rendering: `Text`, `Paragraph`, `H1`–`H6` | `SET (RenderMode: H2) ON txtTitle` |
+| `Placeholder` | Input hint text (text box, text area, date picker) | `SET (Placeholder: 'Enter your name') ON txtName` |
+| `Password` | Mask a text box’s input | `SET (Password: true) ON txtPin` |
+| `Validation` | A text box’s validation expression | `SET (Validation: '$value != empty') ON txtName` |
+| `ValidationMessage` | Message shown when the validation fails | `SET (ValidationMessage: 'Name is required') ON txtName` |
 | `ButtonStyle` | Button visual style | `SET (ButtonStyle: Danger) ON btnDelete` |
 | `Class` | CSS class names | `SET (Class: 'card p-3') ON cMain` |
 | `Style` | Inline CSS | `SET (Style: 'margin: 8px;') ON cBox` |
@@ -16121,6 +16127,9 @@ mxcli search -p app.mpr "validation" -q --format names
 # Output as JSON array
 mxcli search -p app.mpr "validation" --json
 
+# Exit 1 when anything matches (0 when nothing does)
+mxcli search -p app.mpr "validation" --fail-on-match
+
 ```
 ## [Output Formats](#output-formats)
 
@@ -16183,6 +16192,24 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service’s contract entities (written by the remote service, not by the project).
 
 **MDL source** (only after `refresh catalog full source`): microflow, nanoflow and page bodies, expressions and the other definitions as MDL text. Until it is built, a warning on stderr says only strings were searched.
+
+## [Failing on a match](#failing-on-a-match)
+
+`--fail-on-match` turns `search` into a gate. The results are printed as usual (a JSON array under `--json`), and the exit status carries the answer:
+
+| Exit status | Meaning |
+| --- | --- |
+| `0` | No hit |
+| `1` | At least one hit |
+| `2` | The search could not run: an unknown project, or a query the index rejects (an unbalanced `"`, say) |
+
+```
+# Refuse the change if a placeholder is left anywhere in the project's text
+mxcli search -p app.mpr "TODO" --fail-on-match --json
+
+```
+
+Without the flag a hit exits `0`, as before.
 
 ## [Comparison with Catalog Queries](#comparison-with-catalog-queries)
 
@@ -20874,6 +20901,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
 | `--serve-port` | 6543 | `mxbuild --serve` port |
+| `--listen-addr` | `127.0.0.1` | IP address the app binds to (not a host name). `0.0.0.0` binds all IPv4 interfaces, `::` all interfaces, so other machines on the network can open the app; the URLs it is reachable at are printed after boot. The runtime does not derive an application root URL from this address, so if the app builds absolute URLs (SSO redirects, links in emails) pass `--runtime-setting ApplicationRootUrl=http://<host>:<port>/` or set a real host in the configuration (a warning says so). The M2EE admin API is unaffected and always binds `127.0.0.1` |
 | `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
@@ -30343,6 +30371,7 @@ CREATE OR REPLACE NAVIGATION profile
     [ LOGIN PAGE module.PageName ]
     [ NOT FOUND PAGE module.PageName ]
     [ ON SYNC ERROR { THROW | CONTINUE } ]
+    [ PROGRESSIVE WEB APP [ ( Precaching: bool, InstallPrompt: bool ) ] | PROGRESSIVE WEB APP OFF ]
     [ SYNC (
         sync_rules
     ) ]
@@ -30475,6 +30504,27 @@ phrase MDL already has for failure handling — a microflow’s `ON ERROR CONTIN
 stored value alone, and `DESCRIBE NAVIGATION` emits it only when it is not the
 default.
 
+`PROGRESSIVE WEB APP` is Studio Pro’s *“Progressive web app”* settings. A profile
+stores none until they are set, and an **offline** profile without them gets no
+service worker: the built `index.js` has `"registerServiceWorker": false`, and no
+page opens without a network, while `check`, `exec` and `mx check` all pass
+(mendixlabs/mxcli#1377). `Precaching` pre-loads the app’s pages and resources
+(default `false`); `InstallPrompt` allows the *Add to home screen* prompt (default
+`true`); a key the clause leaves out takes its default, so a bare
+`PROGRESSIVE WEB APP` writes the defaults, `PROGRESSIVE WEB APP OFF`
+stores none, and omitting the clause leaves the stored settings alone.
+`DESCRIBE NAVIGATION` emits it when settings are stored, naming only the keys that
+differ from the defaults, and `CREATE NAVIGATION` warns about an offline profile
+left without them.
+
+```
+CREATE OR MODIFY NAVIGATION PhoneOffline
+    HOME PAGE Field.WorkOrder_List
+    PROGRESSIVE WEB APP ( Precaching: true )
+    SYNC ( SYNC Field.WorkOrder ALL; );
+
+```
+
 An entity’s *compatibility mode* flag has no MDL syntax. It is read, preserved
 across a rewrite, and reported by `DESCRIBE NAVIGATION` — never silently
 dropped.
@@ -30510,8 +30560,8 @@ CREATE OR MODIFY NAVIGATION Responsive
 
 Native mobile navigation. A native profile’s home is a page or a nanoflow
 (`HOME NANOFLOW`); mxcli writes its home pages and `SYNC` block only, and refuses a
-`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE` and `ON SYNC ERROR`
-on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
+`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE`, `ON SYNC ERROR` and
+`PROGRESSIVE WEB APP` on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
 
 ```
 CREATE OR MODIFY NAVIGATION NativePhone
@@ -41167,6 +41217,22 @@ level Production. This script creates it as a NEW microflow, ... [MDL-SEC21]
 
 It is an **error at security level Prototype or Production** (the stored level, or the one the script sets) and a warning at Off, where MxBuild does not check it. Only what the script changes is reported: a flow that already had the problem before the script, and that the script does not touch, is left to `mxcli docker check`.
 
+### [MDL-SEC22: A call across entity access (CE0114)](#mdl-sec22-a-call-across-entity-access-ce0114)
+
+```
+✗ microflow MyModule.DS_Tile_Count does not apply entity access (@applyentityaccess(false)
+in this script) but calls microflow MyModule.SUB_Scoped_List, which does
+(@applyentityaccess(true) as stored) — MxBuild reports CE0114 "A microflow that does not
+apply entity access can only call microflows that also do not apply entity access." [MDL-SEC22]
+
+```
+
+**Cause:** With a project (`check -p`), a microflow without “Apply entity access” calls a microflow — or decides on a rule (`if Mod.Rule(…)`) — that has it. Measured on Mendix 11.13 and 11.14, MxBuild refuses only that direction, at every security level; on -> off, on -> on, off -> off, a nanoflow caller and an excluded caller all build. Both settings are read from the project and simulated through the script (`@applyentityaccess`, `@applyentityaccess(false)`, and an absent annotation on `create or modify` keeping what is stored).
+
+**Solution:** Put `@applyentityaccess` on the caller, or call a flow that does not apply entity access. Turning it off on the callee also builds, but widens what that flow may read and write for every caller.
+
+Only what the script changes is reported, and a callee neither the project nor the script holds is not judged.
+
 ### [MDL-I18N01: A tab page caption without the default language (CE4899)](#mdl-i18n01-a-tab-page-caption-without-the-default-language-ce4899)
 
 ```
@@ -41785,8 +41851,56 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 | --- | --- |
+| October 15, 2026 | [Release: mxcli v0.27.0](#release-mxcli-v0270) |
 | October 11, 2026 | [Release: mxcli v0.26.0](#release-mxcli-v0260) |
 | April 23, 2026 | [Introducing mxcli](#introducing-mxcli) |
+
+# [Release: mxcli v0.27.0](#release-mxcli-v0270)
+
+*October 15, 2026*
+
+v0.27.0 makes **`exec` all or nothing**. If a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed. Around that sits a large wave of round-trip fixes: describing real apps, checking the output and executing it again now works far more often.
+
+## [The language poster](#the-language-poster-1)
+
+New to mxcli? The poster puts all of mxcli and MDL on one page.
+
+[![The mxcli language poster](poster/mxcli-poster-small.png)](poster/mxcli-language-poster.html)
+
+**[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
+
+## [What’s new](#whats-new)
+
+**All-or-nothing `exec`.** Before, a statement that failed at write time left every statement before it in place: a created module stayed, and a `drop` ahead of the failing `create` was not undone. Now mxcli backs up the `.mpr` and every unit file a run touches before the first write, and restores them if anything fails. The message reads “Nothing was written: statement N was rolled back”.
+
+**Round trips over real apps.** We ran `describe` → `check` → `exec` over complete applications: the Siemens FSM template, the GenAI showcase and Marketplace modules. Every place where the description didn’t check, or didn’t execute back to the same model, is now fixed. That covers indexes on system date members, layouts built on other layouts, Mendix 9 pluggable data sources, decisions on enumeration rules, doc comments with bullets, mutually recursive microflows, and more. `describe module --all` now emits every document type.
+
+**Mendix 9 projects.** Microflows, nanoflows and pages with pluggable widgets can be written to 9.x projects again. `run --local` picks JDK 17 for them.
+
+**`check -p` catches more before `exec` does.** It now checks access rule XPaths, event handler microflows, enumeration keys, view entity sources, DataGrid 2 column attributes, ALTER PAGE targets, and references to image collections and flows the same script creates.
+
+**New in MDL.** The classic `filemanager` widget, role-based visibility with `Visible: roles (Mod.A, …)`, and `+=` / `-=` for reference sets inside `change`. ALTER PAGE can now address navigation list items (`nav item('Home')`) and widgets inside Accordion groups.
+
+**The domain model, drawn.** `mxcli describe --format svg domainmodel <Module>` draws a module’s domain model as SVG, with entities where Studio Pro shows them and boxes sized to fit every name. The Claude Code companion shows the diagram when you select a Domain Model node, with pan, fit and a full-width view.
+
+**Security.** The MongoDB BSON driver is upgraded for the October 2026 advisories, which release scanners flagged on the published binaries.
+
+## [Upgrading](#upgrading)
+
+Download the `v0.27.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.27.0):
+
+```
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.27.0/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+```
+
+Then refresh a project’s skills, commands and the companion mod with `mxcli init --sync-skills`.
+
+**One breaking change:** mxcli no longer creates a module role on its own. A new page, microflow or nanoflow in a module with no roles used to create `<Module>.User` and grant itself to it. Now a new document starts with no allowed roles. If a script grants to `<Module>.User`, add `create module role <Module>.User;` before the grant.
+
+Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHANGELOG.md)
 
 # [Release: mxcli v0.26.0](#release-mxcli-v0260)
 
@@ -41794,7 +41908,7 @@ News, release announcements, and demos from the mxcli team.
 
 v0.26.0 makes the documents mxcli writes **mergeable in Studio Pro**. It also adds a **companion Project pane for Claude Code**, makes `describe` → `exec` keep Studio Pro-authored microflows and pages unchanged, and introduces the **mxcli language poster**.
 
-## [The language poster](#the-language-poster-1)
+## [The language poster](#the-language-poster-2)
 
 All of mxcli and MDL on one page: the idea, getting started with the bootstrap prompt, the CLI map, exploring and querying a project, domain models, microflows, pages, security, running and testing, the quality gates, skills, custom widgets, the Marketplace, runtime insight, and working alongside Studio Pro.
 
@@ -41802,7 +41916,7 @@ All of mxcli and MDL on one page: the idea, getting started with the bootstrap p
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new)
+## [What’s new](#whats-new-1)
 
 **Documents that survive Studio Pro’s merge.** Mendix’s merge and diff engine compares an element’s property *names* between two revisions and throws when they differ. So when mxcli left out a key, or wrote one the project’s Mendix version doesn’t have, the document became unmergeable the first time Studio Pro saved it, even though `mx check`, the build and the runtime were all green. Every element mxcli writes now carries exactly the property set Studio Pro writes for that version. The set comes from a table measured with `mx convert` across Mendix 10.24, 11.6 and 11.12–11.15. For a project an older mxcli already wrote to, run:
 
@@ -41822,7 +41936,7 @@ mxcli fix property-sets -p app.mpr
 
 **The dev loop.** `mxcli run --local --detach` runs the app as a background service, and `mxcli playwright check` gives a text verdict for a list of pages in one call. `run --local` and `test --local` also work on Windows without Developer Mode, including domain model changes under `--watch`.
 
-## [Upgrading](#upgrading)
+## [Upgrading](#upgrading-1)
 
 Download the `v0.26.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.26.0):
 
