@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.27.0 @ 3d3bb3e
-Generated: 2026-10-16T06:39:59Z
+Version:   mxcli v0.27.0 @ 80b1b8d
+Generated: 2026-10-18T06:53:57Z
 
 ---
 
@@ -7082,7 +7082,9 @@ BirthDate: DateTime NOT LOCALIZED,  -- not localized
 - On a **new** attribute, no clause means localized.
 - On a **rewrite** — `CREATE OR MODIFY ENTITY` or `MODIFY ATTRIBUTE` — no clause
   keeps the value already stored (a Studio Pro-authored non-localized attribute
-  stays non-localized); a stated clause wins.
+  stays non-localized); a stated clause wins. When the keep is a stored
+  `not localized`, the statement prints a `Note:` naming the attribute and the
+  `DateTime localized` spelling that changes it.
 - On a **view entity** the value follows the OQL source attribute and needs no
   clause; a stated one overrides it, and a mismatch with the source is CE6770.
 - On any type other than DateTime the clause is an error: there is nowhere to
@@ -13263,7 +13265,11 @@ does not have it yet. The offline kinds are the online names plus `Offline`.
 
 ## [CREATE OR REPLACE NAVIGATION](#create-or-replace-navigation)
 
-Replaces an entire navigation profile:
+Sets the clauses it states on a navigation profile. Every clause is optional,
+and an omitted clause keeps the stored value: a statement with only a menu
+keeps the home page, role home pages, login page and not-found page. The
+`{ }` block replaces the whole menu, and `HOME … FOR <UserRole>` replaces the
+home page of that role only.
 
 ```
 CREATE OR REPLACE NAVIGATION <Profile>
@@ -30384,7 +30390,9 @@ CREATE OR REPLACE NAVIGATION profile
 
 Creates or replaces a navigation profile. Each profile defines the home page, optional role-specific home pages, optional login page, optional 404 page, and a hierarchical menu structure.
 
-The statement fully replaces the existing profile configuration. To modify only part of a profile’s navigation, use DESCRIBE NAVIGATION to export the current configuration, edit the MDL, and re-execute.
+Every clause is optional, and a clause the statement omits leaves the stored value alone. A statement that states only a menu keeps the profile’s home page, role-based home pages, login page and not-found page. A clause that is stated replaces what it names: the `{ }` block replaces the whole menu, the `SYNC ( )` block the whole sync list, and `HOME … FOR Role` the home page of that role only, so other roles keep theirs. MDL has no clause that clears a home page, a login page or a not-found page.
+
+The output of DESCRIBE NAVIGATION states every clause the profile has, so it can be edited and re-executed as it is.
 
 ### [Profile Types](#profile-types-1)
 
@@ -30423,7 +30431,7 @@ The navigation profile type — see [Profile Types](#profile-types-1). One of
 
 [`HOME PAGE module.PageName`](#home-page-modulepagename)
 
-The default home page for the profile. Required. The page must already exist.
+The default home page for the profile. The page must already exist. Omitting the clause keeps the stored home page. A web profile without a home page fails the build with CE0527.
 
 [`HOME MICROFLOW module.Flow` / `HOME NANOFLOW module.Flow`](#home-microflow-moduleflow--home-nanoflow-moduleflow)
 
@@ -30434,17 +30442,17 @@ nanoflow home, still runs with a warning).
 
 [`HOME PAGE module.PageName FOR UserRole`](#home-page-modulepagename-for-userrole)
 
-Optional role-specific home page. Users with this role see a different home page than the default. Multiple role-specific home pages can be specified.
+Optional role-specific home page. Users with this role see a different home page than the default. Multiple role-specific home pages can be specified. Each one replaces the stored home page of its role only, and a role the statement does not mention keeps its home page.
 
 The role is a **user role**, written as a bare name (`FOR Administrator`). User roles are project-level and have no module part. A module-qualified name here — a module role, which often shares the name — produces a project Mendix cannot load: `StorageLoadException: … is not a valid UserRoleIdentifier`, raised before checking runs. `mxcli check --references` refuses it.
 
 [`LOGIN PAGE module.PageName`](#login-page-modulepagename)
 
-Optional custom login page. If omitted, the default system login page is used.
+Optional custom login page. A profile with no login page uses the default system login page. Omitting the clause keeps the stored login page.
 
 [`NOT FOUND PAGE module.PageName`](#not-found-page-modulepagename)
 
-Optional custom 404 page shown when a requested page is not found.
+Optional custom 404 page shown when a requested page is not found. Omitting the clause keeps the stored page.
 
 [`{ menu_items }`](#-menu_items-)
 
@@ -33619,6 +33627,8 @@ DESCRIBE SETTINGS [ category ]
 Displays project settings. `LIST SETTINGS` provides a compact overview of all settings across all categories. `DESCRIBE SETTINGS` outputs the full settings in round-trippable MDL syntax that can be used to recreate the same configuration.
 
 When `DESCRIBE SETTINGS` is called without a category, it outputs all settings. When a category is specified, only that category is shown.
+
+Both also show the **project ID** — the `$ID` of the `Projects$Project` root unit that every module belongs to. `LIST SETTINGS` prints it as a `Project` row; `DESCRIBE SETTINGS` prints it as a `-- Project ID: …` comment, so the output still executes. It is read-only: there is no statement that changes it. Business Events uses it as the app id, so two apps made from one model (a copied `.mpr`, a shared template) report the same project ID.
 
 The available settings categories are:
 
@@ -39699,6 +39709,11 @@ mxcli fix widgets -p app.mpr             # CE0463
 mxcli fix design-properties -p app.mpr   # CE6087
 
 ```
+
+`marketplace install` runs both itself after a module install (a widget install runs
+the widget resync only) when `mx` for the project’s version is available, and falls
+back to printing these two commands with a warning when it is not.
+
 ```
 Updated design properties: 42 unit(s) changed.
   Storage: 1868 .mxunit file(s), unchanged from 1868 before (MPR v2 preserved).
@@ -40120,7 +40135,7 @@ END WORKFLOW;
 | List menu tree | `LIST NAVIGATION MENU [Profile];` | Menu tree for profile or all |
 | List home pages | `LIST NAVIGATION HOMES;` | Home page assignments across profiles |
 | Describe navigation | `DESCRIBE NAVIGATION [Profile];` | Full MDL output (round-trippable) |
-| Create/replace navigation | `CREATE OR REPLACE NAVIGATION Profile ...;` | Full replacement of profile |
+| Create/replace navigation | `CREATE OR REPLACE NAVIGATION Profile ...;` | Sets the stated clauses; an omitted clause keeps its stored value, a `{ }` menu replaces the whole menu |
 
 **Navigation Example:**
 
@@ -41423,6 +41438,21 @@ reported.
 ```
 retrieve $E from Mod.Ent first;
 change $E (Attr = 'x');
+
+```
+
+**Over an association** (`check --references`, mendixlabs/mxcli#1516). Whether
+`retrieve $L from $h/Mod.Assoc` binds a list depends on the association: from the FROM
+entity of a Reference it is one object; from its TO entity (the “one” side) it is a
+**list**, unless the owner is Both; a ReferenceSet is a list from either end. The project
+knows which, so with `-p` / `--references` a member path over that list (CE0117), a
+`change` of it (CE7247 “Variable ‘L’ is of type List of …, but should be of type
+Object.”), and passing it to a parameter that takes one object (CE0117) are reported too
+— measured identically on 11.6.6 and 11.15.0. The bare list retrieve, `count`, a `loop`
+and a list parameter build. For one object, retrieve it from the database:
+
+```
+retrieve $L from Mod.Line where [Mod.Line_Header = $h] first;
 
 ```
 

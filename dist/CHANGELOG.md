@@ -1,3 +1,7 @@
+## 2026-10-18 -- mxcli v0.27.0 @ 80b1b8d
+- +38 / -8 lines
+- Sections changed: [CREATE OR REPLACE NAVIGATION](#create-or-replace-navigation), [Description](#description-44), [Description](#description-74), [LOCALIZED / NOT LOCALIZED (DateTime only)](#localized--not-localized-datetime-only), [Navigation](#navigation-1), [Parameters](#parameters-47), [Repairing the model (`mxcli fix`)](#repairing-the-model-mxcli-fix), [mxcli Parser Errors](#mxcli-parser-errors)
+
 ## 2026-10-16 -- mxcli v0.27.0 @ 3d3bb3e
 - +119 / -5 lines
 - Sections changed: Exit 1 when anything matches (0 when nothing does), Refuse the change if a placeholder is left anywhere in the project's text, [Blog](#blog), [Release: mxcli v0.27.0](#release-mxcli-v0270), [Examples](#examples-57), [Failing on a match](#failing-on-a-match), [Flags](#flags-3), [Level 2: Syntax + reference validation](#level-2-syntax--reference-validation) (+10 more)
