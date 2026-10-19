@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.27.0 @ 80b1b8d
-Generated: 2026-10-18T06:53:57Z
+Version:   mxcli v0.27.0 @ cbc51de
+Generated: 2026-10-19T07:13:36Z
 
 ---
 
@@ -13992,6 +13992,7 @@ A user task pauses the workflow until a user completes it. Each outcome resumes 
 USER TASK <name> '<caption>'
   [PAGE <Module>.<Page>]
   [TARGETING MICROFLOW <Module>.<Microflow>]
+  [AUTO ASSIGN SINGLE USER]
   [ON CREATED MICROFLOW <Module>.<Microflow>]
   OUTCOMES '<outcome>' { <activities> } ['<outcome>' { <activities> }] ...;
 
@@ -14003,6 +14004,7 @@ USER TASK <name> '<caption>'
 | `<caption>` | Display label shown to users |
 | `PAGE` | The page opened when the user acts on the task |
 | `TARGETING MICROFLOW` | Microflow that determines which users see the task |
+| `AUTO ASSIGN SINGLE USER` | Studio Pro’s “Auto-assign when targeting results in one user”: when the targeting yields exactly one user, the task is assigned to them. Off when omitted, as Studio Pro creates a task. Without it, that user cannot complete the task from a microflow until it is assigned to them. Valid on multi-user tasks too |
 | `ON CREATED MICROFLOW` | Microflow run when the task is created — for example to assign it. It takes exactly `System.WorkflowUserTask` and the workflow’s context entity, in either order (else CE6683), and returns nothing (else CE5012) |
 | `OUTCOMES` | Named outcomes, each with a block of follow-up activities |
 
@@ -28996,6 +28998,8 @@ Appends new widgets as the **last children** of a named container. This is the o
 
 Supported on simple containers (container/DivContainer, data view, group box, tab page, scroll-container region). A layout grid (rows/columns) has no single child list — insert relative to a widget inside the target column instead. A tab container’s children are tab pages; see below.
 
+A pluggable widget’s child-widget slots have no name of their own, so they are addressed by the widget and the slot keyword `describe` prints: `insert into dataGrid1.controlbar { actionbutton … }` adds to a Data grid 2’s control bar (even after its last button was dropped), `replace dataGrid1.controlbar with { … }` swaps its content, and `drop dataGrid1.controlbar` empties it. The widget’s own property key (`dataGrid1.filtersPlaceholder`) works too. `insert into dataGrid1` on the widget itself is refused with the slot addresses it has.
+
 ### [Adding Tab Pages](#adding-tab-pages)
 
 A tab container holds tab pages, and only tab pages. `INSERT INTO` the tab
@@ -29343,9 +29347,44 @@ mxcli exec mine.mdl -p app.mpr
 
 Read the describe output before running it. A widget MDL cannot express is
 emitted as a comment ending `-- NOT re-executable`, naming exactly what a
-re-run would drop (`Atlas_Core.Atlas_SideBar`, for instance, loses both of its
-`Forms$SidebarToggleButton` widgets).
+re-run would drop.
 
+Atlas’s responsive sidebar toggle is the `sidebartoggle` widget, so a copied
+layout keeps its slide-in navigation on phones and tablets:
+
+```
+sidebartoggle sidebarToggle3 (
+  Tooltip: 'Toggle Menu', ButtonStyle: Primary,
+  Icon: 'Atlas_Core.Atlas_Filled.navigation-menu', Class: 'toggle-btn'
+)
+
+```
+
+It takes an action button’s `Caption`, `Tooltip`, `ButtonStyle` and `Icon`,
+and `RenderMode: Link` to render as a link; it has no `Action`.
+
+The phone and tablet layouts keep their header bar in a `layoutheader`, whose
+two sides are spelled like a scroll container’s regions:
+
+```
+layoutheader header1 {
+  region left { sidebartoggle sidebarToggle2 (RenderMode: Link, Icon: 'Atlas_Core.Atlas_Filled.navigation-menu') }
+  region right { placeholder HeaderRight }
+}
+
+```
+
+A native layout keeps three things beside its content tree: the placeholder on
+the header’s right, whether the bottom bar shows, and the sidebar.
+
+```
+create layout MyModule.Native_SideMenu (layouttype: 'Default', showbottombar: true) {
+  placeholder Main
+  region header { placeholder Header }
+  region sidebar { placeholder Placeholder1 }
+};
+
+```
 ## [Parameters](#parameters-41)
 
 [`module.Name`](#modulename-17)
@@ -29585,10 +29624,9 @@ tree *is* a page’s plus four element types.
 
 This is the tool for changing a layout you did not write. `CREATE OR REPLACE LAYOUT` rebuilds the document from your MDL, which means it can only reproduce
 what MDL can express; `ALTER LAYOUT` edits what is stored and leaves everything
-it was not asked about untouched — including widgets MDL has no syntax for.
-Measured on `Atlas_Core.Atlas_SideBar`, a describe → rename → run copy loses
-both of its `Forms$SidebarToggleButton` widgets. An `ALTER LAYOUT` against it
-does not.
+it was not asked about untouched — including widgets MDL has no syntax for,
+which a describe → rename → run copy drops (`describe` names each one in a
+`-- NOT re-executable` comment). An `ALTER LAYOUT` against it does not.
 
 Like `CREATE LAYOUT`, it refuses a Marketplace target and names the
 copy-then-repoint route in the error.
@@ -31081,6 +31119,13 @@ CREATE EXTERNAL ENTITIES FROM Module.Service ENTITIES (Customer, Order);
 CREATE OR MODIFY EXTERNAL ENTITIES FROM Module.Service;
 
 ```
+
+Each entity is named after its OData **entity type**, as Studio Pro names it: an
+entity type `Part` exposed as entity set `Parts` becomes `Module.Part`. The entity
+set is kept as the entity’s remote entity set. A re-import finds an entity by the
+service and entity set it maps first, so an entity that an earlier mxcli version
+named after the set (`Module.Parts`) is updated in place and keeps its name.
+
 ### [Complex types are flattened](#complex-types-are-flattened)
 
 The Mendix domain model has no complex types. A property typed as an OData
@@ -31114,6 +31159,23 @@ Two more consequences:
   an entity backed by an entity set. On a derived or contained type they are
   neither. `CE6630` fires in both directions here, so this follows the contract
   rather than a fixed answer.
+
+### [Navigation properties become associations](#navigation-properties-become-associations)
+
+Each navigation property whose target is also imported becomes an association.
+A navigation property with a `Partner` is one end of a bidirectional
+relationship, and Mendix does not accept its ends as separate associations
+(`CE6618` “Navigation ‘…’ is not available in the OData service”):
+
+| Navigation | Association |
+| --- | --- |
+| No `Partner` | One per navigation property — `Reference`, or `ReferenceSet` for a collection |
+| One-to-many pair (`Lines` / `ParentBuffer`) | One `Reference` from the single-valued end, naming both navigation properties |
+| Many-to-many or one-to-one pair | None. Mendix offers no such navigation; the import lists the pair as not imported |
+
+A re-import of a module that an earlier mxcli version imported the old way lists
+the associations that fail with `CE6618` as `drop association …;` lines. Run them,
+then run the import again.
 
 ## [Contract Browsing Statements](#contract-browsing-statements)
 

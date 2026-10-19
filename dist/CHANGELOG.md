@@ -1,3 +1,7 @@
+## 2026-10-19 -- mxcli v0.27.0 @ cbc51de
+- +68 / -6 lines
+- Sections changed: change the qualified name to your own module, then:, [CREATE EXTERNAL ENTITIES](#create-external-entities), [Description](#description-35), [Description](#description-38), [User Task](#user-task)
+
 ## 2026-10-18 -- mxcli v0.27.0 @ 80b1b8d
 - +38 / -8 lines
 - Sections changed: [CREATE OR REPLACE NAVIGATION](#create-or-replace-navigation), [Description](#description-44), [Description](#description-74), [LOCALIZED / NOT LOCALIZED (DateTime only)](#localized--not-localized-datetime-only), [Navigation](#navigation-1), [Parameters](#parameters-47), [Repairing the model (`mxcli fix`)](#repairing-the-model-mxcli-fix), [mxcli Parser Errors](#mxcli-parser-errors)
