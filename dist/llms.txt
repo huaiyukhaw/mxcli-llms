@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.27.0 @ cbc51de | Generated: 2026-10-19T07:13:36Z
+Version: mxcli v0.27.0 @ 3b24e5a | Generated: 2026-10-21T06:55:58Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -265,7 +265,9 @@ may have changed. A project keeps them in step with…
 - [UPDATE SECURITY](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/security/update-security.md): Bring entity access rules back into sync with their domain model — the headless
 equivalent of Studio Pro’s Update security button…
 - [Navigation Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/index.md): Statements for configuring application navigation profiles, home pages, login pages, and menu structures.
-- [ALTER NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/alter-navigation.md)
+- [CREATE NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/create-navigation.md)
+- [ALTER NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/alter-navigation.md): To change one menu item, or to clear a page clause, edit the stored profile
+instead of restating it. The items are addressed by…
 - [LIST NAVIGATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/list-navigation.md)
 - [CREATE MENU](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/navigation/menu.md)
 - [Workflow Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/workflow/index.md): Statements for creating, inspecting, and dropping workflows.

@@ -1,1 +1,1 @@
-# [ALTER NAVIGATION](#alter-navigation)
+# [ALTER NAVIGATION](#alter-navigation-1)

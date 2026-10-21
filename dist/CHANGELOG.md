@@ -1,3 +1,7 @@
+## 2026-10-21 -- mxcli v0.27.0 @ 3b24e5a
+- +577 / -237 lines
+- Sections changed: Run all tests in a directory, Run all tests in a directory, including its subfolders, Run all tests in a directory, including its subfolders (folders starting, Run markdown test files, Run the control on its own: the folder you name is always read, [ALTER NAVIGATION](#alter-navigation), [ALTER NAVIGATION](#alter-navigation-1), [CREATE NAVIGATION](#create-navigation) (+225 more)
+
 ## 2026-10-19 -- mxcli v0.27.0 @ cbc51de
 - +68 / -6 lines
 - Sections changed: change the qualified name to your own module, then:, [CREATE EXTERNAL ENTITIES](#create-external-entities), [Description](#description-35), [Description](#description-38), [User Task](#user-task)
