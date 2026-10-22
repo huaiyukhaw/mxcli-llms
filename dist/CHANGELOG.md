@@ -1,3 +1,7 @@
+## 2026-10-22 -- mxcli v0.27.0 @ 29dceb2
+- +269 / -9 lines
+- Sections changed: Exit 1 when anything matches (0 when nothing does), Leave out Marketplace modules, [Annotations](#annotations-1), [Automate: CI/CD and scripting](#automate-cicd-and-scripting), [Bundled Starlark Rules](#bundled-starlark-rules), [Call Workflow](#call-workflow), [Convention Rules](#convention-rules), [Data Widgets](#data-widgets) (+23 more)
+
 ## 2026-10-21 -- mxcli v0.27.0 @ 3b24e5a
 - +577 / -237 lines
 - Sections changed: Run all tests in a directory, Run all tests in a directory, including its subfolders, Run all tests in a directory, including its subfolders (folders starting, Run markdown test files, Run the control on its own: the folder you name is always read, [ALTER NAVIGATION](#alter-navigation), [ALTER NAVIGATION](#alter-navigation-1), [CREATE NAVIGATION](#create-navigation) (+225 more)
