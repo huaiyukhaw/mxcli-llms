@@ -1,3 +1,7 @@
+## 2026-10-23 -- mxcli v0.27.0 @ 3812b35
+- +155 / -55 lines
+- Sections changed: [Consuming a REST API](#consuming-a-rest-api), [Description](#description-33), [Description](#description-35), [Description](#description-38), [Editing themes (SCSS): rebuild, don’t clear caches](#editing-themes-scss-rebuild-dont-clear-caches), [Flags](#flags-3), [How to migrate a script](#how-to-migrate-a-script), [Pages render in the browser](#pages-render-in-the-browser) (+4 more)
+
 ## 2026-10-22 -- mxcli v0.27.0 @ 29dceb2
 - +269 / -9 lines
 - Sections changed: Exit 1 when anything matches (0 when nothing does), Leave out Marketplace modules, [Annotations](#annotations-1), [Automate: CI/CD and scripting](#automate-cicd-and-scripting), [Bundled Starlark Rules](#bundled-starlark-rules), [Call Workflow](#call-workflow), [Convention Rules](#convention-rules), [Data Widgets](#data-widgets) (+23 more)
