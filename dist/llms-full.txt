@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.27.0 @ 3812b35
-Generated: 2026-10-23T06:52:21Z
+Version:   mxcli v0.28.0 @ 12594f3
+Generated: 2026-10-24T06:48:21Z
 
 ---
 
@@ -2763,11 +2763,12 @@ which is why it can safely open every script.
 After executing your script, validate the entire project using the Mendix toolchain:
 
 ```
+mxcli setup mxbuild -p app.mpr   # once per Mendix version
 mxcli docker check -p app.mpr
 
 ```
 
-This runs Mendix’s own `mx check` tool inside a Docker container. It performs the same validation that Studio Pro does when you open a project, catching issues that mxcli’s parser cannot detect:
+This runs Mendix’s own `mx check` tool on a temporary copy of the project. It performs the same validation that Studio Pro does when you open a project, catching issues that mxcli’s parser cannot detect:
 
 - BSON serialization errors (malformed internal data)
 - Security configuration problems (missing access rules, CE0066 errors)
@@ -2775,22 +2776,14 @@ This runs Mendix’s own `mx check` tool inside a Docker container. It performs 
 - Missing required properties on widgets
 - Broken cross-references between documents
 
-The first time you run this, it will download the MxBuild toolchain for your project’s Mendix version. Subsequent runs reuse the cached download.
+`docker check` does not download MxBuild, and does not use Docker: the `docker` in its name groups it with `docker build`. It runs the `mx` of an MxBuild already on the machine, as a local process, and stops with `mx not found` when there is none. `mxcli setup mxbuild -p app.mpr` downloads the project’s version once and caches it under `~/.mxcli/mxbuild/`; `mxcli new` and `mxcli docker build` download it too.
 
-### [Without Docker](#without-docker)
+### [With a local Mendix installation](#with-a-local-mendix-installation)
 
-If you have `mx` installed locally (e.g., from a Mendix installation), you can run the check directly:
-
-```
-mxcli docker check -p app.mpr
+If you have `mx` installed locally (e.g., from a Mendix installation), the check finds it on PATH or in the Studio Pro installation, and `setup mxbuild` is not needed. To choose a specific one:
 
 ```
-
-Or use mxcli to auto-download and run it:
-
-```
-mxcli setup mxbuild -p app.mpr
-mxcli docker check -p app.mpr
+mxcli docker check -p app.mpr --mxbuild-path /path/to/mendix
 
 ```
 ## [The recommended workflow](#the-recommended-workflow)
@@ -7620,9 +7613,9 @@ mdl 1;
 ALTER ENTITY Sales.Order
   ADD EVENT HANDLER ON BEFORE DELETE CALL Sales.ACT_CheckCanDelete RAISE ERROR;
 
--- Remove a handler
+-- Remove a handler (CALL names which, when the event has several)
 ALTER ENTITY Sales.Order
-  DROP EVENT HANDLER ON BEFORE COMMIT;
+  DROP EVENT HANDLER ON BEFORE COMMIT CALL Sales.ACT_ValidateOrder;
 
 ```
 
@@ -8196,11 +8189,22 @@ ALTER ENTITY Sales.Order
 ALTER ENTITY Sales.Order
   ADD EVENT HANDLER ON AFTER CREATE CALL Sales.NotifyNewOrder();
 
--- Remove an event handler
+-- A second handler for the same event runs as well
 ALTER ENTITY Sales.Order
-  DROP EVENT HANDLER ON BEFORE COMMIT;
+  ADD EVENT HANDLER ON BEFORE COMMIT CALL Sales.CheckCredit($currentObject) RAISE ERROR;
+
+-- Remove an event handler: CALL names which one
+ALTER ENTITY Sales.Order
+  DROP EVENT HANDLER ON BEFORE COMMIT CALL Sales.CheckCredit;
 
 ```
+
+An entity may have several handlers for one event. A handler is identified by
+its moment, event **and** microflow: `ADD EVENT HANDLER` with another microflow
+adds a second one, and only the same microflow again is a duplicate (an error,
+or skipped with `IF NOT EXISTS`). `DROP EVENT HANDLER ON BEFORE COMMIT` without
+`CALL` works while the entity has one Before Commit handler; when it has several,
+it is refused and the error names them.
 
 | Moment | Returns | RAISE ERROR | Use case |
 | --- | --- | --- | --- |
@@ -8966,6 +8970,20 @@ SHOW PAGE Sales.OrderDetail (
 The older spellings `($Order = $Order)` and `(Order: $Order)` still parse but are
 deprecated (MDL-DEPR006, MDL-DEPR007); `mxcli fmt --upgrade` rewrites them.
 
+The action’s own settings go in a `with` list after the arguments:
+
+```
+SHOW PAGE Sales.Order_Edit (Order = $Order) WITH title = 'Edit order';
+SHOW PAGE Sales.Order_Overview WITH NumberOfPagesToClose = 1;  -- close the current page first
+
+```
+
+`title` overrides the page title. `NumberOfPagesToClose` is Studio Pro’s “Number of
+pages to close”: an Integer expression for how many pages to close before the page
+opens. Leaving it out closes none. It is a setting, not an argument —
+`(NumberOfPagesToClose: 1)` passes a page parameter of that name, which
+`check --references` refuses (Mendix build: CE1613).
+
 ### [CLOSE PAGE](#close-page)
 
 Closes the current page, or the given number of pages:
@@ -9015,6 +9033,19 @@ LOG INFO NODE 'OrderProcessing' 'Order created: ' + $Order/OrderNumber;
 LOG ERROR NODE 'PaymentGateway' 'Payment failed for order ' + $Order/OrderNumber;
 
 ```
+
+`WITH STACKTRACE` ticks **Include latest stack trace**, which is what an error
+handler usually wants. It comes after the template parameters, which also open
+with `WITH`:
+
+```
+LOG ERROR NODE 'PaymentGateway' 'Payment failed: {1}' WITH ({1} = $latestError/Message) WITH STACKTRACE;
+
+```
+
+Without it the box is unticked, which is Mendix’s default, so `DESCRIBE` prints
+`WITH STACKTRACE` only for a log that has it.
+
 ## [Email](#email)
 
 ### [SEND EMAIL](#send-email)
@@ -9106,7 +9137,7 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Call microflow | `$Var = CALL MICROFLOW Module.Name (Param = $val);` | Any type |
 | Call nanoflow | `$Var = CALL NANOFLOW Module.Name (Param = $val);` | Any type |
 | Call Java action | `$Var = CALL JAVA ACTION Module.Name (Param = val);` | Any type |
-| Show page | `SHOW PAGE Module.Page (Param = $val);` | – |
+| Show page | `SHOW PAGE Module.Page (Param = $val) [WITH title = '…', NumberOfPagesToClose = n];` | – |
 | Close page | `CLOSE PAGE [n];` | – |
 | Validation | `VALIDATION FEEDBACK $Var/Attr MESSAGE 'msg';` | – |
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'msg';` | – |
@@ -10900,6 +10931,7 @@ DATAGRID dgOrders (DataSource: DATABASE Sales.Order, PageSize: 20) {
 | `Pagination` | Pagination mode | `Pagination: virtualScrolling` |
 | `PagingPosition` | Position of paging controls | `PagingPosition: both` |
 | `ShowPagingButtons` | When to show paging buttons | `ShowPagingButtons: auto` |
+| `Selection` | Row selection: `None`, `Single` or `Multi` (also on a GALLERY). The widget key `itemSelection:` is the same property; two different values for it are refused (MDL-WIDGET50) | `Selection: Single` |
 
 **Any other Data grid 2 setting** can be set by its widget key — the name the
 widget’s own definition gives it (`DESCRIBE WIDGET TYPE datagrid` lists them with
@@ -11832,6 +11864,7 @@ ALTER PAGE Module.EditPage {
 | Property | Description | Example |
 | --- | --- | --- |
 | `Caption` | Button/link caption | `SET (Caption: 'Submit') ON btnSave` |
+| `Action` | On-click action of a button, link button, container, list view or image — any `CREATE PAGE` action expression | `SET (Action: CALL MICROFLOW M.ACT_Open) ON card1` |
 | `Label` | Input field label | `SET (Label: 'Full Name') ON txtName` |
 | `RenderMode` | Dynamic text rendering: `Text`, `Paragraph`, `H1`–`H6` | `SET (RenderMode: H2) ON txtTitle` |
 | `Placeholder` | Input hint text (text box, text area, date picker) | `SET (Placeholder: 'Enter your name') ON txtName` |
@@ -17872,9 +17905,10 @@ These rules run with `mxcli check` (and the LSP, for real-time diagnostics) rath
 | --- | --- | --- |
 | **MDL-WIDGET01** | `mxcli check` + LSP | Unknown property key on a pluggable widget. The property is not in the widget’s `.def.json`. Catches typos like `optionsSourcType` (missing `e`) before MxBuild does. Suggests the nearest known key. |
 | **MDL-WIDGET02** | `mxcli check --post-migration` | Legacy native widget found on a project that has a pluggable replacement available. Reports each occurrence with the qualified document name, widget instance name, and the recommended pluggable widget. |
-| **MDL-SET01** | `mxcli check` + LSP | Non-integer value for an Integer-typed project setting (`HttpPortNumber`, `ServerPortNumber`, `BcryptCost`, `DefaultTaskParallelism`, `WorkflowEngineParallelism`). These used to be skipped silently while the statement still reported success. |
+| **MDL-SET01** | `mxcli check` + LSP | Non-integer value for an Integer-typed project setting (`HttpPortNumber`, `ServerPortNumber`, `MaxJavaHeapSize`, `BcryptCost`, `DefaultTaskParallelism`, `WorkflowEngineParallelism`). These used to be skipped silently while the statement still reported success. |
 | **MDL-I18N01** | `mxcli check -p` | A script that changes `DefaultLanguageCode` leaves a tab page caption — stored in the project, or created by the script before the change — with no text in the new default. MxBuild reports CE4899 “Empty caption”. See [Error Messages](#mdl-i18n01-a-tab-page-caption-without-the-default-language-ce4899). |
 | **MDL-SET02** | `mxcli check` + LSP | Value other than `true` / `false` for a Boolean-typed project setting (`AllowUserMultipleSessions`). Anything else was silently stored as `false`. |
+| **MDL-SET04** | `mxcli check` + LSP | `ALTER SETTINGS` section or key that does not exist (`alter settings nosuchsection (…)`, a misspelled `ExtraJvmParams`), or a verb the section does not define. Reported with the message `exec` refuses it with, and the valid keys; `check` used to pass these and leave `exec` to stop halfway through the script. |
 
 Run `mxcli check --help` for usage. See [Error Messages → MDL-WIDGET01 / MDL-WIDGET02](#mdl-widget01-unknown-pluggable-widget-property) for cause-and-solution detail.
 
@@ -22128,7 +22162,7 @@ mxcli provides Docker integration for building, running, and validating Mendix a
 | --- | --- |
 | `mxcli docker build` | Build a Mendix application with mxbuild in Docker, including PAD patching |
 | `mxcli docker run` | Run a Mendix application in a Docker container |
-| `mxcli docker check` | Validate a project with `mx check` (auto-downloads mxbuild) |
+| `mxcli docker check` | Validate a project with `mx check`, run locally (does not download mxbuild or use Docker; see [Getting mx](#getting-mx)) |
 | `mxcli test` | Run test files (uses Docker for `mx create-project` and `mx check`) |
 | `mxcli oql` | Query a running Mendix runtime via M2EE admin API |
 
@@ -22168,6 +22202,9 @@ The mx binary location depends on the environment:
 ## [Quick Start](#quick-start-6)
 
 ```
+# Once per Mendix version: download MxBuild (docker check does not download it)
+mxcli setup mxbuild -p app.mpr
+
 # Validate a project
 mxcli docker check -p app.mpr
 
@@ -22285,8 +22322,8 @@ mxcli docker check -p app.mpr
 ```
 ## [What It Does](#what-it-does-3)
 
-1. **Resolves the `mx` binary** – Looks for `mx` in the mxbuild directory, PATH, or cached installations at `~/.mxcli/mxbuild/<version>/modeler/mx`
-2. **Runs `mx check`** – Executes the Mendix project checker against the `.mpr` file
+1. **Resolves the `mx` binary** – Takes the `mx` next to `--mxbuild-path`, else the first it finds on PATH, in a Studio Pro installation, or in the download cache at `~/.mxcli/mxbuild/<version>/modeler/mx`. It does not download one (see [Getting mx](#getting-mx))
+2. **Runs `mx check`** – Executes the Mendix project checker against a temporary copy of the `.mpr` file, as a local process; despite the `docker` in its name, it does not use Docker
 3. **Reports results** – Outputs errors, warnings, and deprecations to the console
 
 If the project has errors, the command exits with a non-zero status code.
@@ -22296,12 +22333,13 @@ cannot see: an MPR v2 `ContentsHash` index that disagrees with the `.mxunit`
 files (`mxcli fix hashes`), and git states that make Studio Pro 11.13 fail to
 open the project. See [Working Outside Studio Pro](#working-outside-studio-pro).
 
-## [Auto-Download](#auto-download)
+## [Getting mx](#getting-mx)
 
-If mxbuild is not installed locally, you can download it first:
+`docker check` does not download MxBuild. With no `mx` to find it stops with
+`mx not found` and names the command that sets one up:
 
 ```
-# Explicit setup (downloads matching mxbuild version)
+# Once per Mendix version: download MxBuild (including mx) for the project's version
 mxcli setup mxbuild -p app.mpr
 
 # Then check
@@ -22309,7 +22347,15 @@ mxcli docker check -p app.mpr
 
 ```
 
-The downloaded mxbuild (including the `mx` binary) is cached at `~/.mxcli/mxbuild/{version}/` for reuse.
+The downloaded mxbuild is cached at `~/.mxcli/mxbuild/{version}/` for reuse.
+`mxcli new` and `mxcli docker build` download it too. On macOS and Windows,
+`setup mxbuild` prefers Studio Pro’s bundled MxBuild, because the CDN only
+publishes Linux binaries.
+
+The `mx` found need not be the project’s version: an `mx` on PATH, or any
+cached version, is used when the project’s own is not there. `mx check` accepts
+another patch of the same minor; `mx update-widgets` does not and the check then
+runs without it (see `mxcli docker check --help`). Pass `--mxbuild-path ~/.mxcli/mxbuild/<version>` to choose one.
 
 ## [Example Output](#example-output-1)
 
@@ -28769,7 +28815,7 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 | `CHECKBOX` | Boolean toggle | `Label`, `Attribute` |
 | `RADIOBUTTONS` | Radio button group | `Label`, `Attribute` |
 | `DATEPICKER` | Date/time selector | `Label`, `Attribute` |
-| `COMBOBOX` | Dropdown selector | `Label`, `Attribute` |
+| `COMBOBOX` | Dropdown selector | `Label`, `Attribute`; association mode adds `DataSource`, `CaptionAttribute`; database mode `optionsSourceDatabaseDataSource`, `CaptionAttribute`, `optionsSourceDatabaseValueAttribute` |
 | `FILEMANAGER` | File upload/download, inside a data view on a `System.FileDocument` specialization | `Label`, `Type` (`Upload`, `Download`, `Both` default), `MaxFileSize` (MB, default 5), `AllowedExtensions`, `ShowFileInBrowser` |
 
 **Display Widgets**
@@ -29269,8 +29315,8 @@ ALTER SNIPPET module.Name {
 generic ALTER — `set` / `insert` / `replace` / `drop` against a target — which
 every document type shares; a page’s targets are widget names, DataGrid 2
 columns `grid column(Attr)` / `grid column('Caption')`, navigation list items
-`nav item(widget)` / `nav item('Text')` / `nav item@n`, or a layout region
-`container.top`.
+`nav item(widget)` / `nav item('Text')` / `nav item@n`, a legacy table cell
+`table1 cell(row, col)`, or a layout region `container.top`.
 
 The older spellings still run and warn with a deprecation code:
 
@@ -29334,6 +29380,15 @@ Supported standard properties: `Caption`, `Label`, `ButtonStyle`, `Class`, `Styl
 For page-level properties (like `Title`), omit the `ON` clause.
 
 For pluggable widget properties, use quoted property names (e.g., `'showLabel'`).
+
+A pluggable widget’s **attribute** property is bound the way `CREATE PAGE` binds it.
+A bare name (`set (eventDataAttribute: JsonData) on chart1`) belongs to the entity
+the property binds to: the widget’s own datasource when the property is linked to
+one, otherwise the enclosing data container. `Module.Entity.Attr` must be an
+attribute of that entity or of one of its generalizations. `$Param.Attr` reads an
+attribute of a page or snippet parameter instead. A name the bound entity lacks
+(CE1613), and another entity’s qualified attribute (CE7247), are refused by
+`check` and `exec` alike.
 
 ### [INSERT BEFORE / INSERT AFTER](#insert-before--insert-after)
 
@@ -29454,6 +29509,37 @@ alter page Shop.Faq {
   — since the stored schema has no default to fill in.
 - `INSERT BEFORE` / `AFTER` an item (adding a new group) and `REPLACE` of a
   whole item are not supported; use `drop` and `create or modify page`.
+
+### [Legacy Table Cell Operations](#legacy-table-cell-operations)
+
+A legacy (Studio Pro) table’s cell stores no name, only its position, so it is
+addressed as `table1 cell(row, column)`, 1-based from the top-left. `describe`
+lists the cells under the table’s line, with what each holds:
+
+```
+-- Forms$Table (table1)  -- NOT re-executable: …
+--   cell(1,1): txtName
+--   cell(1,2): (empty)
+
+```
+```
+mdl 1;
+alter page Shop.Customer_Edit {
+  insert into table1 cell(1,2) { textbox tbName (Attribute: Name) };
+  replace table1 cell(1,1) with { dynamictext txtLabel (Content: 'Name') };
+  drop table1 cell(2,1);
+};
+
+```
+
+- `insert into` appends to the cell; `replace` swaps its content; `drop`
+  empties it — the cell itself stays, the table’s grid needs it.
+- Widgets in a cell bind in the data context around the table, as anywhere else.
+- A position covered by a spanning cell is refused, naming the cell to address.
+- `INSERT BEFORE` / `AFTER` a cell is refused: rows and columns cannot be added.
+  A widget already in a cell is reachable by its own name.
+- MDL cannot create a table, so these statements work only on a page that
+  already has one.
 
 ### [DROP](#drop-2)
 
@@ -32342,6 +32428,15 @@ every mapping — there is no `CREATE XML SCHEMA` in MDL, so an XML schema is
 only ever something imported into the project by hand, and having none is the
 ordinary case. The same resolution applies to `WITH JSON STRUCTURE`.
 
+MDL cannot state the XML half of such a mapping — the schema element it is
+rooted at, or the schema path of each element — and mxcli does not read the
+XSD to derive them. So `CREATE OR MODIFY` of an existing XML-schema mapping
+that carries them is accepted only when the statement is the mapping’s own
+`DESCRIBE` output, which reports `Unchanged` and writes nothing; any other
+rewrite is refused rather than written without its root element (which
+mxbuild reports as CE0270 “No root element could be found in the schema”).
+Edit such a mapping in Studio Pro.
+
 [`CREATE | FIND | FIND OR CREATE`](#create--find--find-or-create)
 
 Object handling strategy for each entity block.
@@ -32541,6 +32636,15 @@ A project holding **no** XML schemas disables the check rather than refusing
 every mapping — there is no `CREATE XML SCHEMA` in MDL, so an XML schema is
 only ever something imported into the project by hand, and having none is the
 ordinary case. The same resolution applies to `WITH JSON STRUCTURE`.
+
+MDL cannot state the XML half of such a mapping — the schema element it is
+rooted at, or the schema path of each element — and mxcli does not read the
+XSD to derive them. So `CREATE OR MODIFY` of an existing XML-schema mapping
+that carries them is accepted only when the statement is the mapping’s own
+`DESCRIBE` output, which reports `Unchanged` and writes nothing; any other
+rewrite is refused rather than written without its root element (which
+mxbuild reports as CE0270 “No root element could be found in the schema”).
+Edit such a mapping in Studio Pro.
 
 [`NULL VALUES LeaveOutElement | SendAsNil`](#null-values-leaveoutelement--sendasnil)
 
@@ -34310,31 +34414,27 @@ Statements for viewing and modifying Mendix project settings. Settings are organ
 ```
 LIST SETTINGS
 
-DESCRIBE SETTINGS [ category ]
+DESCRIBE SETTINGS
+
+DESCRIBE SETTINGS CONFIGURATION 'name'
 
 ```
 ## [Description](#description-75)
 
-Displays project settings. `LIST SETTINGS` provides a compact overview of all settings across all categories. `DESCRIBE SETTINGS` outputs the full settings in round-trippable MDL syntax that can be used to recreate the same configuration.
-
-When `DESCRIBE SETTINGS` is called without a category, it outputs all settings. When a category is specified, only that category is shown.
+Displays project settings. `LIST SETTINGS` provides a compact overview, one row per section. `DESCRIBE SETTINGS` outputs every section as re-executable MDL — the `ALTER SETTINGS` and `CREATE OR MODIFY CONFIGURATION` statements that recreate it. `DESCRIBE SETTINGS CONFIGURATION 'name'` outputs one configuration only, and names the ones that exist when there is none by that name. There is no form that describes another single section.
 
 Both also show the **project ID** — the `$ID` of the `Projects$Project` root unit that every module belongs to. `LIST SETTINGS` prints it as a `Project` row; `DESCRIBE SETTINGS` prints it as a `-- Project ID: …` comment, so the output still executes. It is read-only: there is no statement that changes it. Business Events uses it as the app id, so two apps made from one model (a copied `.mpr`, a shared template) report the same project ID.
 
-The available settings categories are:
+`DESCRIBE SETTINGS` emits, in order:
 
-| Category | Contents |
+| Section | Emitted as |
 | --- | --- |
-| `MODEL` | Application-level settings: AfterStartupMicroflow, BeforeShutdownMicroflow, HashAlgorithm, JavaVersion, etc. |
-| `CONFIGURATION` | Runtime configurations: DatabaseType, DatabaseUrl, HttpPortNumber, etc. Each named configuration is listed separately. |
-| `CONSTANT` | Constant value overrides per configuration. Shows which constants have non-default values in each configuration. An override whose value is private — stored on the developer’s workstation rather than in the shared model — is reported as `(private)`; its value is not in the project and mxcli cannot show it. |
-| `LANGUAGE` | Localization settings: DefaultLanguageCode and available languages. |
-| `WORKFLOWS` | Workflow engine settings: UserEntity, DefaultTaskParallelism, etc. |
+| Runtime | `ALTER SETTINGS RUNTIME (…)` — AfterStartupMicroflow, HashAlgorithm, JavaVersion, etc.; only the properties this project’s Mendix version stores. |
+| Configurations | `CREATE OR MODIFY CONFIGURATION 'name' (…)` per configuration — DatabaseType, DatabaseUrl, HttpPortNumber, etc. (never `DatabasePassword`), then `ALTER SETTINGS CONSTANT … IN CONFIGURATION 'name'` per constant override. A private override — its value kept on the developer’s workstation, not in the shared model — is a comment, since its value is not in the project. |
+| Languages | `ALTER SETTINGS LANGUAGE ADD OR MODIFY 'code' (…)` per enabled language, then the default language. |
+| Workflows | `ALTER SETTINGS WORKFLOWS (…)` and one `ADD OR MODIFY GROUP` per workflow group. |
+| Web UI | `ALTER SETTINGS WEBUI (OptimizedClient: …)` — `Yes` (React client), `No` (classic client) or `MigrationMode`. |
 
-## [Parameters](#parameters-76)
-
-[**category** (DESCRIBE only)](#category-describe-only)
-One of `MODEL`, `CONFIGURATION`, `CONSTANT`, `LANGUAGE`, or `WORKFLOWS`. If omitted, all categories are shown.
 ## [Examples](#examples-87)
 
 ### [Show settings overview](#show-settings-overview)
@@ -34349,16 +34449,10 @@ LIST SETTINGS;
 DESCRIBE SETTINGS;
 
 ```
-### [Describe model settings only](#describe-model-settings-only)
+### [Describe one configuration](#describe-one-configuration)
 
 ```
-DESCRIBE SETTINGS MODEL;
-
-```
-### [Describe runtime configurations](#describe-runtime-configurations)
-
-```
-DESCRIBE SETTINGS CONFIGURATION;
+DESCRIBE SETTINGS CONFIGURATION 'Default';
 
 ```
 ### [List workflow groups](#list-workflow-groups)
@@ -34373,12 +34467,6 @@ descriptions. It reads the project settings directly, so no catalog refresh is
 needed. Groups are created with
 [`ALTER SETTINGS WORKFLOWS ... GROUP`](#alter-settings-1).
 
-### [Describe workflow settings](#describe-workflow-settings)
-
-```
-DESCRIBE SETTINGS WORKFLOWS;
-
-```
 ## [See Also](#see-also-113)
 
 [ALTER SETTINGS](#alter-settings-1), [LIST CONSTANT VALUES](#list-constants)
@@ -34410,6 +34498,8 @@ ALTER SETTINGS WORKFLOWS ADD [OR MODIFY] GROUP 'name' [( Description: 'text' )]
 ALTER SETTINGS WORKFLOWS MODIFY GROUP 'name' ( Description: 'text' )
 ALTER SETTINGS WORKFLOWS DROP GROUP 'name'
 
+ALTER SETTINGS WEBUI ( OptimizedClient: 'Yes' | 'No' | 'MigrationMode' )
+
 ```
 ## [Description](#description-76)
 
@@ -34417,7 +34507,7 @@ Modifies project settings by category. Each category has its own syntax and avai
 
 **MODEL** settings control application-level behavior such as the after-startup microflow, hashing algorithm, and Java version.
 
-**CONFIGURATION** settings control named runtime configurations. Each project can have multiple configurations (e.g., `default`, `staging`, `production`). Settings include database type, database URL, HTTP port number, and other runtime parameters. The configuration name must be enclosed in single quotes.
+**CONFIGURATION** settings control named runtime configurations. Each project can have multiple configurations (e.g., `default`, `staging`, `production`). The keys are `DatabaseType`, `DatabaseUrl`, `DatabaseName`, `DatabaseUserName`, `DatabasePassword`, `HttpPortNumber`, `ServerPortNumber`, `ApplicationRootUrl`, `ExtraJvmParameters` (Studio Pro’s Server ▸ Extra JVM parameters) and `MaxJavaHeapSize` (Server ▸ Java heap ▸ Maximum size, in MB; `0` is Studio Pro’s “Default”). The configuration name must be enclosed in single quotes.
 
 **CONSTANT** settings override the default value of a project constant within a specific runtime configuration. The constant is named as MDL names a constant everywhere, `@Module.Name`; the configuration name is enclosed in single quotes. The older quoted constant name (`CONSTANT 'Module.Name'`) still parses and warns `MDL-DEPR085`; `mxcli fmt --upgrade` rewrites it.
 
@@ -34429,7 +34519,16 @@ used for workflow tasks and default task parallelism, and the **workflow
 groups** — the named buckets under App Settings ▸ Workflows ▸ Groups that a user
 task’s group targeting selects from. Groups need Mendix **11.2** or later.
 
-## [Parameters](#parameters-77)
+**WEBUI** settings choose the client the app runs on: `OptimizedClient: 'Yes'` is
+the React client, `'No'` the classic (Dojo) client, `'MigrationMode'` Mendix’s
+mixed mode. The value is matched case-insensitively; anything else is rejected by
+`mxcli check` (MDL-SET03) and by the executor.
+
+A section or key that does not exist is rejected by `mxcli check` (MDL-SET04) with
+the message the executor gives, so a script that cannot run does not pass the
+check.
+
+## [Parameters](#parameters-76)
 
 [**key**](#key)
 The setting name to modify. Available keys depend on the category.
@@ -34465,6 +34564,18 @@ ALTER SETTINGS CONFIGURATION 'default' ( DatabaseType: 'POSTGRESQL' );
 ALTER SETTINGS CONFIGURATION 'production' ( DatabaseUrl: 'jdbc:postgresql://dbhost:5432/myapp' );
 
 ```
+### [Pass extra JVM parameters](#pass-extra-jvm-parameters)
+
+```
+ALTER SETTINGS CONFIGURATION 'default' ( ExtraJvmParameters: '-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=8888' );
+
+```
+
+The value is stored as written and is what Studio Pro passes to the JVM when it
+runs the app. `mxcli run --local` and `mxcli test --local` pass it too, after
+`-Xmx<n>m` for a non-zero `MaxJavaHeapSize`, and print which options they pass
+(without `-D` values).
+
 ### [Override a constant in a configuration](#override-a-constant-in-a-configuration)
 
 ```
@@ -34563,6 +34674,17 @@ List the groups with [`LIST WORKFLOW GROUPS`](#list--describe-settings).
 ALTER SETTINGS RUNTIME ( JavaVersion: '17' );
 
 ```
+### [Switch to the classic web client](#switch-to-the-classic-web-client)
+
+```
+ALTER SETTINGS WEBUI ( OptimizedClient: 'No' );
+
+```
+
+Stored as `UseOptimizedClient` on the Web UI settings part (Mendix 9.10 and
+later). `DESCRIBE SETTINGS` emits the statement, and `LIST SETTINGS` shows the
+value as `OptimizedClient`.
+
 ### [Remove a constant override from a configuration](#remove-a-constant-override-from-a-configuration)
 
 ```
@@ -34620,7 +34742,7 @@ CREATE MODULE module_name
 
 Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with default settings and an empty domain model.
 
-## [Parameters](#parameters-78)
+## [Parameters](#parameters-77)
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
@@ -34659,7 +34781,7 @@ Creates a folder within a module for organizing documents such as pages, microfl
 
 Note: Folders can also be created implicitly by specifying a `FOLDER` clause when creating a microflow or a `Folder` property when creating a page.
 
-## [Parameters](#parameters-79)
+## [Parameters](#parameters-78)
 
 [**module\_name**](#module_name-1)
 The name of the module in which to create the folder.
@@ -34737,7 +34859,7 @@ Removes an empty folder from a module. The folder must contain no documents (pag
 
 Nested folder paths use the `/` separator. Only the leaf folder is deleted; parent folders are not affected.
 
-## [Parameters](#parameters-80)
+## [Parameters](#parameters-79)
 
 [**folder\_path**](#folder_path-1)
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
@@ -34801,7 +34923,7 @@ A `FOLDER` clause on `CREATE OR MODIFY` moves an existing document as well, so a
 script that already creates a document does not need a separate `MOVE` to place
 it.
 
-## [Parameters](#parameters-81)
+## [Parameters](#parameters-80)
 
 [**document\_type**](#document_type)
 The type of document to move:
@@ -34932,7 +35054,7 @@ The source folder is identified using the standard qualified name syntax: `Modul
 
 Target folders are created automatically if they don’t exist.
 
-## [Parameters](#parameters-82)
+## [Parameters](#parameters-81)
 
 [**qualified\_name**](#qualified_name-9)
 The source folder in `Module.FolderName` format. Use double quotes for paths with `/` or special characters.
@@ -35018,7 +35140,7 @@ document. These are the same dependencies shown in Studio Pro under
 
 Multiple actions can be chained in a single `ALTER MODULE` statement.
 
-## [Parameters](#parameters-83)
+## [Parameters](#parameters-82)
 
 [**module\_name**](#module_name-5)
 The name of the module to modify.
@@ -35126,7 +35248,7 @@ project, optionally filtered to a single module. `DESCRIBE JAR DEPENDENCY`
 outputs the full definition of a single dependency as a re-executable
 `ALTER MODULE … ADD JAR DEPENDENCY` statement.
 
-## [Parameters](#parameters-84)
+## [Parameters](#parameters-83)
 
 [**IN module**](#in-module-2)
 Filters the listing to a single module.
@@ -35215,7 +35337,7 @@ SET variable = value
 
 Sets a session variable that controls REPL behavior. Session variables persist for the duration of the session and are reset when the REPL exits. Variable names are case-insensitive.
 
-## [Parameters](#parameters-85)
+## [Parameters](#parameters-84)
 
 [**variable**](#variable)
 The name of the session variable to set.
@@ -35265,7 +35387,7 @@ STATUS
 
 Displays the current session status including the connection state, the open project path, the Mendix version of the project, the MPR format version, and the values of any session variables. This is useful for confirming which project is loaded and verifying session configuration.
 
-## [Parameters](#parameters-86)
+## [Parameters](#parameters-85)
 
 This statement takes no parameters.
 
@@ -40342,7 +40464,7 @@ Administration updated 4.3.2 → 4.5.0
 
 - **Element identity.** The runtime keys entities and their attributes on the model’s `GUID`, so a module whose documents are replaced without carrying the old GUIDs is a *different* module to the database and its tables are dropped on the next deploy. Studio Pro transplants them; so does this.
 - **Access.** A user role’s grant of a module role lives in the project’s security document, not the module, so removing the module takes the grants with it and putting it back does not return them.
-- **Everything else the package ships.** A module is not only its model: the `.mpk` carries widget binaries under `widgets/`, styling and design-property declarations under `themesource/`, and whatever else it needs. All of it is replaced — only `project.mpr` and `package.xml` are manifest rather than payload. DataWidgets 3.11.3 replaces 49 such files, and skipping them leaves the app running old widget code and reporting `CE6083` for design properties the module itself declares.
+- **Everything else the package ships.** A module is not only its model: the `.mpk` carries widget binaries under `widgets/`, styling and design-property declarations under `themesource/`, and whatever else it needs. All of it is replaced: every file the package’s `package.xml` lists under `<files>`, which is exactly what `mx module-import` installs. What it does not list is the package’s own metadata — `License.txt`, `manifest.json`, the `READMEOSS` report, `Mendix EULA.docx` — and is left out, named on one line of the output. DataWidgets 3.11.3 replaces 49 such files, and skipping them leaves the app running old widget code and reporting `CE6083` for design properties the module itself declares.
 
 It does not use `mx module-import`, which would rewrite an MPR v2 project as v1 and refuses theme modules. Units are copied with mxcli’s own writer, so the project keeps its format.
 
@@ -40460,6 +40582,24 @@ Note that `--force` still builds the baseline. It is not wasted work — under
 `--force` the command prints the locally changed elements it is about to
 replace, and that list is the whole point of the check. Use `--no-baseline` when
 you genuinely want to skip it.
+
+### [Where references are built: the 260-character limit](#where-references-are-built-the-260-character-limit)
+
+`mx` refuses to write any file whose path is 260 characters or longer — on every
+platform, not only Windows: the check is in `mx` itself. A reference project holds
+the blank template plus the imported package, and their deepest files are bundled
+`node_modules` trees: 181 characters for the 11.12.1 blank app, about 202 for
+NanoflowCommons 7.x. That leaves under 60 characters for the directory they are
+built in, and the default Windows `%TEMP%` (`C:\Users\<user>\AppData\Local\Temp`)
+used most of it, so `diff` and `update` failed with *“The specified file name or
+path is too long”*.
+
+References are therefore built under the shortest directory the user owns:
+`%USERPROFILE%\.mxcli\t` on Windows, `/tmp` on Linux and macOS, or `TMP` /
+`TMPDIR` when that is shorter still. It is never a folder at a drive root such as
+`C:\mxt`, which every local account may modify; point `TMP` there yourself if you
+accept that. If a package is deep enough to hit the limit anyway, the error names
+the directory, its length, and what is left for the package.
 
 ## [Repairing the model (`mxcli fix`)](#repairing-the-model-mxcli-fix)
 
@@ -40774,6 +40914,7 @@ CREATE PUBLISHED ODATA SERVICE MyModule.CustomerAPI (
 | Close page | `CLOSE PAGE [n];` | `n` pages, default 1 |
 | Validation | `VALIDATION FEEDBACK $Entity/Attribute MESSAGE 'message';` | Requires attribute path + MESSAGE |
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'message';` |  |
+| Log with stack trace | `LOG ERROR 'message' [WITH ({1} = $v)] WITH STACKTRACE;` | “Include latest stack trace” |
 | Position | `@position(x, y)` | Canvas position (before activity) |
 | Start event | `@start(x, y)` | Canvas position of the start, on the **first** statement. Omit it and the start is placed one spacing unit left of the first activity and MOVES with it on a rewrite; a start that is not at that derived spot is treated as hand-placed, survives a rewrite, and is emitted by DESCRIBE (#951) |
 | Caption | `@caption 'text'` | Custom caption (before activity) |
@@ -41003,7 +41144,9 @@ MDL uses explicit property declarations for pages:
 | `Draggable` | `true`, `false` | `true` | `Draggable: false` |
 | `Hidable` | `yes`, `hidden`, `no` | `yes` | `Hidable: no` |
 | `ColumnWidth` | `autoFill`, `autoFit`, `manual` | `autoFill` | `ColumnWidth: manual` |
-| `Size` | integer (px) | `1` | `Size: 200` |
+| `Size` | integer — a relative weight, not px | `1` | `Size: 2` — under `ColumnWidth: manual` only, rendered `2fr` against `1fr` per autoFill column |
+| `minWidth` | `auto`, `minContent`, `manual` | `auto` | `minWidth: manual` — under `ColumnWidth: autoFit` only |
+| `minWidthLimit` | integer (px) | `100` | `minWidthLimit: 220` — the minimum in pixels, under `ColumnWidth: autoFit, minWidth: manual` |
 | `Visible` | expression | `true` | `Visible: $showColumn` — evaluated once for the grid: a page variable or parameter, never `$currentObject` (MDL-WIDGET43, CE0117) |
 | `DynamicCellClass` | expression | (empty) | `DynamicCellClass: if $currentObject/Stock < 10 then 'text-danger' else ''` |
 | `Tooltip` | text string | (empty) | `Tooltip: 'Price in USD'` |
@@ -41036,6 +41179,7 @@ CREATE PAGE MyModule.Customer_Edit
 
 - Layout: `LAYOUTGRID`, `ROW`, `COLUMN`, `CONTAINER`, `CUSTOMCONTAINER`
 - Input: `TEXTBOX`, `TEXTAREA`, `CHECKBOX`, `RADIOBUTTONS`, `DATEPICKER`, `COMBOBOX`
+  - `COMBOBOX` modes: enumeration `(Attribute: EnumAttr)`; association `(Attribute: Assoc, DataSource: DATABASE Mod.Target, CaptionAttribute: Name)`; database `(optionsSourceDatabaseDataSource: <source>, Attribute: TargetAttr, CaptionAttribute: Name, optionsSourceDatabaseValueAttribute: ValueAttr)` — the datasource’s key selects database mode, the generic `DataSource:` association mode
 - Display: `DYNAMICTEXT`, `DATAGRID`, `GALLERY`, `LISTVIEW`, `IMAGE`, `STATICIMAGE`, `DYNAMICIMAGE`
 - Actions: `ACTIONBUTTON`, `LINKBUTTON`, `NAVIGATIONLIST`
 - Structure: `DATAVIEW`, `HEADER`, `FOOTER`, `CONTROLBAR`, `SNIPPETCALL`
@@ -42177,6 +42321,44 @@ retrieve $u from System.User where [id = $task/System.owner] first;
 retrieve $u from System.User where [id = $task/System.changedBy] first;
 
 ```
+
+That constraint reads the member off `$task`, so it builds only when `$task`’s entity stores
+it — `owner: AutoOwner` / `changedBy: AutoChangedBy` on the root of its generalization chain
+(a `System.FileDocument` specialization stores both). On an entity that does not, mxbuild
+rejects it with CE0161 “Error(s) in XPath constraint.” (measured on 11.12.5, ako/mxcli#1306),
+and `check -p` and `exec` refuse it, naming the `alter entity` that stores the member.
+
+### [MDL-CHANGE01: Setting `System.owner` / `System.changedBy` in a create or change](#mdl-change01-setting-systemowner--systemchangedby-in-a-create-or-change)
+
+```
+member "System.owner" on M.Entity: System.owner is kept by the runtime, not set by a
+microflow — a create or change object cannot set it, and mxbuild rejects the member with
+CE1050 "Unknown association 'System.owner'." (whether or not the entity stores it) [MDL-CHANGE01]
+
+```
+
+**Cause:** The owner and last editor of an object are system members, not associations a
+project models. Written as a create or change object member, `System.owner` and
+`System.changedBy` are CE1050 for every entity — one that stores its owner, one that does not,
+a `System.FileDocument` specialization — in a microflow and a nanoflow alike (measured on
+11.12.5, mendixlabs/mxcli#1612). `check` needs no project to know it; `check` and `exec` both
+refuse it. A list operation is different: `find $l by System.owner = $u` (and `filter`, and
+`System.changedBy`) builds when the list’s entity stores the member — on one that does not it
+is CE0091 “No member selected.”, which `check -p` and `exec` report with the `alter entity`
+that stores it (ako/mxcli#1629).
+
+**Solution:** To record a user on an object — for example to own seeded data — model the
+association and set that:
+
+```
+create association M.Entity_User from M.Entity to System.User;
+
+$S = create M.Entity (Name = 'x', M.Entity_User = $User);
+
+```
+
+Constrain on `M.Entity_User` where you would have used `System.owner`.
+
 ### [MDL-RETRIEVE03: `change` over a list retrieve](#mdl-retrieve03-change-over-a-list-retrieve)
 
 ```
@@ -42643,9 +42825,62 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 | --- | --- |
+| October 23, 2026 | [Release: mxcli v0.28.0](#release-mxcli-v0280) |
 | October 15, 2026 | [Release: mxcli v0.27.0](#release-mxcli-v0270) |
 | October 11, 2026 | [Release: mxcli v0.26.0](#release-mxcli-v0260) |
 | April 23, 2026 | [Introducing mxcli](#introducing-mxcli) |
+
+# [Release: mxcli v0.28.0](#release-mxcli-v0280)
+
+*October 23, 2026*
+
+v0.28.0 is about **changing one thing without restating the rest**. You can now edit a menu item, a REST operation or a single widget in place, and a flow can take a reworded note or decision caption without being rebuilt.
+
+## [What’s new](#whats-new)
+
+**Edit menus in place.** Adding one menu item used to mean restating the whole menu. Now:
+
+```
+alter navigation Responsive {
+  set (Caption: 'People') on 'Admin' > 'Users';
+  drop 'Old';
+};
+
+```
+
+Items are addressed by their caption path, and mxcli never guesses. An address that matches nothing or several items is refused, and the message lists the candidates. `alter menu` does the same for menu documents. `alter consumed rest service` adds, changes and removes operations without restating the service.
+
+**ALTER PAGE reaches every widget.** You can now address legacy table cells by position (`table1 cell(1,2)`), Accordion groups and other pluggable widget items (`acc1 item@2`, `acc1 item@1.headercontent`), and named slots such as `dataGrid1.controlbar`. Rewriting a page, snippet or layout also no longer deletes the widgets MDL can’t author.
+
+**Flows change in place.** Under `mdl 1`, `create or modify` now splices a reworded note, a changed decision caption, or a change to an activity with a custom error handler, where it used to refuse them as a rebuild.
+
+**Protected add-on modules.** `check -p --references` now catches the Hidden-element references that mxbuild refuses (CE1406, CE5400). Entities, attributes, associations and enumerations take `export level api|hidden`.
+
+**Marketplace modules out.** `mxcli marketplace package MyModule` exports a module as a `.mpk`. `marketplace install` now runs the widget and design-property repairs itself.
+
+**The local dev loop.** `run --local` passes your configuration’s JVM options and starts with scheduled events running. `--listen-addr` makes the app reachable from another device, and `--db-admin-user` handles password-protected PostgreSQL. `--watch` also recovers from two `mxbuild --serve` faults that left pages returning 404 or a fixed theme still failing.
+
+**Security.** The deprecated v1 BSON driver is gone, so mxcli now runs on `mongo-driver/v2` alone, and a test stops it from coming back. Go moves to 1.27.3, and the npm advisories in the bundled widget and the VS Code extension are cleared.
+
+## [Upgrading](#upgrading)
+
+Download the `v0.28.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.28.0):
+
+```
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.28.0/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+```
+
+Then refresh a project’s skills, commands and the companion mod with `mxcli init --sync-skills`. It now keeps a bundled lint rule you edited, and doesn’t recreate one you renamed.
+
+Behaviour changes worth knowing:
+
+- `check -p` now applies the same Mendix version gates as `exec`, so a statement your project’s version can’t store fails at check time instead of halfway through `exec`.
+- `run --local` now runs scheduled events. Pass `--runtime-setting ScheduledEventExecution=NONE` to keep them off.
+
+Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHANGELOG.md)
 
 # [Release: mxcli v0.27.0](#release-mxcli-v0270)
 
@@ -42661,7 +42896,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new)
+## [What’s new](#whats-new-1)
 
 **All-or-nothing `exec`.** Before, a statement that failed at write time left every statement before it in place: a created module stayed, and a `drop` ahead of the failing `create` was not undone. Now mxcli backs up the `.mpr` and every unit file a run touches before the first write, and restores them if anything fails. The message reads “Nothing was written: statement N was rolled back”.
 
@@ -42677,7 +42912,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **Security.** The MongoDB BSON driver is upgraded for the October 2026 advisories, which release scanners flagged on the published binaries.
 
-## [Upgrading](#upgrading)
+## [Upgrading](#upgrading-1)
 
 Download the `v0.27.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.27.0):
 
@@ -42708,7 +42943,7 @@ All of mxcli and MDL on one page: the idea, getting started with the bootstrap p
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new-1)
+## [What’s new](#whats-new-2)
 
 **Documents that survive Studio Pro’s merge.** Mendix’s merge and diff engine compares an element’s property *names* between two revisions and throws when they differ. So when mxcli left out a key, or wrote one the project’s Mendix version doesn’t have, the document became unmergeable the first time Studio Pro saved it, even though `mx check`, the build and the runtime were all green. Every element mxcli writes now carries exactly the property set Studio Pro writes for that version. The set comes from a table measured with `mx convert` across Mendix 10.24, 11.6 and 11.12–11.15. For a project an older mxcli already wrote to, run:
 
@@ -42728,7 +42963,7 @@ mxcli fix property-sets -p app.mpr
 
 **The dev loop.** `mxcli run --local --detach` runs the app as a background service, and `mxcli playwright check` gives a text verdict for a list of pages in one call. `run --local` and `test --local` also work on Windows without Developer Mode, including domain model changes under `--watch`.
 
-## [Upgrading](#upgrading-1)
+## [Upgrading](#upgrading-2)
 
 Download the `v0.26.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.26.0):
 

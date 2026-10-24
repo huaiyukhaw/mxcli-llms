@@ -1,3 +1,7 @@
+## 2026-10-24 -- mxcli v0.28.0 @ 12594f3
+- +310 / -75 lines
+- Sections changed: Explicit setup (downloads matching mxbuild version), Once per Mendix version: download MxBuild (docker check does not download it), Once per Mendix version: download MxBuild (including mx) for the project's version, Park those edits as re-executable MDL, then update over them, Then check, [Blog](#blog), [Release: mxcli v0.28.0](#release-mxcli-v0280), [ADD/DROP EVENT HANDLER](#adddrop-event-handler) (+44 more)
+
 ## 2026-10-23 -- mxcli v0.27.0 @ 3812b35
 - +155 / -55 lines
 - Sections changed: [Consuming a REST API](#consuming-a-rest-api), [Description](#description-33), [Description](#description-35), [Description](#description-38), [Editing themes (SCSS): rebuild, don’t clear caches](#editing-themes-scss-rebuild-dont-clear-caches), [Flags](#flags-3), [How to migrate a script](#how-to-migrate-a-script), [Pages render in the browser](#pages-render-in-the-browser) (+4 more)
