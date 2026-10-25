@@ -1,3 +1,7 @@
+## 2026-10-25 -- mxcli v0.28.0 @ ff2473f
+- +50 / -7 lines
+- Sections changed: [Behaviour changes to know about](#behaviour-changes-to-know-about), [Error Handling](#error-handling-2), [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [POST a Body Built Elsewhere](#post-a-body-built-elsewhere)
+
 ## 2026-10-24 -- mxcli v0.28.0 @ 12594f3
 - +310 / -75 lines
 - Sections changed: Explicit setup (downloads matching mxbuild version), Once per Mendix version: download MxBuild (docker check does not download it), Once per Mendix version: download MxBuild (including mx) for the project's version, Park those edits as re-executable MDL, then update over them, Then check, [Blog](#blog), [Release: mxcli v0.28.0](#release-mxcli-v0280), [ADD/DROP EVENT HANDLER](#adddrop-event-handler) (+44 more)
