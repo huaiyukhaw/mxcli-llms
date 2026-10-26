@@ -1,3 +1,7 @@
+## 2026-10-26 -- mxcli v0.28.0 @ 9eeb6e0
+- +51 / -7 lines
+- Sections changed: [Description](#description-22), [Description](#description-26), [Examples](#examples-34), [Feature Availability Matrix](#feature-availability-matrix), [Parameters](#parameters-29), [mxcli playwright check](#mxcli-playwright-check)
+
 ## 2026-10-25 -- mxcli v0.28.0 @ ff2473f
 - +50 / -7 lines
 - Sections changed: [Behaviour changes to know about](#behaviour-changes-to-know-about), [Error Handling](#error-handling-2), [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [POST a Body Built Elsewhere](#post-a-body-built-elsewhere)

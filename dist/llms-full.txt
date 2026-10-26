@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ ff2473f
-Generated: 2026-10-25T07:12:10Z
+Version:   mxcli v0.28.0 @ 9eeb6e0
+Generated: 2026-10-26T07:20:25Z
 
 ---
 
@@ -20034,10 +20034,28 @@ FAIL 1 of 2 page(s)
 The verdict line is the same one `mxcli run --local --page-check` prints; both use
 one probe, and every page of a call is loaded in one headless browser.
 
+A page is measured once it has **settled**: no request to the app open for half a
+second, no progress indicator, and its text unchanged. The requests are the part
+that matters. While a list view’s data source runs, the list view shows nothing
+that says so — no spinner, no “no items” placeholder — so a page caught then looks
+finished and simply empty (ako/mxcli#845). A page that has not settled within
+`--wait` (default 15s; a page that settles sooner is measured then) is reported as
+still loading and fails, naming what it was waiting for:
+
+```
+page /p/Order_Overview  title="Orders"  STILL LOADING  rows=0  text=37  console-errors=0
+  WAIT   not settled after 3.1s: still waiting for POST /xas/
+  FAIL   still loading when measured, so the verdict may describe a partly rendered page (raise --wait if it is only slow)
+
+```
+
+A page with a list view, data grid or gallery always reports `rows=`, `rows=0`
+included, so an empty list does not read the same as a page without one.
+
 | Exit status | Meaning |
 | --- | --- |
 | 0 | every page passed |
-| 1 | a page failed: HTTP error, sign-in form instead of the page (or a 401 from the runtime), error banner or error dialog, console error, failed same-origin request, or a failed `--assert-*` |
+| 1 | a page failed: still loading when measured, HTTP error, sign-in form instead of the page (or a 401 from the runtime), error banner or error dialog, console error, failed same-origin request, or a failed `--assert-*` |
 | 2 | the check could not run (no Node/Playwright, sign-in rejected, bad flag) |
 
 A warning banner or validation message is shown but does not fail the page.
@@ -27454,7 +27472,15 @@ DROP ENTITY module.name
 
 `DROP ENTITY` removes an entity from a module’s domain model. The entity and all of its attributes, validation rules, indexes, and access rules are deleted.
 
-Associations that reference the dropped entity are **not** automatically removed. Drop those separately with `DROP ASSOCIATION` before or after dropping the entity to avoid dangling references.
+Every association with the dropped entity at either end is removed with it — including a cross-module association declared in another module. The access rules of the entities at the other end are reconciled afterwards, in whichever module they live, so no rule is left naming an association that no longer exists (Mendix would reject that with CE1613):
+
+```
+Reconciled 1 access rule(s) in module Shop after dropping the entity
+Dropped entity: Crm.Contact
+
+```
+
+Microflows, pages and other documents that use the entity or one of those associations are not changed.
 
 Use `LIST IMPACT OF Module.EntityName` to check which microflows, pages, and associations reference the entity before dropping it.
 
@@ -27477,10 +27503,7 @@ mdl 1;
 -- Check what references this entity
 LIST IMPACT OF Sales.OldEntity;
 
--- Drop related association first
-DROP ASSOCIATION Sales.OldEntity_Customer;
-
--- Then drop the entity
+-- Drops the entity and its associations, and reconciles the access rules
 DROP ENTITY Sales.OldEntity;
 
 ```
@@ -27666,19 +27689,37 @@ A documentation comment (`/** ... */`) placed before the statement is preserved 
 ## [Parameters](#parameters-29)
 
 [**OR MODIFY**](#or-modify-2)
+
 Makes the statement idempotent. If the association already exists, its properties are updated. Without this clause, creating a duplicate association is an error.
+
 [**module.name**](#modulename-5)
+
 The qualified name of the association in the form `Module.AssociationName`. By convention, association names follow the pattern `Module.Child_Parent` or `Module.EntityA_EntityB`.
+
 [**FROM from\_module.from\_entity**](#from-from_modulefrom_entity)
+
 The entity on the “from” side of the relationship. This is the entity that owns the foreign key in the database. In a one-to-many relationship, this is typically the “one” (parent) side.
+
 [**TO to\_module.to\_entity**](#to-to_moduleto_entity)
+
 The entity on the “to” side of the relationship. In a one-to-many relationship, this is typically the “many” (child) side that holds the reference.
+
 [**TYPE**](#type)
+
 Either `Reference` (many-to-one) or `ReferenceSet` (many-to-many).
+
 [**OWNER**](#owner)
+
 Which side can modify the association. Defaults to `Default` if omitted.
+
+Between a persistent and a non-persistent entity, Mendix allows one shape only: `FROM` the non-persistent entity, with owner `Default`. A persistent `FROM` end or `OWNER Both` there fails the build with CE0001, so `mxcli check` and `exec` refuse it (MDL-ASSOC01). `ALTER ASSOCIATION … SET OWNER Both` is refused the same way.
+
+Under `OWNER Both` the association is a member of the TO entity too, so its access rules get an entry for it — in the TO entity’s module, for a cross-module association. `CREATE OR MODIFY` that moves the TO end, or changes the owner, reconciles the old and the new TO module’s rules.
+
 [**ON DELETE**](#on-delete)
+
 What happens to associated objects when a FROM-side object is deleted. If omitted, references are kept (the default Mendix behavior).
+
 ## [Examples](#examples-37)
 
 ### [Many-to-one: Order belongs to Customer](#many-to-one-order-belongs-to-customer)
@@ -27754,7 +27795,9 @@ DROP ASSOCIATION module.name
 
 `DROP ASSOCIATION` removes an association (relationship) between two entities from the domain model. The entities themselves are not affected – only the relationship is removed.
 
-After dropping an association, any microflows, pages, or access rules that traverse it will become invalid. Use `LIST IMPACT OF Module.AssociationName` to check references before dropping.
+The access rules that named the association are reconciled: the entry is removed from the FROM entity’s rules and, for an `OWNER Both` association, from the TO entity’s — which for a cross-module association are in another module. A message definition that still exposes the association blocks the drop, naming the member to remove first.
+
+Microflows and pages that traverse the association become invalid. Use `LIST IMPACT OF Module.AssociationName` to check references before dropping.
 
 ## [Parameters](#parameters-30)
 
@@ -41717,6 +41760,7 @@ body on Mendix 10 too, and Studio Pro could not open the project.
 | --- | --- | --- | --- |
 | Basic SELECT | `SELECT, FROM, WHERE` | Yes | Yes |
 | Aggregate functions | `COUNT, SUM, AVG, MIN, MAX, GROUP BY` | Yes | Yes |
+| String aggregate | `STRING_AGG(expr, 'separator')` | 10.24.22+ only | 11.2+ |
 | Subqueries | Inline subqueries in SELECT/WHERE | Yes | Yes |
 | JOIN types | `INNER/LEFT/RIGHT/FULL JOIN` | Yes | Yes |
 
