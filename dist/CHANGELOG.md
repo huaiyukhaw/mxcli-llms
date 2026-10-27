@@ -1,3 +1,7 @@
+## 2026-10-27 -- mxcli v0.28.0 @ 2be9331
+- +543 / -232 lines
+- Sections changed: [ALTER MICROFLOW / NANOFLOW](#alter-microflow--nanoflow), [Microflow Statements](#microflow-statements), [Annotations](#annotations-1), [Description](#description-30), [Description](#description-31), [Description](#description-32), [Description](#description-33), [Description](#description-34) (+232 more)
+
 ## 2026-10-26 -- mxcli v0.28.0 @ 9eeb6e0
 - +51 / -7 lines
 - Sections changed: [Description](#description-22), [Description](#description-26), [Examples](#examples-34), [Feature Availability Matrix](#feature-availability-matrix), [Parameters](#parameters-29), [mxcli playwright check](#mxcli-playwright-check)

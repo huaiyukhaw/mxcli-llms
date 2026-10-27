@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ 9eeb6e0
-Generated: 2026-10-26T07:20:25Z
+Version:   mxcli v0.28.0 @ 2be9331
+Generated: 2026-10-27T07:12:01Z
 
 ---
 
@@ -8751,6 +8751,45 @@ Attach a visual annotation note to the next activity:
 VALIDATION FEEDBACK $Customer/Email MESSAGE 'Email is required';
 
 ```
+
+A note is a node of its own, so one note can document several activities. Give it
+an `id:` at its first mention and refer to that id afterwards; without the id, two
+notes with the same text stay two notes:
+
+```
+@annotation(id: n1, text: 'Both of these touch the same record')
+COMMIT $Order;
+@annotation(id: n1)
+COMMIT $Invoice;
+
+```
+
+The id is scoped to the statement being written and is not stored in the model:
+`DESCRIBE` numbers shared notes afresh every time.
+
+### [Attaching a Note Already in the Flow](#attaching-a-note-already-in-the-flow)
+
+`ALTER MICROFLOW` (and `ALTER NANOFLOW`) inserts or replaces a fragment of a stored
+flow. The fragment cannot see the `id:` labels `DESCRIBE` prints, so it names a note
+that is already in the flow by its **text**, with `existing:`:
+
+```
+ALTER MICROFLOW Sales.ACT_ProcessOrder {
+  INSERT AFTER LOG NODE 'Sales' 'validated' BEGIN
+    @annotation(existing: 'Validates the order')
+    LOG INFO NODE 'Sales' 'discount applied';
+  END;
+};
+
+```
+
+The new activity is joined to the stored note, which keeps its identity, text and
+place on the canvas. The text must match exactly one note of the flow, as `DESCRIBE`
+prints it; when no note matches, or several do, the statement is refused and the
+message lists the flow’s notes. `existing:` never creates a note and takes no other
+parameter, and only an `ALTER` fragment accepts it — a `CREATE` states the whole
+flow and declares its notes.
+
 ### [Combining Annotations](#combining-annotations)
 
 Multiple annotations can be stacked before a single activity:
@@ -10909,6 +10948,39 @@ CONTAINER cCard (Class: 'card mx-spacing-top-large') {
 ### [CUSTOMCONTAINER](#customcontainer)
 
 Similar to `CONTAINER` but used for custom-styled containers.
+
+### [TABCONTAINER / TABPAGE](#tabcontainer--tabpage)
+
+A tab container holds tab pages; each tab page holds widgets.
+
+```
+CREATE PAGE MyModule.Task_Tabs (
+  Title: 'Tasks',
+  Layout: Atlas_Core.Atlas_Default,
+  Params: ($Panel: MyModule.Panel)
+) {
+  DATAVIEW dvPanel (DataSource: $Panel) {
+    TABCONTAINER tcMain {
+      TABPAGE tpOpen (Caption: 'Open', Badge: '{1}', BadgeParams: ({1} = OpenCount)) {
+        DYNAMICTEXT txtOpen (Content: 'Open tasks')
+      }
+      TABPAGE tpDone (Caption: 'Done') {
+        DYNAMICTEXT txtDone (Content: 'Done tasks')
+      }
+    }
+  }
+};
+
+```
+
+| Property (tab page) | Description | Example |
+| --- | --- | --- |
+| `Caption` | Tab caption, plain text (no parameters) | `Caption: 'Open'` |
+| `Badge` | Text shown beside the caption, a text template like a dynamic text’s `Content` | `Badge: '{1}'` |
+| `BadgeParams` | The badge template’s parameters, resolved against the enclosing data container | `BadgeParams: ({1} = OpenCount)` |
+| `Visible` | Visibility condition | `Visible: $Panel/ShowDone` |
+
+A tab page has no `Class`, `Style` or `CaptionParams`: Mendix stores none for it. A `BadgeParams` without a `Badge`, or a `Badge` that is not a quoted template, is refused (MDL-WIDGET51); `Badge` on any other widget is not stored, and `check` says so (MDL-WIDGET07).
 
 ## [Data Widgets](#data-widgets)
 
@@ -27940,7 +28012,7 @@ To make a private value shared (or the reverse), change it in Studio Pro.
 
 # [Microflow Statements](#microflow-statements)
 
-Statements for creating and dropping microflows, nanoflows, and Java actions.
+Statements for creating, altering and dropping microflows, nanoflows, and Java actions.
 
 Microflows are the primary mechanism for implementing business logic in Mendix applications. They execute on the server and have access to the full range of activities including database operations, integrations, and security-sensitive actions.
 
@@ -27950,6 +28022,7 @@ Nanoflows share the same syntax as microflows but execute on the client (browser
 | --- | --- |
 | [CREATE MICROFLOW](#create-microflow) | Create a microflow with activities and control flow |
 | [CREATE NANOFLOW](#create-nanoflow) | Create a client-side nanoflow |
+| [ALTER MICROFLOW / NANOFLOW](#alter-microflow--nanoflow) | Patch a stored flow in place: insert, replace or drop activities, or replace a loop’s body |
 | [CREATE JAVA ACTION](#create-java-action) | Create a Java action stub with inline code |
 | [DROP MICROFLOW / NANOFLOW](#drop-microflow--nanoflow) | Remove a microflow or nanoflow |
 
@@ -28402,9 +28475,145 @@ END;
 
 [CREATE MICROFLOW](#create-microflow), [DROP MICROFLOW](#drop-microflow--nanoflow), [GRANT EXECUTE ON NANOFLOW](/reference/security/grant.html)
 
-# [DROP MICROFLOW / NANOFLOW](#drop-microflow--nanoflow)
+# [ALTER MICROFLOW / NANOFLOW](#alter-microflow--nanoflow)
 
 ## [Synopsis](#synopsis-30)
+
+```
+mdl 1;
+ALTER MICROFLOW module.Name {
+  INSERT AFTER | BEFORE <target> BEGIN <statements> END;
+  REPLACE <target> WITH BEGIN <statements> END;
+  REPLACE BODY OF <loop> WITH BEGIN <statements> END;
+  DROP <target>;
+};
+
+ALTER NANOFLOW module.Name { … };
+
+```
+## [Description](#description-30)
+
+Patches a stored microflow or nanoflow in place: the operations are spliced
+into the stored graph rather than rebuilding it. Only the new activities, the
+flows rewired around them and the nodes moved to make room change; every other
+element keeps its element ID (`$ID`), position and curve, so Studio Pro shows
+the change and nothing else.
+
+A target addresses one stored activity by content, as
+`DESCRIBE MICROFLOW module.Name WITH HANDLES` prints it above each activity:
+`$Var` for the activity that outputs `$Var`, `'Caption'` for a decision or an
+activity with a custom caption, or a statement pattern in which `*` matches any
+run of tokens — followed by `@n` when several match. Every target is resolved
+against the flow as stored before any operation runs.
+
+A fragment is written exactly as the same statements are in `CREATE MICROFLOW`, between `BEGIN` and `END`.
+
+### [Inside a loop body](#inside-a-loop-body)
+
+Inside a loop body, plain activities are inserted, replaced and dropped the
+same way — the body’s first and last activity included. The new activities are
+laid out among the body’s nodes; when the body no longer fits, the loop box
+grows on its far side, and what is drawn past the loop moves along. The loop’s
+iterator is in scope.
+
+What would change the body’s *shape* — a decision, a nested loop, a `RETURN`,
+`BREAK` or `CONTINUE`, a `RAISE ERROR` or an activity with a custom error
+handler put in, changed or taken out — is refused there, and the refusal names
+`REPLACE BODY OF`.
+
+### [REPLACE BODY OF](#replace-body-of)
+
+`REPLACE BODY OF <loop>` keeps the stored loop itself — its element ID, its
+position, its iterator and list, the flows into and out of it and the notes on
+it — and replaces only what is inside it. The new body is laid out as `CREATE MICROFLOW` lays out a loop body; the loop box keeps its size when the new body
+fits it, and grows on its far side when it does not.
+
+`<loop>` is the loop’s handle: `loop $It in $Items`, or `while $N < 3` for a
+while loop, at any depth of nesting. The new body is scope-checked like any
+fragment: it may read the iterator, what it declares itself and what is
+declared before the loop, and it may not declare a variable the flow already
+has outside the loop.
+
+`REPLACE <loop handle> WITH BEGIN LOOP … END LOOP; END;` also works, and
+rebuilds the loop as well — its element ID and position included.
+
+### [Decisions](#decisions)
+
+`DROP` and `REPLACE` take a decision out whole when it has the shape `INSERT`
+produces: two paths of plain activities, or none, that rejoin at one merge.
+The flow into the decision is joined to the node after its merge (or to the
+replacing fragment), and the decision, the activities on its paths and the
+merge go; every other element keeps its element ID. A decision is addressed by
+its handle — its caption, `'$Order/Total > 100'`. Any other decision — a path
+that returns or raises an error, a decision or loop on a path, an activity
+with an error handler, a path from elsewhere joining it — is refused with the
+part of its shape that is out of reach.
+
+### [CREATE OR MODIFY](#create-or-modify-1)
+
+`CREATE OR MODIFY MICROFLOW` of a flow that exists derives the same operations
+from the difference between the script and the stored flow. A plain activity
+added, removed, reordered or changed inside a loop body is spliced; under
+`mdl 1;` a change the splice cannot make is refused with the operation that
+makes it — for a decision inside a loop body, `REPLACE BODY OF` that loop.
+Re-running the script that created a flow after another script spliced a
+decision into it takes that decision out again, when it has the shape above.
+
+## [Examples](#examples-42)
+
+Insert, replace and drop at top level:
+
+```
+mdl 1;
+ALTER MICROFLOW FeedbackModule.VAL_Feedback {
+  INSERT AFTER $IsValidEmail BEGIN LOG INFO NODE 'Feedback' 'Email checked'; END;
+  REPLACE COMMIT $Order WITH BEGIN COMMIT $Order WITH EVENTS; END;
+  DROP LOG DEBUG NODE 'Feedback' *;
+};
+
+```
+
+Add an activity inside a loop body:
+
+```
+mdl 1;
+ALTER MICROFLOW Shop.ACT_ProcessLines {
+  INSERT AFTER COMMIT $Line BEGIN LOG INFO NODE 'Shop' 'line saved'; END;
+};
+
+```
+
+Put a decision inside a loop body, keeping the loop:
+
+```
+mdl 1;
+ALTER MICROFLOW Shop.ACT_ProcessLines {
+  REPLACE BODY OF LOOP $Line IN $Lines WITH BEGIN
+    IF $Line/Quantity > 0 THEN
+      CHANGE $Line (Processed = true);
+    END IF;
+    COMMIT $Line;
+  END;
+};
+
+```
+
+Take out a decision another script put in:
+
+```
+mdl 1;
+ALTER MICROFLOW Shop.ACT_Order {
+  DROP '$Order/Total > 100';
+};
+
+```
+## [See Also](#see-also-67)
+
+[CREATE MICROFLOW](#create-microflow), [DESCRIBE MICROFLOW](/reference/query/describe-microflow.html)
+
+# [DROP MICROFLOW / NANOFLOW](#drop-microflow--nanoflow)
+
+## [Synopsis](#synopsis-31)
 
 ```
 mdl 1;
@@ -28413,7 +28622,7 @@ DROP MICROFLOW module.Name;
 DROP NANOFLOW module.Name;
 
 ```
-## [Description](#description-30)
+## [Description](#description-31)
 
 Removes a microflow or nanoflow from the project. The microflow or nanoflow must exist; otherwise an error is raised.
 
@@ -28423,7 +28632,7 @@ Dropping a microflow or nanoflow does not automatically update references to it 
 
 [`module.Name`](#modulename-10)
 The qualified name of the microflow or nanoflow to drop (`Module.MicroflowName` or `Module.NanoflowName`).
-## [Examples](#examples-42)
+## [Examples](#examples-43)
 
 Drop a microflow:
 
@@ -28450,24 +28659,25 @@ LIST IMPACT OF Sales.ACT_CreateOrder;
 DROP MICROFLOW Sales.ACT_CreateOrder;
 
 ```
-## [See Also](#see-also-67)
+## [See Also](#see-also-68)
 
 [CREATE MICROFLOW](#create-microflow), [CREATE NANOFLOW](#create-nanoflow), [LIST IMPACT](/reference/catalog/list-references-impact.html)
 
 # [CREATE JAVA ACTION](#create-java-action)
 
-## [Synopsis](#synopsis-31)
+## [Synopsis](#synopsis-32)
 
 ```
 CREATE [ OR MODIFY ] JAVA ACTION module.Name [ < T [, ...] > ] [ FOLDER 'folder_path' ] ( parameters )
     RETURNS type [ AS $return_name ]
     [ EXPOSED AS 'caption' IN 'category' ]
     AS $$ java_code $$
+    [ EXTRA CODE $$ helper_code $$ ]
 
 DROP JAVA ACTION module.Name;
 
 ```
-## [Description](#description-31)
+## [Description](#description-32)
 
 Creates a Java action with inline Java code. Java actions allow custom server-side logic written in Java to be called from microflows.
 
@@ -28494,6 +28704,25 @@ Pro shows when a modeler drags the action into a microflow, and what `DESCRIBE J
 On `CREATE OR MODIFY`, leaving either out keeps what is stored; an empty `/** */`
 clears a description. A new action gets no descriptions and the return value name
 `ReturnValueName`, as in Studio Pro.
+
+### [The Java Source File](#the-java-source-file)
+
+The statement writes `javasource/<module>/actions/<Name>.java` the way mxbuild
+generates it, byte for byte, so the next build leaves it unchanged. The action’s
+documentation – the `/** ... */` before `CREATE` – is the class javadoc above
+`public class`; a rewrite without one keeps the stored documentation, in the model
+and in the file. (Before ako/mxcli#1700 the file had no javadoc, so every rewrite
+removed the one a build had written and the next build put it back.)
+
+Studio Pro keeps three parts of the file when it regenerates it, and the statement
+states all three: the code between `BEGIN USER CODE` and `END USER CODE` is the
+`AS $$ ... $$` body; an `import` line in the body goes to the file’s import list;
+and `EXTRA CODE $$ ... $$` is the section between `BEGIN EXTRA CODE` and
+`END EXTRA CODE` – helper methods, constants and nested classes the body calls.
+On `CREATE OR MODIFY` an omitted `EXTRA CODE` keeps the stored section, as an
+omitted `EXPOSED AS` keeps the toolbox entry; `EXTRA CODE $$ $$` clears it.
+`DESCRIBE JAVA ACTION` prints the imports a developer added and the section, so
+executing its output on another project rebuilds the same file (ako/mxcli#1702).
 
 ### [Exposed Actions](#exposed-actions)
 
@@ -28526,10 +28755,12 @@ Optional. The return value’s name. Omitted, the stored name is kept (`ReturnVa
 [`EXPOSED AS 'caption' IN 'category'`](#exposed-as-caption-in-category)
 Optional. Makes the action visible in the toolbox with the given caption and category.
 [`AS $$ java_code $$`](#as--java_code-)
-The Java code body, enclosed in `$$` delimiters. **Mandatory** — the body cannot be omitted.
+The Java code body, enclosed in `$$` delimiters. **Mandatory** — the body cannot be omitted. An `import` line in it goes to the file’s import list.
+[`EXTRA CODE $$ helper_code $$`](#extra-code--helper_code-)
+Optional. The file’s EXTRA CODE section, beside `executeAction()`. Omitted, the stored section is kept; empty, it is cleared.
 [`OR MODIFY`](#or-modify-4)
 Makes the statement idempotent. If the Java action already exists, updates its parameters, return type, exposed-as settings, and body. Without this clause, creating a duplicate Java action is an error.
-## [Examples](#examples-43)
+## [Examples](#examples-44)
 
 Simple Java action returning a string:
 
@@ -28556,6 +28787,25 @@ CREATE JAVA ACTION MyModule.JA_ToUpper (
 ) RETURNS String AS $UpperText
 AS $$
     return Input.toUpperCase();
+$$;
+
+```
+
+Java action with a helper in the EXTRA CODE section, and the import it needs:
+
+```
+CREATE JAVA ACTION MyModule.JA_Twice (
+    N: Integer NOT NULL
+) RETURNS Integer
+AS $$
+    import java.util.Objects;
+
+    return twice(Objects.requireNonNull(N));
+$$
+EXTRA CODE $$
+private static long twice(long n) {
+	return n * 2L;
+}
 $$;
 
 ```
@@ -28642,13 +28892,13 @@ CREATE JAVA ACTION MyModule.JA_Placeholder (
 AS $$ return false; $$;
 
 ```
-## [See Also](#see-also-68)
+## [See Also](#see-also-69)
 
 [CREATE MICROFLOW](#create-microflow), [LIST JAVA ACTIONS](/reference/query/list-microflows.html)
 
 # [CREATE JAVASCRIPT ACTION](#create-javascript-action)
 
-## [Synopsis](#synopsis-32)
+## [Synopsis](#synopsis-33)
 
 ```
 CREATE [ OR MODIFY ] JAVASCRIPT ACTION module.Name [ FOLDER 'folder_path' ] ( parameters )
@@ -28660,7 +28910,7 @@ CREATE [ OR MODIFY ] JAVASCRIPT ACTION module.Name [ FOLDER 'folder_path' ] ( pa
 DROP JAVASCRIPT ACTION module.Name;
 
 ```
-## [Description](#description-32)
+## [Description](#description-33)
 
 Creates a JavaScript action with inline JavaScript code. JavaScript actions hold
 custom client-side logic and are callable from **nanoflows**.
@@ -28736,7 +28986,7 @@ becomes the body of an exported `async function`, so it typically returns a
 [`OR MODIFY`](#or-modify-5)
 Makes the statement idempotent — updates an existing action in place
 (UUID preserved) instead of erroring on a duplicate.
-## [Examples](#examples-44)
+## [Examples](#examples-45)
 
 Simple action (defaults to the Web platform):
 
@@ -28797,7 +29047,7 @@ Drop a JavaScript action (removes the unit and the `.js` source file):
 DROP JAVASCRIPT ACTION MyModule.JSA_IsOnline;
 
 ```
-## [See Also](#see-also-69)
+## [See Also](#see-also-70)
 
 [CREATE JAVA ACTION](#create-java-action), [CREATE MICROFLOW](#create-microflow)
 
@@ -28818,7 +29068,7 @@ Pages define the user interface of a Mendix application. Each page has a layout,
 
 # [CREATE PAGE](#create-page-1)
 
-## [Synopsis](#synopsis-33)
+## [Synopsis](#synopsis-34)
 
 ```
 CREATE [ OR REPLACE ] PAGE module.Name [ FOLDER 'path' ]
@@ -28833,7 +29083,7 @@ CREATE [ OR REPLACE ] PAGE module.Name [ FOLDER 'path' ]
 }
 
 ```
-## [Description](#description-33)
+## [Description](#description-34)
 
 Creates a new page in the specified module. A page defines a user interface screen with a title, a layout, optional parameters, and a hierarchical widget tree.
 
@@ -28929,7 +29179,7 @@ The `DataSource` property determines how a data widget obtains its data:
 | Parameter | `DataSource: $ParamName` | Binds to a page parameter or enclosing data view |
 | Database | `DataSource: DATABASE Module.Entity` | Retrieves from database |
 | Selection | `DataSource: SELECTION widgetName` | Listens to selection on another widget |
-| Microflow | `DataSource: MICROFLOW Module.MFName` | Calls a microflow for data |
+| Microflow | `DataSource: MICROFLOW Module.MFName` | Calls a microflow for data. Takes `with (FormValidations: All|Widget|None)` like a microflow action (default `All`); no other setting |
 
 ### [Action Types](#action-types)
 
@@ -28986,6 +29236,34 @@ A setting left out keeps its default, and `DESCRIBE` prints only the settings
 that differ from it. An unknown key, or a setting the action does not have, is
 an error. For `CREATE OBJECT … THEN SHOW PAGE …` the list goes at the end and
 belongs to the create action.
+
+#### [Return value mappings](#return-value-mappings)
+
+A microflow or nanoflow call can map what the flow returns back onto the page —
+Studio Pro’s **Return value mappings** (Mendix 11.5+). The `returns ( … )` list
+goes after the arguments and before `with ( … )`, one `target = source` per row:
+
+```
+DATAVIEW dvVehicle (DataSource: $Vehicle) {
+  ACTIONBUTTON btnRefresh (Caption: 'Refresh',
+    Action: CALL MICROFLOW Shop.ACT_Vehicle_Get returns (
+      Brand = $ActionReturnValue/Brand,     -- an attribute of the returned object
+      $stringResult = $ActionReturnValue,   -- the return value itself
+      Brand = 'Demo brand'))                -- any expression
+}
+
+```
+
+| Target | Means | Needs |
+| --- | --- | --- |
+| `Attr` (bare) | an attribute of the enclosing data container’s object | Mendix 11.15 — mx 11.13 and 11.14 report CE7006 on it |
+| `$name` | a page variable (`Variables: ( … )`) | Mendix 11.5 |
+
+The source is `$ActionReturnValue`, `$ActionReturnValue/Attr` (the flow must
+return an object that has `Attr`), or any expression. `DESCRIBE` prints the
+stored mappings, and re-running a statement without the list removes them — the
+statement is the authority. A mapping `DESCRIBE` cannot spell (a path over an
+association) is printed as a comment under the widget, saying a re-run drops it.
 
 A microflow or nanoflow action is a **call**: every parameter the flow declares
 needs an argument, or Mendix rejects the page with **CE1571**. An enclosing data
@@ -29072,7 +29350,7 @@ The page layout. Must reference an existing layout. Required.
 Optional folder within the module, as a clause after the name. Nested folders use `/`. The `Folder: 'path'` property is its deprecated alias (`MDL-DEPR105`).
 [`Variables: ( ... )`](#variables---)
 Optional page variables with type and default expression.
-## [Examples](#examples-45)
+## [Examples](#examples-46)
 
 Edit page with a data view and form fields:
 
@@ -29242,13 +29520,13 @@ CREATE PAGE Reports.MonthlySummary
 };
 
 ```
-## [See Also](#see-also-70)
+## [See Also](#see-also-71)
 
 [CREATE SNIPPET](#create-snippet-1), [ALTER PAGE](#alter-page--alter-snippet-1), [DROP PAGE](#drop-page--snippet), [DESCRIBE PAGE](/reference/query/describe-page.html), [GRANT VIEW ON PAGE](/reference/security/grant.html)
 
 # [CREATE SNIPPET](#create-snippet-1)
 
-## [Synopsis](#synopsis-34)
+## [Synopsis](#synopsis-35)
 
 ```
 CREATE [ OR REPLACE ] SNIPPET module.Name [ FOLDER 'path' ]
@@ -29260,7 +29538,7 @@ CREATE [ OR REPLACE ] SNIPPET module.Name [ FOLDER 'path' ]
 }
 
 ```
-## [Description](#description-34)
+## [Description](#description-35)
 
 Creates a reusable widget fragment (snippet) in the specified module. Snippets contain a widget tree that can be embedded in pages or other snippets using the `SNIPPETCALL` widget.
 
@@ -29298,7 +29576,7 @@ object and read the member inside the snippet.
 
 Optional folder path within the module, as a clause after the name. The `Folder: 'path'` property is its deprecated alias (`MDL-DEPR105`).
 
-## [Examples](#examples-46)
+## [Examples](#examples-47)
 
 Simple snippet with a header:
 
@@ -29367,13 +29645,13 @@ CREATE PAGE MyModule.Customer_Edit
 };
 
 ```
-## [See Also](#see-also-71)
+## [See Also](#see-also-72)
 
 [CREATE PAGE](#create-page-1), [ALTER PAGE](#alter-page--alter-snippet-1), [DROP PAGE](#drop-page--snippet)
 
 # [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-1)
 
-## [Synopsis](#synopsis-35)
+## [Synopsis](#synopsis-36)
 
 ```
 ALTER PAGE module.Name {
@@ -29440,7 +29718,7 @@ SET Layout = module.LayoutName;
 SET Layout = module.LayoutName MAP (OldPlaceholder AS NewPlaceholder);
 
 ```
-## [Description](#description-35)
+## [Description](#description-36)
 
 Modifies an existing page or snippet in-place without requiring a full `CREATE OR REPLACE`. This is useful when you need to make targeted changes to a page while preserving the rest of its widget tree, including any unsupported or third-party widget types that cannot be round-tripped through MDL.
 
@@ -29664,7 +29942,7 @@ The name of a widget within the page. Use `DESCRIBE PAGE` to list widget names.
 A widget property name. Standard properties are unquoted. Pluggable widget properties use single quotes.
 [`value`](#value)
 The new property value. Strings are quoted. Booleans and enumerations are unquoted.
-## [Examples](#examples-47)
+## [Examples](#examples-48)
 
 Change button caption and style:
 
@@ -29777,13 +30055,13 @@ ALTER PAGE MyModule.Customer_Edit {
 };
 
 ```
-## [See Also](#see-also-72)
+## [See Also](#see-also-73)
 
 [CREATE PAGE](#create-page-1), [CREATE SNIPPET](#create-snippet-1), [DESCRIBE PAGE](/reference/query/describe-page.html), [DROP PAGE](#drop-page--snippet)
 
 # [DROP PAGE / SNIPPET](#drop-page--snippet)
 
-## [Synopsis](#synopsis-36)
+## [Synopsis](#synopsis-37)
 
 ```
 mdl 1;
@@ -29792,7 +30070,7 @@ DROP PAGE module.Name;
 DROP SNIPPET module.Name;
 
 ```
-## [Description](#description-36)
+## [Description](#description-37)
 
 Removes a page or snippet from the project. The page or snippet must exist; otherwise an error is raised.
 
@@ -29802,7 +30080,7 @@ Dropping a page or snippet does not automatically update references to it from m
 
 [`module.Name`](#modulename-16)
 The qualified name of the page or snippet to drop (`Module.PageName` or `Module.SnippetName`).
-## [Examples](#examples-48)
+## [Examples](#examples-49)
 
 Drop a page:
 
@@ -29829,13 +30107,13 @@ LIST IMPACT OF Sales.Order_Edit;
 DROP PAGE Sales.Order_Edit;
 
 ```
-## [See Also](#see-also-73)
+## [See Also](#see-also-74)
 
 [CREATE PAGE](#create-page-1), [CREATE SNIPPET](#create-snippet-1), [ALTER PAGE](#alter-page--alter-snippet-1), [LIST IMPACT](/reference/catalog/list-references-impact.html)
 
 # [CREATE LAYOUT](#create-layout)
 
-## [Synopsis](#synopsis-37)
+## [Synopsis](#synopsis-38)
 
 ```
 CREATE [OR REPLACE] LAYOUT module.Name
@@ -29852,7 +30130,7 @@ CREATE [OR REPLACE] LAYOUT module.Name
 }
 
 ```
-## [Description](#description-37)
+## [Description](#description-38)
 
 Creates a layout — the frame every page renders inside: the topbar, the
 navigation sidebar, and the hole a page’s own content drops into. A page names
@@ -30040,7 +30318,7 @@ Every menu widget renders **either** a navigation profile (`profile: 'Responsive
 are alternatives for the same slot, and naming both is refused. With neither, the
 `Responsive` profile is used.
 
-## [Examples](#examples-49)
+## [Examples](#examples-50)
 
 A topbar layout, which is the shape `mxcli new` scaffolds:
 
@@ -30113,14 +30391,14 @@ CREATE PAGE MyModule.Dashboard
   Renaming one unbinds every page that used it — those pages still build, and
   their content vanishes.
 
-## [See Also](#see-also-74)
+## [See Also](#see-also-75)
 
 [ALTER LAYOUT](#alter-layout), [CREATE PAGE](#create-page-1),
 [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-1)
 
 # [ALTER LAYOUT](#alter-layout)
 
-## [Synopsis](#synopsis-38)
+## [Synopsis](#synopsis-39)
 
 ```
 ALTER LAYOUT module.Name {
@@ -30165,7 +30443,7 @@ ALTER PAGES [IN module] SET LAYOUT = module.Layout
     [MAP (Old AS New, …)] [WHERE LAYOUT = module.OldLayout];
 
 ```
-## [Description](#description-38)
+## [Description](#description-39)
 
 Modifies an existing layout in place. `ALTER LAYOUT` takes the whole
 [ALTER PAGE](#alter-page--alter-snippet-1) operation vocabulary, because a layout’s widget
@@ -30223,7 +30501,7 @@ exist is an **error**, not a “0 pages” success for a typo:
 Error: layout not found: MyModule.NoSuchLayout
 
 ```
-## [Examples](#examples-50)
+## [Examples](#examples-51)
 
 Put a brand caption in the topbar of a layout you own:
 
@@ -30296,7 +30574,7 @@ ALTER PAGE MyModule.Split {
 - `DESCRIBE LAYOUT` emits re-executable MDL, so it is the way to see what a
   layout currently contains before altering it.
 
-## [See Also](#see-also-75)
+## [See Also](#see-also-76)
 
 [CREATE LAYOUT](#create-layout), [ALTER PAGE / ALTER SNIPPET](#alter-page--alter-snippet-1),
 [CREATE PAGE](#create-page-1)
@@ -30339,13 +30617,13 @@ Mendix security operates at two levels. **Module roles** define permissions with
 
 # [CREATE MODULE ROLE](#create-module-role-1)
 
-## [Synopsis](#synopsis-39)
+## [Synopsis](#synopsis-40)
 
 ```
 CREATE MODULE ROLE module.RoleName [ DESCRIPTION 'text' ]
 
 ```
-## [Description](#description-39)
+## [Description](#description-40)
 
 Creates a new module role within a module. Module roles are the foundation of Mendix security – they are referenced by entity access rules, microflow/page access grants, and aggregated into project-level user roles.
 
@@ -30359,7 +30637,7 @@ If the module does not exist, the statement returns an error.
 Qualified name consisting of the module name and the new role name, separated by a dot. The module must already exist.
 [`DESCRIPTION 'text'`](#description-text)
 Optional human-readable description of the role’s purpose.
-## [Examples](#examples-51)
+## [Examples](#examples-52)
 
 Create a basic module role:
 
@@ -30384,13 +30662,13 @@ CREATE MODULE ROLE HR.Employee DESCRIPTION 'Self-service access';
 CREATE MODULE ROLE HR.Viewer DESCRIPTION 'Read-only access';
 
 ```
-## [See Also](#see-also-76)
+## [See Also](#see-also-77)
 
 [CREATE USER ROLE](#create-user-role-1), [GRANT](#grant-1), [REVOKE](#revoke-1)
 
 # [CREATE USER ROLE](#create-user-role-1)
 
-## [Synopsis](#synopsis-40)
+## [Synopsis](#synopsis-41)
 
 ```
 CREATE [ OR MODIFY ] USER ROLE Name [ (
@@ -30403,7 +30681,7 @@ CREATE [ OR MODIFY ] USER ROLE Name [ (
 ) ]
 
 ```
-## [Description](#description-40)
+## [Description](#description-41)
 
 Creates a project-level user role that aggregates module roles. User roles are assigned to end users (either directly or via demo users) and determine the combined set of permissions across all modules.
 
@@ -30429,7 +30707,7 @@ The user roles users with this role can manage, when `ManageAllRoles` is not `tr
 When `true`, users with this role can also manage users that have no role.
 [`CheckSecurity`](#checksecurity)
 Studio Pro’s “Check security” setting for the role.
-## [Examples](#examples-52)
+## [Examples](#examples-53)
 
 Create an administrator role with management privileges:
 
@@ -30456,13 +30734,13 @@ CREATE USER ROLE SalesManager (
 );
 
 ```
-## [See Also](#see-also-77)
+## [See Also](#see-also-78)
 
 [CREATE MODULE ROLE](#create-module-role-1), [GRANT](#grant-1), [CREATE DEMO USER](#create-demo-user-1)
 
 # [GRANT](#grant-1)
 
-## [Synopsis](#synopsis-41)
+## [Synopsis](#synopsis-42)
 
 ```
 -- Entity access
@@ -30478,7 +30756,7 @@ GRANT VIEW ON PAGE module.Name TO module.Role [, ...]
 GRANT EXECUTE ON NANOFLOW module.Name TO module.Role [, ...]
 
 ```
-## [Description](#description-41)
+## [Description](#description-42)
 
 Grants access rights to module roles. There are four forms of the GRANT statement, each controlling a different kind of access.
 
@@ -30553,7 +30831,7 @@ Optional XPath constraint for entity access, in brackets. Restricts which object
 The target microflow, nanoflow, or page.
 [`TO module.Role [, ...]`](#to-modulerole--)
 One or more module roles receiving the access (for microflow, page, and nanoflow forms).
-## [Examples](#examples-53)
+## [Examples](#examples-54)
 
 Grant full entity access:
 
@@ -30655,13 +30933,13 @@ CREATE PERSISTENT ENTITY Docs.Employee EXTENDS System.User (EmployeeNo: String(2
 GRANT READ (EmployeeNo) ON ENTITY Docs.Employee TO Docs.Viewer;
 
 ```
-## [See Also](#see-also-78)
+## [See Also](#see-also-79)
 
 [REVOKE](#revoke-1), [CREATE MODULE ROLE](#create-module-role-1), [CREATE USER ROLE](#create-user-role-1)
 
 # [REVOKE](#revoke-1)
 
-## [Synopsis](#synopsis-42)
+## [Synopsis](#synopsis-43)
 
 ```
 -- Entity access (full -- removes entire rule)
@@ -30680,7 +30958,7 @@ REVOKE VIEW ON PAGE module.Name FROM module.Role [, ...]
 REVOKE EXECUTE ON NANOFLOW module.Name FROM module.Role [, ...]
 
 ```
-## [Description](#description-42)
+## [Description](#description-43)
 
 Removes previously granted access rights from module roles. Each form is the counterpart to the corresponding GRANT statement.
 
@@ -30722,7 +31000,7 @@ Optional. A comma-separated list of rights to revoke (partial revoke). Same synt
 The target microflow, nanoflow, or page.
 [`FROM module.Role [, ...]`](#from-modulerole--)
 One or more module roles losing access (for microflow, page, and nanoflow forms).
-## [Examples](#examples-54)
+## [Examples](#examples-55)
 
 Remove all entity access for a role:
 
@@ -30772,13 +31050,13 @@ Remove nanoflow execution:
 REVOKE EXECUTE ON NANOFLOW Shop.NAV_ValidateInput FROM Shop.Viewer;
 
 ```
-## [See Also](#see-also-79)
+## [See Also](#see-also-80)
 
 [GRANT](#grant-1), [CREATE MODULE ROLE](#create-module-role-1)
 
 # [CREATE DEMO USER](#create-demo-user-1)
 
-## [Synopsis](#synopsis-43)
+## [Synopsis](#synopsis-44)
 
 ```
 CREATE [ OR MODIFY ] DEMO USER 'username' (
@@ -30788,7 +31066,7 @@ CREATE [ OR MODIFY ] DEMO USER 'username' (
 )
 
 ```
-## [Description](#description-43)
+## [Description](#description-44)
 
 Creates a demo user for development and testing. Demo users appear on the login screen when running the application locally, allowing quick login without manual credential entry.
 
@@ -30808,7 +31086,7 @@ The password for the demo user. Enclosed in single quotes. Required.
 Optional. The entity that generalizes `System.User` (e.g., `Administration.Account`). If the project has exactly one `System.User` subtype, this can be omitted and it will be auto-detected.
 [`UserRoles: ( UserRole [, ...] )`](#userroles--userrole---)
 The project-level user role names (unqualified) to assign to the demo user.
-## [Examples](#examples-55)
+## [Examples](#examples-56)
 
 Create a demo user with auto-detected entity:
 
@@ -30833,7 +31111,7 @@ CREATE DEMO USER 'user' ( Password: '1', Entity: Administration.Account, UserRol
 CREATE DEMO USER 'viewer' ( Password: '1', Entity: Administration.Account, UserRoles: (AppViewer) );
 
 ```
-## [See Also](#see-also-80)
+## [See Also](#see-also-81)
 
 [CREATE USER ROLE](#create-user-role-1), [GRANT](#grant-1)
 
@@ -30901,7 +31179,7 @@ they copy in, and report the count — a transplant copies the incoming units
 verbatim, so without it the package’s rules reach the project unchecked
 (mendixlabs/mxcli#1085).
 
-## [Examples](#examples-56)
+## [Examples](#examples-57)
 
 ```
 mdl 1;
@@ -30929,7 +31207,7 @@ mxcli -p app.mpr -c "update security UserCommons"
   be fully checked here: those inherited members are neither added nor removed,
   but existing entries for them are preserved rather than pruned.
 
-## [See also](#see-also-81)
+## [See also](#see-also-82)
 
 - [GRANT](#grant-1) — author entity access rules
 - [REVOKE](#revoke-1) — remove them
@@ -30958,7 +31236,7 @@ Mendix applications can have multiple navigation profiles (Responsive, Tablet, P
 
 # [CREATE NAVIGATION](#create-navigation)
 
-## [Synopsis](#synopsis-44)
+## [Synopsis](#synopsis-45)
 
 ```
 CREATE [ OR MODIFY ] NAVIGATION profile
@@ -30976,7 +31254,7 @@ CREATE [ OR MODIFY ] NAVIGATION profile
     } ]
 
 ```
-## [Description](#description-44)
+## [Description](#description-45)
 
 Creates a navigation profile, or writes the clauses it states into an existing one. Each profile defines the home page, optional role-specific home pages, optional login page, optional 404 page, and a hierarchical menu structure.
 
@@ -31129,7 +31407,7 @@ An entity’s *compatibility mode* flag has no MDL syntax. It is read, preserved
 across a rewrite, and reported by `DESCRIBE NAVIGATION` — never silently
 dropped.
 
-## [Examples](#examples-57)
+## [Examples](#examples-58)
 
 Minimal navigation with just a home page:
 
@@ -31169,13 +31447,13 @@ CREATE OR MODIFY NAVIGATION NativePhone
     HOME PAGE Mobile.Dashboard FOR User;
 
 ```
-## [See Also](#see-also-82)
+## [See Also](#see-also-83)
 
 [ALTER NAVIGATION](#alter-navigation-1), [LIST NAVIGATION](#list-navigation)
 
 # [ALTER NAVIGATION](#alter-navigation-1)
 
-## [Synopsis](#synopsis-45)
+## [Synopsis](#synopsis-46)
 
 ```
 ALTER NAVIGATION profile {
@@ -31203,7 +31481,7 @@ DROP NOT FOUND PAGE
 'caption' [ @n ] [ > 'caption' [ @n ] ... ]
 
 ```
-## [Description](#description-45)
+## [Description](#description-46)
 
 Edits one web navigation profile in place: its menu items at any depth, and its
 home, login and not-found pages. Where
@@ -31317,7 +31595,7 @@ the stored menu with the same code `exec` runs and reports the same refusals.
 [`profile`](#profile-1)
 A web navigation profile the project has: `Responsive`, `Phone`, `Tablet` or
 one of their `Offline` kinds.
-## [Examples](#examples-58)
+## [Examples](#examples-59)
 
 Given the menu `DESCRIBE NAVIGATION Responsive` prints:
 
@@ -31369,14 +31647,14 @@ ALTER NAVIGATION Responsive {
 
 A bare `'Users'` in that statement would be refused: it matches two items.
 
-## [See Also](#see-also-83)
+## [See Also](#see-also-84)
 
 [CREATE NAVIGATION](#create-navigation), [LIST NAVIGATION](#list-navigation),
 [CREATE MENU](#create-menu)
 
 # [LIST NAVIGATION](#list-navigation)
 
-## [Synopsis](#synopsis-46)
+## [Synopsis](#synopsis-47)
 
 ```
 LIST NAVIGATION
@@ -31385,7 +31663,7 @@ LIST NAVIGATION HOMES
 DESCRIBE NAVIGATION [ profile ]
 
 ```
-## [Description](#description-46)
+## [Description](#description-47)
 
 Displays navigation configuration for the current project.
 
@@ -31411,7 +31689,7 @@ Outputs the full MDL representation of one or all navigation profiles. The outpu
 
 [`profile`](#profile-2)
 Optional. One of: `Responsive`, `Tablet`, `Phone`, `NativePhone`. When omitted, all profiles are shown.
-## [Examples](#examples-59)
+## [Examples](#examples-60)
 
 Show a summary of all profiles:
 
@@ -31440,13 +31718,13 @@ Export the responsive profile as MDL:
 DESCRIBE NAVIGATION Responsive;
 
 ```
-## [See Also](#see-also-84)
+## [See Also](#see-also-85)
 
 [CREATE NAVIGATION](#create-navigation), [ALTER NAVIGATION](#alter-navigation-1)
 
 # [CREATE MENU](#create-menu)
 
-## [Synopsis](#synopsis-47)
+## [Synopsis](#synopsis-48)
 
 ```
 CREATE [ OR MODIFY ] MENU module.name [ FOLDER 'folder_path' ] { menu_item [ menu_item ... ] }
@@ -31469,7 +31747,7 @@ and each `item_operation` is one of the item operations of
 `MOVE`, `DROP`, `SET ( … ) ON` — with items addressed by caption path
 (`'Group' > 'Item'`).
 
-## [Description](#description-47)
+## [Description](#description-48)
 
 Manages standalone **menu documents** (`Menus$MenuDocument`) — reusable menus that a
 menu widget on a page points at. Atlas\_Core ships two of them, `Phone_Menu` and
@@ -31543,7 +31821,7 @@ spelling — items in `( )`, each ending in `;`, with `PAGE`/`MICROFLOW`/`ICON`
 clauses after the caption — still parses and warns (MDL-DEPR121, MDL-DEPR122);
 `mxcli fmt --upgrade` rewrites it.
 
-## [Examples](#examples-60)
+## [Examples](#examples-61)
 
 Create a menu with a nested sub-menu:
 
@@ -31607,7 +31885,7 @@ reported on its own comment line rather than dropped silently:
 -- set it in Studio Pro
 
 ```
-## [See Also](#see-also-85)
+## [See Also](#see-also-86)
 
 - [CREATE NAVIGATION](#create-navigation) and [ALTER NAVIGATION](#alter-navigation-1) — the menu inside a navigation profile
 - [LIST NAVIGATION](#list-navigation) — read profile menus and home pages
@@ -31634,20 +31912,20 @@ Mendix workflows model long-running business processes with user tasks, decision
 
 # [CREATE WORKFLOW](#create-workflow-1)
 
-## [Synopsis](#synopsis-48)
+## [Synopsis](#synopsis-49)
 
 ```
 CREATE [ OR MODIFY ] WORKFLOW module.Name
     PARAMETER $Variable: module.Entity
     [ OVERVIEW PAGE module.PageName ]
-    [ DISPLAY 'caption' ]
-    [ DESCRIPTION 'text' ]
+    [ DISPLAY 'caption' [ WITH ( {1} = expression, ... ) ] ]
+    [ DESCRIPTION 'text' [ WITH ( {1} = expression, ... ) ] ]
 BEGIN
     activities
 END WORKFLOW
 
 ```
-## [Description](#description-48)
+## [Description](#description-49)
 
 Creates a workflow that models a long-running business process. Each workflow has a context parameter (an entity that carries the data through the process) and a sequence of activities.
 
@@ -31741,10 +32019,16 @@ User tasks, call microflow activities, and wait-for-notification activities supp
 USER TASK name 'caption'
     PAGE module.Page
     OUTCOMES 'Done' { }
-    BOUNDARY EVENT INTERRUPTING TIMER addHours([%CurrentDateTime%], 1) { activities }
+    BOUNDARY EVENT INTERRUPTING TIMER addHours([%CurrentDateTime%], 1) CAPTION 'Escalate' { activities }
     BOUNDARY EVENT NON INTERRUPTING TIMER addMinutes([%CurrentDateTime%], 30) { activities }
+    BOUNDARY EVENT NON INTERRUPTING TIMER addDays([%CurrentDateTime%], 1) REPEAT EVERY 1 DAY AT MOST 5 TIMES { activities }
 
 ```
+
+`REPEAT EVERY <n> <unit> AT MOST <m> TIMES` makes a non-interrupting timer a repeating reminder: it fires at the delay, then every `<n>` minutes, hours, days, weeks or months, `<m>` times in all (the first firing counts, so `<m>` is at least 2). A timer-started event sub-process takes the same clause on Mendix 11.15 and later.
+
+`CAPTION '<caption>'` after the delay is the text Studio Pro shows on the timer; it is optional.
+
 ## [Parameters](#parameters-51)
 
 [`module.Name`](#modulename-21)
@@ -31757,7 +32041,9 @@ Optional overview page displayed when viewing workflow instances.
 Optional display name shown in the workflow overview.
 [`DESCRIPTION 'text'`](#description-text-1)
 Optional description of the workflow’s purpose.
-## [Examples](#examples-61)
+[`WITH ( {1} = expression, ... )`](#with--1--expression--)
+Fills the `{1}`, `{2}`, … placeholders of `DISPLAY` or `DESCRIPTION` from expressions over `$WorkflowContext`, as a log message’s template does: `DISPLAY 'Approval for {1}' WITH ({1} = $WorkflowContext/Title)`. A user task’s `TASK NAME '…'` (what the task inbox shows; the caption when omitted) and `DESCRIPTION '…'` take the same clause, and may also use `$WorkflowInstance`. A placeholder no parameter fills is CE0720, which `mxcli check` reports as MDL-WF21.
+## [Examples](#examples-62)
 
 Simple approval workflow:
 
@@ -31816,19 +32102,19 @@ BEGIN
 END WORKFLOW;
 
 ```
-## [See Also](#see-also-86)
+## [See Also](#see-also-87)
 
 [DROP WORKFLOW](#drop-workflow-1)
 
 # [DROP WORKFLOW](#drop-workflow-1)
 
-## [Synopsis](#synopsis-49)
+## [Synopsis](#synopsis-50)
 
 ```
 DROP WORKFLOW module.Name;
 
 ```
-## [Description](#description-49)
+## [Description](#description-50)
 
 Removes a workflow from the project. The workflow is identified by its qualified name. If the workflow does not exist, an error is returned.
 
@@ -31838,13 +32124,13 @@ Any references to the dropped workflow (e.g., CALL WORKFLOW activities in other 
 
 [`module.Name`](#modulename-22)
 The qualified name of the workflow to drop (`Module.WorkflowName`).
-## [Examples](#examples-62)
+## [Examples](#examples-63)
 
 ```
 DROP WORKFLOW HR.ApprovalFlow;
 
 ```
-## [See Also](#see-also-87)
+## [See Also](#see-also-88)
 
 [CREATE WORKFLOW](#create-workflow-1)
 
@@ -32048,7 +32334,7 @@ DROP DATA TRANSFORMER module.Name;
 ```
 # [CREATE JSON STRUCTURE](#create-json-structure)
 
-## [Synopsis](#synopsis-50)
+## [Synopsis](#synopsis-51)
 
 ```
 [ /** description */ ]
@@ -32058,7 +32344,7 @@ CREATE [ OR MODIFY ] JSON STRUCTURE module.Name
     [ CUSTOM_NAME_MAP ( 'jsonKey' AS 'AttributeName' [, ...] ) ]
 
 ```
-## [Description](#description-50)
+## [Description](#description-51)
 
 Creates a JSON structure document from a representative JSON sample. `SNIPPET` is the old keyword for `SAMPLE`: it still parses and warns `MDL-DEPR132`. The sample is stored verbatim and Mendix uses its shape to define attribute types and nesting when you create import or export mappings against it.
 
@@ -32080,7 +32366,7 @@ Optional. The documentation of the JSON structure document, as a doc comment bef
 A representative JSON document. Must be a valid JSON string. The sample defines field names and types. Multi-line snippets can use `$$...$$` quoting.
 [`CUSTOM_NAME_MAP ( 'jsonKey' AS 'AttributeName' )`](#custom_name_map--jsonkey-as-attributename-)
 Optional. Renames individual JSON keys to the specified attribute names. Useful for keys that are reserved words or contain special characters.
-## [Examples](#examples-63)
+## [Examples](#examples-64)
 
 ### [Flat JSON object](#flat-json-object)
 
@@ -32154,13 +32440,13 @@ CREATE OR MODIFY JSON STRUCTURE MyModule.JSON_Pet
     SAMPLE '{"id": 1, "name": "Fido", "status": "available", "tags": []}';
 
 ```
-## [See Also](#see-also-88)
+## [See Also](#see-also-89)
 
 [CREATE IMPORT MAPPING](#create-import-mapping), [CREATE EXPORT MAPPING](#create-export-mapping)
 
 # [CREATE MESSAGE DEFINITION COLLECTION](#create-message-definition-collection)
 
-## [Synopsis](#synopsis-51)
+## [Synopsis](#synopsis-52)
 
 ```
 CREATE [ OR MODIFY ] MESSAGE DEFINITION COLLECTION module.Name
@@ -32181,7 +32467,7 @@ its own document, created with
 [CREATE MESSAGE DEFINITION](#create-message-definition). On an 11.15 project
 the collection statements are refused with a hint to use that form.
 
-## [Description](#description-51)
+## [Description](#description-52)
 
 Creates a message definition collection — one of the four sources an import or
 export mapping can be bound to, and the only one besides a JSON structure that
@@ -32237,7 +32523,7 @@ otherwise: reproducing English inflection needs `-y → -ies` and an
 already-plural detector, and a name the author writes beats one a heuristic
 guesses.
 
-## [Examples](#examples-64)
+## [Examples](#examples-65)
 
 ```
 mdl 1;
@@ -32301,13 +32587,13 @@ DROP MESSAGE DEFINITION COLLECTION module.Name;
 `DESCRIBE` emits re-executable MDL. `OR MODIFY` preserves the document UUID, so
 mappings bound to it keep resolving.
 
-## [See Also](#see-also-89)
+## [See Also](#see-also-90)
 
 [CREATE IMPORT MAPPING](#create-import-mapping), [CREATE EXPORT MAPPING](#create-export-mapping), [CREATE JSON STRUCTURE](#create-json-structure)
 
 # [CREATE MESSAGE DEFINITION](#create-message-definition)
 
-## [Synopsis](#synopsis-52)
+## [Synopsis](#synopsis-53)
 
 ```
 CREATE [ OR MODIFY ] MESSAGE DEFINITION module.Name
@@ -32324,7 +32610,7 @@ CREATE [ OR MODIFY ] MESSAGE DEFINITION module.Name
 definition is then an entry of a
 [message definition collection](#create-message-definition-collection).
 
-## [Description](#description-52)
+## [Description](#description-53)
 
 Creates one message definition as its own document. Mendix 11.15 removed the
 message definition collection and stores each definition as a separate
@@ -32391,13 +32677,13 @@ definition that a mapping still uses is refused, and the mappings are named.
 On 11.15 the collection statements (`CREATE`, `ALTER`, `DESCRIBE` and `DROP MESSAGE DEFINITION COLLECTION`) are refused with a hint to use this form, and
 `LIST MESSAGE DEFINITION COLLECTIONS` points to `LIST MESSAGE DEFINITIONS`.
 
-## [See Also](#see-also-90)
+## [See Also](#see-also-91)
 
 [CREATE MESSAGE DEFINITION COLLECTION](#create-message-definition-collection), [CREATE IMPORT MAPPING](#create-import-mapping), [CREATE EXPORT MAPPING](#create-export-mapping)
 
 # [CREATE IMPORT MAPPING](#create-import-mapping)
 
-## [Synopsis](#synopsis-53)
+## [Synopsis](#synopsis-54)
 
 ```
 [ /** description */ ]
@@ -32417,7 +32703,7 @@ CREATE [ OR MODIFY ] IMPORT MAPPING module.Name
 };
 
 ```
-## [Description](#description-53)
+## [Description](#description-54)
 
 Creates an import mapping that reads JSON or XML data and creates or finds Mendix entity objects from it.
 
@@ -32524,7 +32810,7 @@ Maps the JSON field `jsonField` to entity attribute `Attribute`. `KEY` marks thi
 
 Maps a nested JSON object or array element to a child entity via the named association.
 
-## [Examples](#examples-65)
+## [Examples](#examples-66)
 
 ### [Simple flat mapping](#simple-flat-mapping)
 
@@ -32623,13 +32909,13 @@ Referencing an inherited attribute against the entity being mapped rather than i
 declaring entity is Mendix **CE1613** *“The selected attribute … no longer
 exists”*, and Studio Pro shows the field unmapped.
 
-## [See Also](#see-also-91)
+## [See Also](#see-also-92)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE EXPORT MAPPING](#create-export-mapping)
 
 # [CREATE EXPORT MAPPING](#create-export-mapping)
 
-## [Synopsis](#synopsis-54)
+## [Synopsis](#synopsis-55)
 
 ```
 [ /** description */ ]
@@ -32650,7 +32936,7 @@ CREATE [ OR MODIFY ] EXPORT MAPPING module.Name
 };
 
 ```
-## [Description](#description-54)
+## [Description](#description-55)
 
 Creates an export mapping that serialises Mendix entity objects to JSON or XML.
 
@@ -32733,7 +33019,7 @@ Maps entity attribute `Attribute` to the JSON key `jsonField`.
 
 Maps associated objects to a nested JSON object or array using the named alias.
 
-## [Examples](#examples-66)
+## [Examples](#examples-67)
 
 ### [Simple flat mapping](#simple-flat-mapping-1)
 
@@ -32809,13 +33095,13 @@ CREATE OR MODIFY EXPORT MAPPING MyModule.EMM_Pet
 - Export mappings use a different entity structure than import mappings for the same JSON. Arrays in export require an intermediate container entity (no attributes) between the root entity and the array item entity.
 - Import and export mappings cannot share the same domain model for nested JSON because the FK direction and entity structure differ.
 
-## [See Also](#see-also-92)
+## [See Also](#see-also-93)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
 # [CREATE DATA TRANSFORMER](#create-data-transformer)
 
-## [Synopsis](#synopsis-55)
+## [Synopsis](#synopsis-56)
 
 ```
 [ /** description */ ]
@@ -32828,7 +33114,7 @@ CREATE [ OR MODIFY ] DATA TRANSFORMER module.Name
 };
 
 ```
-## [Description](#description-55)
+## [Description](#description-56)
 
 Creates a data transformer that reshapes JSON or XML data through one or more transformation steps before it enters an import mapping or is returned to a caller.
 
@@ -32865,7 +33151,7 @@ A representative XML input document.
 A JSLT transformation expression applied to the current input.
 [`XSLT 'transformation'`](#xslt-transformation)
 An XSLT stylesheet applied to the current input.
-## [Examples](#examples-67)
+## [Examples](#examples-68)
 
 ### [Single-step JSON flattening](#single-step-json-flattening)
 
@@ -32911,7 +33197,7 @@ CREATE OR MODIFY DATA TRANSFORMER MyModule.WeatherTransform
 };
 
 ```
-## [See Also](#see-also-93)
+## [See Also](#see-also-94)
 
 [CREATE JSON STRUCTURE](#create-json-structure), [CREATE IMPORT MAPPING](#create-import-mapping)
 
@@ -32972,7 +33258,7 @@ feature not available: agent editor requires Mendix >= 11.9
 ```
 # [CREATE AI MODEL](#create-ai-model)
 
-## [Synopsis](#synopsis-56)
+## [Synopsis](#synopsis-57)
 
 ```
 CREATE [ OR MODIFY ] AI MODEL module.Name (
@@ -32989,7 +33275,7 @@ DROP AI MODEL module.Name;
 
 Requires Mendix 11.9+.
 
-## [Description](#description-56)
+## [Description](#description-57)
 
 Creates an agent-editor Model document, which Studio Pro calls an AI model. `MODEL` without `AI` is the old spelling: it still parses and warns `MDL-DEPR131`. A model represents an LLM configuration in the Mendix Agent Editor. It references a String constant that holds the Mendix Cloud GenAI Portal resource key.
 
@@ -33013,7 +33299,7 @@ Optional. The display name shown in Studio Pro. Populated by Studio Pro after ke
 Optional. The Portal key name. Populated by Studio Pro after key validation.
 [`Environment: 'environment'`](#environment-environment)
 Optional. The deployment environment. Populated by Studio Pro after key validation.
-## [Examples](#examples-68)
+## [Examples](#examples-69)
 
 ### [Minimal model](#minimal-model)
 
@@ -33056,13 +33342,13 @@ CREATE OR MODIFY AI MODEL MyModule."GPT4Model" (
 DROP AI MODEL MyModule.GPT4Model;
 
 ```
-## [See Also](#see-also-94)
+## [See Also](#see-also-95)
 
 [CREATE AGENT](#create-agent), [CREATE KNOWLEDGE BASE](#create-knowledge-base)
 
 # [CREATE KNOWLEDGE BASE](#create-knowledge-base)
 
-## [Synopsis](#synopsis-57)
+## [Synopsis](#synopsis-58)
 
 ```
 CREATE [ OR MODIFY ] KNOWLEDGE BASE module.Name (
@@ -33076,7 +33362,7 @@ DROP KNOWLEDGE BASE module.Name;
 
 Requires Mendix 11.9+.
 
-## [Description](#description-57)
+## [Description](#description-58)
 
 Creates an agent-editor Knowledge Base document. A knowledge base connects an agent to a vector knowledge base for retrieval-augmented generation (RAG). It references a String constant that holds the Mendix Cloud GenAI Portal resource key for the knowledge base.
 
@@ -33092,7 +33378,7 @@ The qualified name of the knowledge base document.
 The provider. `MxCloudGenAI` is the only supported value.
 [`key: module.KeyConstant`](#key-modulekeyconstant-1)
 A qualified reference to a String constant that holds the Portal resource key for the knowledge base.
-## [Examples](#examples-69)
+## [Examples](#examples-70)
 
 ### [Create a knowledge base](#create-a-knowledge-base)
 
@@ -33116,13 +33402,13 @@ CREATE OR MODIFY KNOWLEDGE BASE MyModule."ProductDocs" (
 );
 
 ```
-## [See Also](#see-also-95)
+## [See Also](#see-also-96)
 
 [CREATE AGENT](#create-agent), [CREATE AI MODEL](#create-ai-model)
 
 # [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)
 
-## [Synopsis](#synopsis-58)
+## [Synopsis](#synopsis-59)
 
 ```
 CREATE [ OR MODIFY ] CONSUMED MCP SERVICE module.Name (
@@ -33138,7 +33424,7 @@ DROP CONSUMED MCP SERVICE module.Name;
 
 Requires Mendix 11.9+.
 
-## [Description](#description-58)
+## [Description](#description-59)
 
 Creates a Consumed MCP Service document. A consumed MCP service represents a remote tool server that implements the Model Context Protocol (MCP). Once registered, agents can use the tools provided by the MCP server.
 
@@ -33158,7 +33444,7 @@ The service version as a quoted string.
 Optional. Connection timeout in seconds. Defaults to 30.
 [`documentation: 'description'`](#documentation-description)
 Optional. A human-readable description of the MCP service.
-## [Examples](#examples-70)
+## [Examples](#examples-71)
 
 ### [Register an MCP service](#register-an-mcp-service)
 
@@ -33182,13 +33468,13 @@ CREATE OR MODIFY CONSUMED MCP SERVICE MyModule."WebSearch" (
 );
 
 ```
-## [See Also](#see-also-96)
+## [See Also](#see-also-97)
 
 [CREATE AGENT](#create-agent), [CREATE AI MODEL](#create-ai-model)
 
 # [CREATE AGENT](#create-agent)
 
-## [Synopsis](#synopsis-59)
+## [Synopsis](#synopsis-60)
 
 ```
 CREATE [ OR MODIFY ] AGENT module.Name (
@@ -33222,7 +33508,7 @@ DROP AGENT module.Name;
 
 Requires Mendix 11.9+.
 
-## [Description](#description-59)
+## [Description](#description-60)
 
 Creates an agent document in the Mendix Agent Editor. An agent defines how an AI assistant behaves: which model it uses, what instructions it follows, and which tools and knowledge bases it can access.
 
@@ -33282,7 +33568,7 @@ Optional maximum number of tokens in the response.
 Optional sampling temperature (0.0–1.0). Higher values produce more creative output.
 [`ToolChoice`](#toolchoice)
 Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
-## [Examples](#examples-71)
+## [Examples](#examples-72)
 
 ### [Simple task agent](#simple-task-agent)
 
@@ -33373,7 +33659,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 - The model and knowledge base documents must exist before the agent is created.
 - Dollar-quoted prompts (`$$...$$`) preserve all whitespace including newlines.
 
-## [See Also](#see-also-97)
+## [See Also](#see-also-98)
 
 [CREATE AI MODEL](#create-ai-model), [CREATE KNOWLEDGE BASE](#create-knowledge-base), [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)
 
@@ -33399,7 +33685,7 @@ Business event services enable asynchronous, event-driven communication between 
 
 # [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
-## [Synopsis](#synopsis-60)
+## [Synopsis](#synopsis-61)
 
 ```
 CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
@@ -33414,7 +33700,7 @@ CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
 }
 
 ```
-## [Description](#description-60)
+## [Description](#description-61)
 
 Creates a business event service that defines one or more messages for event-driven communication between applications.
 
@@ -33464,7 +33750,7 @@ This application publishes (sends) this message type.
 This application subscribes to (receives) this message type.
 [`ENTITY module.Entity`](#entity-moduleentity-1)
 Optional entity linked to the message for data mapping.
-## [Examples](#examples-72)
+## [Examples](#examples-73)
 
 Create a service that publishes order events:
 
@@ -33512,19 +33798,19 @@ CREATE OR MODIFY BUSINESS EVENT SERVICE Shop.OrderEvents
 };
 
 ```
-## [See Also](#see-also-98)
+## [See Also](#see-also-99)
 
 [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
 # [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
-## [Synopsis](#synopsis-61)
+## [Synopsis](#synopsis-62)
 
 ```
 DROP BUSINESS EVENT SERVICE module.Name;
 
 ```
-## [Description](#description-61)
+## [Description](#description-62)
 
 Removes a business event service from the project. The service is identified by its qualified name. If the service does not exist, an error is returned.
 
@@ -33534,13 +33820,13 @@ Dropping a service removes all its message definitions and operation implementat
 
 [`module.Name`](#modulename-32)
 The qualified name of the business event service to drop (`Module.ServiceName`).
-## [Examples](#examples-73)
+## [Examples](#examples-74)
 
 ```
 DROP BUSINESS EVENT SERVICE Shop.OrderEvents;
 
 ```
-## [See Also](#see-also-99)
+## [See Also](#see-also-100)
 
 [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
@@ -33556,7 +33842,7 @@ Statements for creating, inspecting, and dropping image collections within modul
 
 # [CREATE IMAGE COLLECTION](#create-image-collection-1)
 
-## [Synopsis](#synopsis-62)
+## [Synopsis](#synopsis-63)
 
 ```
 [/** description */]
@@ -33569,7 +33855,7 @@ CREATE [OR MODIFY] IMAGE COLLECTION module.name
     }];
 
 ```
-## [Description](#description-62)
+## [Description](#description-63)
 
 Creates a new image collection in the specified module. `OR MODIFY` updates an existing collection in-place, preserving its UUID so that widget references remain valid. `OR REPLACE` is accepted as a synonym for `OR MODIFY`. Image collections bundle images (icons, logos, graphics) within a module. Images can be loaded from the filesystem during creation, with the format detected automatically from the file extension.
 
@@ -33588,7 +33874,7 @@ The image itself, base64-encoded. This is what `DESCRIBE IMAGE COLLECTION` write
 
 The images are the collection’s children, so they are in `{ }`, each with its properties in `( )`. The older form `( IMAGE name FROM FILE 'path', … )` still parses but warns (MDL-DEPR072); `mxcli fmt --upgrade` rewrites it.
 
-## [Examples](#examples-74)
+## [Examples](#examples-75)
 
 ### [Empty collection](#empty-collection)
 
@@ -33625,19 +33911,19 @@ CREATE IMAGE COLLECTION MyModule.BrandAssets
 };
 
 ```
-## [See Also](#see-also-100)
+## [See Also](#see-also-101)
 
 [DROP IMAGE COLLECTION](#drop-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
 # [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
-## [Synopsis](#synopsis-63)
+## [Synopsis](#synopsis-64)
 
 ```
 DROP IMAGE COLLECTION module.name;
 
 ```
-## [Description](#description-63)
+## [Description](#description-64)
 
 Removes an image collection and all its embedded images from the module.
 
@@ -33645,7 +33931,7 @@ Removes an image collection and all its embedded images from the module.
 
 [**module.name**](#modulename-34)
 The qualified name of the collection to drop (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-75)
+## [Examples](#examples-76)
 
 ```
 DROP IMAGE COLLECTION MyModule.StatusIcons;
@@ -33659,13 +33945,13 @@ LIST REFERENCES TO MyModule.AppIcons;
 DROP IMAGE COLLECTION MyModule.AppIcons;
 
 ```
-## [See Also](#see-also-101)
+## [See Also](#see-also-102)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
 # [LIST / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
-## [Synopsis](#synopsis-64)
+## [Synopsis](#synopsis-65)
 
 ```
 LIST IMAGE COLLECTIONS;
@@ -33673,7 +33959,7 @@ LIST IMAGE COLLECTIONS IN module;
 DESCRIBE IMAGE COLLECTION module.name;
 
 ```
-## [Description](#description-64)
+## [Description](#description-65)
 
 `LIST IMAGE COLLECTIONS` lists all image collections in the project, optionally filtered by module. `DESCRIBE IMAGE COLLECTION` shows the full definition of a specific collection, including its images as a re-executable `CREATE` statement.
 
@@ -33685,7 +33971,7 @@ In the TUI, images are rendered inline when the terminal supports it (Kitty, iTe
 Filters the listing to a single module.
 [**module.name**](#modulename-35)
 The qualified name of the collection to describe (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-76)
+## [Examples](#examples-77)
 
 ### [List all image collections](#list-all-image-collections)
 
@@ -33708,7 +33994,7 @@ DESCRIBE IMAGE COLLECTION MyModule.AppIcons;
 
 The output is the complete `CREATE OR MODIFY` statement, each image written into it as `IMAGE name ( Data: '<base64>' )`, so it can be copied and re-executed on any machine. `DESCRIBE` writes no files.
 
-## [See Also](#see-also-102)
+## [See Also](#see-also-103)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
@@ -33728,13 +34014,13 @@ A basic `REFRESH CATALOG` populates tables for modules, entities, attributes, as
 
 # [REFRESH CATALOG](#refresh-catalog-1)
 
-## [Synopsis](#synopsis-65)
+## [Synopsis](#synopsis-66)
 
 ```
 REFRESH CATALOG [ FULL ] [ FORCE ]
 
 ```
-## [Description](#description-65)
+## [Description](#description-66)
 
 Rebuilds the project metadata catalog from the current state of the open project. The catalog is a SQLite database (`.mxcli/catalog.db`) that enables fast SQL querying and cross-reference navigation over project elements.
 
@@ -33750,7 +34036,7 @@ The catalog is cached between sessions. If the project has not changed, repeated
 Include cross-references, widgets, strings, source text, and permissions in the catalog. Required for callers/callees analysis and full-text search.
 [**FORCE**](#force)
 Bypass the catalog cache and force a complete rebuild regardless of whether the project appears unchanged.
-## [Examples](#examples-77)
+## [Examples](#examples-78)
 
 ### [Basic catalog refresh](#basic-catalog-refresh)
 
@@ -33779,19 +34065,19 @@ REFRESH CATALOG FULL FORCE;
 -- mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 ```
-## [See Also](#see-also-103)
+## [See Also](#see-also-104)
 
 [SELECT FROM CATALOG](#select-from-catalog), [LIST CATALOG TABLES](#list-catalog-tables), [LIST CALLERS / CALLEES](#list-callers--callees-1)
 
 # [SELECT FROM CATALOG](#select-from-catalog)
 
-## [Synopsis](#synopsis-66)
+## [Synopsis](#synopsis-67)
 
 ```
 SELECT columns FROM CATALOG.table [ WHERE condition ] [ ORDER BY column [ ASC | DESC ] ] [ LIMIT n ]
 
 ```
-## [Description](#description-66)
+## [Description](#description-67)
 
 Executes a SQL query against the project metadata catalog. The catalog tables are populated by `REFRESH CATALOG` and can be queried using standard SQL syntax including joins, aggregations, subqueries, and filtering.
 
@@ -33835,7 +34121,7 @@ A SQL WHERE clause for filtering rows. Supports standard operators (`=`, `LIKE`,
 Column to sort by. Append `ASC` (default) or `DESC` for sort direction.
 [**n**](#n)
 Maximum number of rows to return.
-## [Examples](#examples-78)
+## [Examples](#examples-79)
 
 ### [List all entities](#list-all-entities)
 
@@ -33893,13 +34179,13 @@ WHERE p.Id NOT IN (
 SELECT Name FROM CATALOG.MICROFLOWS LIMIT 10;
 
 ```
-## [See Also](#see-also-104)
+## [See Also](#see-also-105)
 
 [REFRESH CATALOG](#refresh-catalog-1), [LIST CATALOG TABLES](#list-catalog-tables), [SEARCH](#list-references--impact-describe-context)
 
 # [LIST CALLERS / CALLEES](#list-callers--callees-1)
 
-## [Synopsis](#synopsis-67)
+## [Synopsis](#synopsis-68)
 
 ```
 LIST CALLERS OF qualified_name [ TRANSITIVE ]
@@ -33907,7 +34193,7 @@ LIST CALLERS OF qualified_name [ TRANSITIVE ]
 LIST CALLEES OF qualified_name [ TRANSITIVE ]
 
 ```
-## [Description](#description-67)
+## [Description](#description-68)
 
 Displays the call relationships for a given element. `LIST CALLERS` finds all elements that call or reference the specified element (incoming edges). `LIST CALLEES` finds all elements that the specified element calls or references (outgoing edges).
 
@@ -33921,7 +34207,7 @@ By default, only direct (one-hop) relationships are shown. With the `TRANSITIVE`
 The fully qualified name of the element to analyze (e.g., `Module.MicroflowName`, `Module.EntityName`). Works with microflows, nanoflows, pages, snippets, entities, and other referenceable elements.
 [**TRANSITIVE**](#transitive)
 Follow the call chain recursively. For `LIST CALLERS`, this finds everything that directly or indirectly leads to the target. For `LIST CALLEES`, this finds everything the target directly or indirectly depends on.
-## [Examples](#examples-79)
+## [Examples](#examples-80)
 
 ### [Find direct callers of a microflow](#find-direct-callers-of-a-microflow)
 
@@ -33957,13 +34243,13 @@ LIST CALLEES OF Sales.ACT_ProcessOrder TRANSITIVE;
 -- mxcli callees -p app.mpr Sales.ACT_ProcessOrder
 
 ```
-## [See Also](#see-also-105)
+## [See Also](#see-also-106)
 
 [LIST REFERENCES / IMPACT / CONTEXT](#list-references--impact-describe-context), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
 # [LIST REFERENCES / IMPACT, DESCRIBE CONTEXT](#list-references--impact-describe-context)
 
-## [Synopsis](#synopsis-68)
+## [Synopsis](#synopsis-69)
 
 ```
 LIST REFERENCES TO qualified_name
@@ -33973,7 +34259,7 @@ LIST IMPACT OF qualified_name
 DESCRIBE CONTEXT OF qualified_name [ DEPTH n ]
 
 ```
-## [Description](#description-68)
+## [Description](#description-69)
 
 These commands provide different views of cross-reference information for a given element. All three require `REFRESH CATALOG FULL` to have been run beforehand.
 
@@ -34007,7 +34293,7 @@ When nothing is found, the message says what was searched. An attribute named on
 The fully qualified name of the element to analyze (e.g., `Module.EntityName`, `Module.MicroflowName`, `Module.Entity.Attribute`, `Module.Enum.Value`).
 [**n** (CONTEXT only)](#n-context-only)
 The number of levels of related elements to include. Defaults to 1 if not specified. Higher values include more surrounding context but produce more output.
-## [Examples](#examples-80)
+## [Examples](#examples-81)
 
 ### [Find all references to an entity](#find-all-references-to-an-entity)
 
@@ -34057,19 +34343,19 @@ MOVE PAGE Sales.CustomerEdit TO NewModule;
 -- mxcli context -p app.mpr Sales.ACT_CreateOrder --depth 3
 
 ```
-## [See Also](#see-also-106)
+## [See Also](#see-also-107)
 
 [LIST CALLERS / CALLEES](#list-callers--callees-1), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
 # [LIST CATALOG TABLES](#list-catalog-tables)
 
-## [Synopsis](#synopsis-69)
+## [Synopsis](#synopsis-70)
 
 ```
 LIST CATALOG TABLES
 
 ```
-## [Description](#description-69)
+## [Description](#description-70)
 
 Lists all available catalog tables along with their column names and types. This is useful for discovering what metadata is queryable before writing `SELECT FROM CATALOG` queries.
 
@@ -34079,7 +34365,7 @@ The output includes both basic tables (populated by `REFRESH CATALOG`) and exten
 
 This statement takes no parameters.
 
-## [Examples](#examples-81)
+## [Examples](#examples-82)
 
 ### [List all catalog tables](#list-all-catalog-tables)
 
@@ -34095,7 +34381,7 @@ LIST CATALOG TABLES;
 SELECT * FROM CATALOG.ENTITIES LIMIT 5;
 
 ```
-## [See Also](#see-also-107)
+## [See Also](#see-also-108)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -34115,13 +34401,13 @@ External SQL connections are independent of the Mendix project connection. You c
 
 # [SQL CONNECT](#sql-connect-1)
 
-## [Synopsis](#synopsis-70)
+## [Synopsis](#synopsis-71)
 
 ```
 SQL CONNECT driver 'dsn' AS alias
 
 ```
-## [Description](#description-70)
+## [Description](#description-71)
 
 Opens a connection to an external database. The connection is identified by the alias, which is used in all subsequent SQL commands to route queries to the correct database.
 
@@ -34143,7 +34429,7 @@ The database driver to use. One of `postgres` (or `pg`, `postgresql`), `oracle` 
 The data source name (connection string) enclosed in single quotes. The format depends on the driver. The DSN is stored in memory only and never appears in session output or logs.
 [**alias**](#alias)
 A short identifier for this connection. Used in all subsequent `SQL alias ...` commands. Must be unique among active connections.
-## [Examples](#examples-82)
+## [Examples](#examples-83)
 
 ### [Connect to PostgreSQL](#connect-to-postgresql)
 
@@ -34176,19 +34462,19 @@ SQL CONNECT pg 'postgres://user:pass@localhost:5432/mydb' AS src;
 SQL CONNECT mssql 'sqlserver://sa:Pass@host:1433?database=db' AS dst;
 
 ```
-## [See Also](#see-also-108)
+## [See Also](#see-also-109)
 
 [SQL DISCONNECT](#sql-disconnect), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
 # [SQL DISCONNECT](#sql-disconnect)
 
-## [Synopsis](#synopsis-71)
+## [Synopsis](#synopsis-72)
 
 ```
 SQL DISCONNECT alias
 
 ```
-## [Description](#description-71)
+## [Description](#description-72)
 
 Closes an external database connection identified by the given alias. After disconnecting, the alias is no longer valid and any subsequent `SQL alias ...` commands will fail.
 
@@ -34198,7 +34484,7 @@ Use `SQL CONNECTIONS` to see which connections are currently active before disco
 
 [**alias**](#alias-1)
 The alias of the connection to close. Must match an active connection established with `SQL CONNECT`.
-## [Examples](#examples-83)
+## [Examples](#examples-84)
 
 ### [Disconnect a connection](#disconnect-a-connection)
 
@@ -34215,13 +34501,13 @@ SQL source SELECT COUNT(*) FROM users;
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-109)
+## [See Also](#see-also-110)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query)
 
 # [SQL (query)](#sql-query)
 
-## [Synopsis](#synopsis-72)
+## [Synopsis](#synopsis-73)
 
 ```
 SQL alias query_text
@@ -34232,7 +34518,7 @@ SQL alias SHOW FUNCTIONS
 SQL alias DESCRIBE table_name
 
 ```
-## [Description](#description-72)
+## [Description](#description-73)
 
 Executes a SQL query or schema discovery command against an external database connection. The alias identifies which connection to use (established with `SQL CONNECT`).
 
@@ -34257,7 +34543,7 @@ The connection alias established with `SQL CONNECT`.
 Any valid SQL for the target database. Sent as-is to the database engine.
 [**table\_name** (DESCRIBE only)](#table_name-describe-only)
 The name of the table or view to describe.
-## [Examples](#examples-84)
+## [Examples](#examples-85)
 
 ### [Query data](#query-data)
 
@@ -34305,19 +34591,19 @@ SQL source SELECT department, COUNT(*) AS headcount
 -- mxcli sql --driver postgres --dsn 'postgres://...' "SELECT * FROM users"
 
 ```
-## [See Also](#see-also-110)
+## [See Also](#see-also-111)
 
 [SQL CONNECT](#sql-connect-1), [SQL DISCONNECT](#sql-disconnect), [SQL GENERATE CONNECTOR](#sql-generate-connector), [IMPORT FROM](#import-from-1)
 
 # [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
-## [Synopsis](#synopsis-73)
+## [Synopsis](#synopsis-74)
 
 ```
 SQL alias GENERATE CONNECTOR INTO module [ TABLES ( table [, ...] ) ] [ VIEWS ( view [, ...] ) ] [ EXEC ]
 
 ```
-## [Description](#description-73)
+## [Description](#description-74)
 
 Generates MDL statements that create a Mendix Database Connector module from the schema of an external database. The generated MDL includes entities, attributes, and associations that mirror the external database tables and views, configured for use with the Mendix Database Connector module.
 
@@ -34339,7 +34625,7 @@ One or more table names to include. If omitted, all user tables are included.
 One or more view names to include. If omitted, no views are included unless `TABLES` is also omitted (in which case all tables are included by default).
 [**EXEC**](#exec)
 Execute the generated MDL immediately instead of printing it. Requires an open Mendix project.
-## [Examples](#examples-85)
+## [Examples](#examples-86)
 
 ### [Preview generated MDL for all tables](#preview-generated-mdl-for-all-tables)
 
@@ -34375,13 +34661,13 @@ SQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-111)
+## [See Also](#see-also-112)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [IMPORT FROM](#import-from-1)
 
 # [IMPORT FROM](#import-from-1)
 
-## [Synopsis](#synopsis-74)
+## [Synopsis](#synopsis-75)
 
 ```
 IMPORT FROM alias QUERY 'sql'
@@ -34392,7 +34678,7 @@ IMPORT FROM alias QUERY 'sql'
   [ LIMIT count ]
 
 ```
-## [Description](#description-74)
+## [Description](#description-75)
 
 Imports data from an external database into a Mendix application’s PostgreSQL database. The command executes the specified SQL query against the external connection, maps the result columns to entity attributes, and inserts rows in batches using direct database insertion.
 
@@ -34424,7 +34710,7 @@ The attribute on the associated entity used to look up the target object for lin
 Number of rows per insert batch. Defaults to a reasonable batch size if not specified.
 [**count** (LIMIT only)](#count-limit-only)
 Maximum number of rows to import from the query result.
-## [Examples](#examples-86)
+## [Examples](#examples-87)
 
 ### [Basic import](#basic-import-1)
 
@@ -34469,7 +34755,7 @@ IMPORT FROM source QUERY 'SELECT name, email FROM employees WHERE active = true'
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-112)
+## [See Also](#see-also-113)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -34484,7 +34770,7 @@ Statements for viewing and modifying Mendix project settings. Settings are organ
 
 # [LIST / DESCRIBE SETTINGS](#list--describe-settings)
 
-## [Synopsis](#synopsis-75)
+## [Synopsis](#synopsis-76)
 
 ```
 LIST SETTINGS
@@ -34494,7 +34780,7 @@ DESCRIBE SETTINGS
 DESCRIBE SETTINGS CONFIGURATION 'name'
 
 ```
-## [Description](#description-75)
+## [Description](#description-76)
 
 Displays project settings. `LIST SETTINGS` provides a compact overview, one row per section. `DESCRIBE SETTINGS` outputs every section as re-executable MDL — the `ALTER SETTINGS` and `CREATE OR MODIFY CONFIGURATION` statements that recreate it. `DESCRIBE SETTINGS CONFIGURATION 'name'` outputs one configuration only, and names the ones that exist when there is none by that name. There is no form that describes another single section.
 
@@ -34510,7 +34796,7 @@ Both also show the **project ID** — the `$ID` of the `Projects$Project` root u
 | Workflows | `ALTER SETTINGS WORKFLOWS (…)` and one `ADD OR MODIFY GROUP` per workflow group. |
 | Web UI | `ALTER SETTINGS WEBUI (OptimizedClient: …)` — `Yes` (React client), `No` (classic client) or `MigrationMode`. |
 
-## [Examples](#examples-87)
+## [Examples](#examples-88)
 
 ### [Show settings overview](#show-settings-overview)
 
@@ -34542,13 +34828,13 @@ descriptions. It reads the project settings directly, so no catalog refresh is
 needed. Groups are created with
 [`ALTER SETTINGS WORKFLOWS ... GROUP`](#alter-settings-1).
 
-## [See Also](#see-also-113)
+## [See Also](#see-also-114)
 
 [ALTER SETTINGS](#alter-settings-1), [LIST CONSTANT VALUES](#list-constants)
 
 # [ALTER SETTINGS](#alter-settings-1)
 
-## [Synopsis](#synopsis-76)
+## [Synopsis](#synopsis-77)
 
 ```
 ALTER SETTINGS RUNTIME ( key: value, ... )
@@ -34576,7 +34862,7 @@ ALTER SETTINGS WORKFLOWS DROP GROUP 'name'
 ALTER SETTINGS WEBUI ( OptimizedClient: 'Yes' | 'No' | 'MigrationMode' )
 
 ```
-## [Description](#description-76)
+## [Description](#description-77)
 
 Modifies project settings by category. Each category has its own syntax and available keys. Properties are written `Key: value` in a parenthesised list, as in every other MDL statement; the older `key = value, ...` without parentheses still runs and warns `MDL-DEPR060`, and `mxcli fmt --upgrade` rewrites it.
 
@@ -34615,7 +34901,7 @@ The name of the configuration, enclosed in single quotes.
 The constant, written `@Module.Name`.
 [**config** (CONSTANT only)](#config-constant-only)
 The name of the runtime configuration where the constant override applies, enclosed in single quotes.
-## [Examples](#examples-88)
+## [Examples](#examples-89)
 
 ### [Set the after-startup microflow](#set-the-after-startup-microflow)
 
@@ -34789,7 +35075,7 @@ Studio Pro’s defaults: `Hsqldb`, runtime port 8080, admin port 8090.
 DROP CONFIGURATION 'Staging';
 
 ```
-## [See Also](#see-also-114)
+## [See Also](#see-also-115)
 
 [SHOW / DESCRIBE SETTINGS](#list--describe-settings)
 
@@ -34807,13 +35093,13 @@ Statements for organizing project structure: creating modules and folders, and m
 
 # [CREATE MODULE](#create-module)
 
-## [Synopsis](#synopsis-77)
+## [Synopsis](#synopsis-78)
 
 ```
 CREATE MODULE module_name
 
 ```
-## [Description](#description-77)
+## [Description](#description-78)
 
 Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with default settings and an empty domain model.
 
@@ -34821,7 +35107,7 @@ Creates a new module in the Mendix project. Modules are the top-level organizati
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
-## [Examples](#examples-89)
+## [Examples](#examples-90)
 
 ### [Create a module](#create-a-module)
 
@@ -34838,19 +35124,19 @@ CREATE MODULE Inventory;
 CREATE MODULE Reporting;
 
 ```
-## [See Also](#see-also-115)
+## [See Also](#see-also-116)
 
 [CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
 
 # [CREATE FOLDER](#create-folder)
 
-## [Synopsis](#synopsis-78)
+## [Synopsis](#synopsis-79)
 
 ```
 CREATE FOLDER module_name/folder_path
 
 ```
-## [Description](#description-78)
+## [Description](#description-79)
 
 Creates a folder within a module for organizing documents such as pages, microflows, and snippets. Nested folders use the `/` separator. If intermediate folders in the path do not exist, they are created automatically.
 
@@ -34862,7 +35148,7 @@ Note: Folders can also be created implicitly by specifying a `FOLDER` clause whe
 The name of the module in which to create the folder.
 [**folder\_path**](#folder_path)
 The path of the folder to create within the module. Use `/` to create nested folders (e.g., `Orders/Processing`).
-## [Examples](#examples-90)
+## [Examples](#examples-91)
 
 ### [Create a simple folder](#create-a-simple-folder)
 
@@ -34916,19 +35202,19 @@ CREATE CONSTANT Encryption.EncryptionKey FOLDER 'Private - String en\/de-cryptio
 `DESCRIBE` writes the escape for you, so its output files the document back
 where it was. A backslash before any other character is an ordinary character.
 
-## [See Also](#see-also-116)
+## [See Also](#see-also-117)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
 # [DROP FOLDER](#drop-folder)
 
-## [Synopsis](#synopsis-79)
+## [Synopsis](#synopsis-80)
 
 ```
 DROP FOLDER 'folder_path' IN module_name;
 
 ```
-## [Description](#description-79)
+## [Description](#description-80)
 
 Removes an empty folder from a module. The folder must contain no documents (pages, microflows, etc.) and no sub-folders. If the folder is not empty, the command returns an error indicating how many child units remain.
 
@@ -34940,7 +35226,7 @@ Nested folder paths use the `/` separator. Only the leaf folder is deleted; pare
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
 [**module\_name**](#module_name-2)
 The name of the module containing the folder.
-## [Examples](#examples-91)
+## [Examples](#examples-92)
 
 ### [Drop a simple folder](#drop-a-simple-folder)
 
@@ -34974,13 +35260,13 @@ DROP FOLDER 'Processing' IN MyModule;
 | `folder not found: 'path' in Module` | No folder exists at the given path in the module |
 | `module not found: Module` | The specified module does not exist |
 
-## [See Also](#see-also-117)
+## [See Also](#see-also-118)
 
 [CREATE FOLDER](#create-folder), [CREATE MODULE](#create-module), [MOVE](#move), [MOVE FOLDER](#move-folder)
 
 # [MOVE](#move)
 
-## [Synopsis](#synopsis-80)
+## [Synopsis](#synopsis-81)
 
 ```
 MOVE document_type qualified_name TO module_name
@@ -34988,7 +35274,7 @@ MOVE document_type qualified_name TO FOLDER 'folder_path'
 MOVE document_type qualified_name TO FOLDER 'folder_path' IN module_name
 
 ```
-## [Description](#description-80)
+## [Description](#description-81)
 
 Moves a document to a different folder or module. Every top-level document type is supported, spelled the way `DESCRIBE` spells it. When moving to a folder, missing intermediate folders are created automatically. Cross-module moves change the qualified name of the document, which may break by-name references elsewhere in the project.
 
@@ -35025,7 +35311,7 @@ The current `Module.Name` of the document to move.
 The target module. When specified without `FOLDER`, moves the document to the module root.
 [**folder\_path**](#folder_path-2)
 The target folder path within the module. Use `/` for nested paths (e.g., `'Orders/Processing'`). Enclosed in single quotes.
-## [Examples](#examples-92)
+## [Examples](#examples-93)
 
 ### [Move a page to a folder in the same module](#move-a-page-to-a-folder-in-the-same-module)
 
@@ -35107,13 +35393,13 @@ LIST IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
-## [See Also](#see-also-118)
+## [See Also](#see-also-119)
 
 [CREATE MODULE](#create-module), [CREATE FOLDER](#create-folder)
 
 # [MOVE FOLDER](#move-folder)
 
-## [Synopsis](#synopsis-81)
+## [Synopsis](#synopsis-82)
 
 ```
 MOVE FOLDER qualified_name TO FOLDER 'folder_path';
@@ -35121,7 +35407,7 @@ MOVE FOLDER qualified_name TO FOLDER 'folder_path' IN module_name;
 MOVE FOLDER qualified_name TO module_name;
 
 ```
-## [Description](#description-81)
+## [Description](#description-82)
 
 Moves a folder (and all its contents) to a different location: another folder within the same module, a folder in a different module, or a module root. The folder’s contents (documents and sub-folders) move with it.
 
@@ -35137,7 +35423,7 @@ The source folder in `Module.FolderName` format. Use double quotes for paths wit
 The target folder path. Use `/` for nested folders.
 [**module\_name**](#module_name-4)
 The target module name (for cross-module moves).
-## [Examples](#examples-93)
+## [Examples](#examples-94)
 
 ### [Move a folder into another folder](#move-a-folder-into-another-folder)
 
@@ -35163,7 +35449,7 @@ MOVE FOLDER MyModule.SharedWidgets TO CommonModule;
 MOVE FOLDER MyModule.Templates TO FOLDER 'Shared/Templates' IN CommonModule;
 
 ```
-## [See Also](#see-also-119)
+## [See Also](#see-also-120)
 
 [CREATE FOLDER](#create-folder), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -35180,7 +35466,7 @@ are stored as `Projects$JarDependency` entries in `Projects$ModuleSettings`.
 
 # [ALTER MODULE … JAR DEPENDENCY](#alter-module--jar-dependency)
 
-## [Synopsis](#synopsis-82)
+## [Synopsis](#synopsis-83)
 
 ```
 ALTER MODULE module_name
@@ -35207,7 +35493,7 @@ ALTER MODULE module_name
   DROP JAR DEPENDENCY 'group:artifact';
 
 ```
-## [Description](#description-82)
+## [Description](#description-83)
 
 Manages Maven/JAR dependencies stored in a module’s `Projects$ModuleSettings`
 document. These are the same dependencies shown in Studio Pro under
@@ -35227,7 +35513,7 @@ The three components of a Maven coordinate. All three are required for `ADD`.
 [**included**](#included)
 When `false`, the dependency is declared but excluded from the classpath
 at build time. Defaults to `true`.
-## [Examples](#examples-94)
+## [Examples](#examples-95)
 
 ### [Add a new dependency](#add-a-new-dependency)
 
@@ -35302,13 +35588,13 @@ Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
 when the project is opened in Studio Pro or built with `mxcli docker build`.
 
-## [See Also](#see-also-120)
+## [See Also](#see-also-121)
 
 [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
 # [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
-## [Synopsis](#synopsis-83)
+## [Synopsis](#synopsis-84)
 
 ```
 LIST JAR DEPENDENCIES;
@@ -35316,7 +35602,7 @@ LIST JAR DEPENDENCIES IN module;
 DESCRIBE JAR DEPENDENCY module 'group:artifact';
 
 ```
-## [Description](#description-83)
+## [Description](#description-84)
 
 `LIST JAR DEPENDENCIES` shows all Maven/JAR dependencies declared across the
 project, optionally filtered to a single module. `DESCRIBE JAR DEPENDENCY`
@@ -35332,7 +35618,7 @@ The module name containing the dependency (for `DESCRIBE`).
 [**‘group:artifact’**](#groupartifact-1)
 The Maven coordinate identifying the dependency, in `groupId:artifactId`
 format (no version). Example: `'org.duckdb:duckdb_jdbc'`.
-## [Examples](#examples-95)
+## [Examples](#examples-96)
 
 ### [List all JAR dependencies](#list-all-jar-dependencies)
 
@@ -35377,7 +35663,7 @@ alter module MyModule
 
 The output is suitable for copying into a script and re-executing.
 
-## [See Also](#see-also-121)
+## [See Also](#see-also-122)
 
 [ALTER MODULE JAR DEPENDENCY](#alter-module--jar-dependency)
 
@@ -35402,13 +35688,13 @@ needs no `;`. A script file is read by its own header; see
 
 # [SET](#set-1)
 
-## [Synopsis](#synopsis-84)
+## [Synopsis](#synopsis-85)
 
 ```
 SET variable = value
 
 ```
-## [Description](#description-84)
+## [Description](#description-85)
 
 Sets a session variable that controls REPL behavior. Session variables persist for the duration of the session and are reset when the REPL exits. Variable names are case-insensitive.
 
@@ -35426,7 +35712,7 @@ The value to assign. Can be a string (in single quotes), a boolean (`TRUE` or `F
 | `verbose` | `TRUE`, `FALSE` | Enable verbose output for debugging |
 | `AUTOCOMMIT` | `TRUE`, `FALSE` | Automatically save changes after each mutation |
 
-## [Examples](#examples-96)
+## [Examples](#examples-97)
 
 ### [Set output format to JSON](#set-output-format-to-json)
 
@@ -35446,19 +35732,19 @@ SET verbose = TRUE;
 SET AUTOCOMMIT = TRUE;
 
 ```
-## [See Also](#see-also-122)
+## [See Also](#see-also-123)
 
 [SHOW STATUS](#show-status), [OPEN PROJECT](#open-project)
 
 # [SHOW STATUS](#show-status)
 
-## [Synopsis](#synopsis-85)
+## [Synopsis](#synopsis-86)
 
 ```
 STATUS
 
 ```
-## [Description](#description-85)
+## [Description](#description-86)
 
 Displays the current session status including the connection state, the open project path, the Mendix version of the project, the MPR format version, and the values of any session variables. This is useful for confirming which project is loaded and verifying session configuration.
 
@@ -35466,7 +35752,7 @@ Displays the current session status including the connection state, the open pro
 
 This statement takes no parameters.
 
-## [Examples](#examples-97)
+## [Examples](#examples-98)
 
 ### [Check session status](#check-session-status)
 
@@ -35492,7 +35778,7 @@ STATUS;
 LIST MODULES;
 
 ```
-## [See Also](#see-also-123)
+## [See Also](#see-also-124)
 
 [OPEN PROJECT](#open-project), [CLOSE PROJECT](#close-project), [SET](#set-1)
 
@@ -39657,7 +39943,7 @@ authoring this is the difference between one cheap turn and dozens of expensive
 ones — and it is why, even though a script “costs” ~60 tool calls, running it
 *through mxcli* keeps that cost out of the model’s context.
 
-## [See also](#see-also-124)
+## [See also](#see-also-125)
 
 - [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp) — how to set up
   the connection and run scripts against a live model.
@@ -42509,6 +42795,31 @@ ignored or the header fails only when a mail is sent.
 `CheckServerIdentity`; rename the header, e.g.
 `Headers: ('X-Correlation-Id': 'value')`.
 
+### [MDL-TEMPLATE01: A message written as an expression followed by `with (…)`](#mdl-template01-a-message-written-as-an-expression-followed-by-with-)
+
+```
+log: the message is an expression, so `with (…)` has no template to fill — the
+parameters fill the {n} placeholders of a message written as a string. [MDL-TEMPLATE01]
+
+```
+
+**Cause:** The text of a `log` message, a `send email` subject or body, a `show message`
+and a `validation feedback` message is a template: a string whose `{n}` placeholders
+`with (…)` fills. An expression is the whole text, stored as the template `'{1}'` with the
+expression as its parameter, so it has no placeholder for further parameters, and Mendix
+cannot store an expression as a template’s text. Before ako/mxcli#1683, `log` and
+`send email` stored the expression’s source as the template — the log line read `$Msg` —
+and `show message` / `validation feedback` stored the parameters where no placeholder read
+them. `check`, `exec` and `mx check` passed all four. `check` and `exec` now refuse it with
+one shared function, as MDL-REST05 does for `call rest service`.
+
+**Solution:** Write the template as a string, or the expression without `with (…)`:
+
+```
+log info node 'Orders' 'Order {1} shipped' with ({1} = $Order/Number);
+log info node 'Orders' $Msg;
+
+```
 ### [MDL-JSONNUM01: A locale-dependent number in hand-built JSON](#mdl-jsonnum01-a-locale-dependent-number-in-hand-built-json)
 
 ```

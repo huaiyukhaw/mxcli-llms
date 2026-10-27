@@ -1,4 +1,4 @@
-## [Examples](#examples-97)
+## [Examples](#examples-98)
 
 ### [Check session status](#check-session-status)
 

@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.28.0 @ 9eeb6e0 | Generated: 2026-10-26T07:20:25Z
+Version: mxcli v0.28.0 @ 2be9331 | Generated: 2026-10-27T07:12:01Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -243,9 +243,10 @@ may have changed. A project keeps them in step with…
 - [CREATE ASSOCIATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/domain-model/create-association.md): Every clause after TO is optional. Left out, they mean TYPE Reference OWNER Default STORAGE COLUMN ON DELETE SET NULL , and…
 - [DROP ASSOCIATION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/domain-model/drop-association.md): Remove an association:
 - [CREATE CONSTANT](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/domain-model/create-constant.md)
-- [Microflow Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/index.md): Statements for creating and dropping microflows, nanoflows, and Java actions.
+- [Microflow Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/index.md): Statements for creating, altering and dropping microflows, nanoflows, and Java actions.
 - [CREATE MICROFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-microflow.md)
 - [CREATE NANOFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-nanoflow.md)
+- [ALTER MICROFLOW / NANOFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/alter-microflow.md)
 - [DROP MICROFLOW / NANOFLOW](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/drop-microflow.md)
 - [CREATE JAVA ACTION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-java-action.md)
 - [CREATE JAVASCRIPT ACTION](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/microflow/create-javascript-action.md)
