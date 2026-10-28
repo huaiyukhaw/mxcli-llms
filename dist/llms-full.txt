@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ 2be9331
-Generated: 2026-10-27T07:12:01Z
+Version:   mxcli v0.28.0 @ 8b6f421
+Generated: 2026-10-28T07:50:58Z
 
 ---
 
@@ -6646,7 +6646,7 @@ refuse the spelling; until then it only warns.
 
 ### [Changes of meaning (`MDL-V1-*`)](#changes-of-meaning-mdl-v1-)
 
-23 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
+24 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
 
 | Code | Without the header (mdl 0) | Under `mdl 1;` | Decided at | Rewritten by `fmt --upgrade` |
 | --- | --- | --- | --- | --- |
@@ -6673,6 +6673,7 @@ refuse the spelling; until then it only warns.
 | `MDL-V1-TEMPLATEATTR` | a text-template parameter bound to a non-String attribute (`{1} = $Order.Total`) was stored as `toString($Order/Total)` by earlier mxcli releases | an attribute reference, rendered with the attribute’s formatting, as Studio Pro stores it | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-VIEWAUTONUMBER` | a view entity attribute declared `autonumber` over an AutoNumber column passes check, and mxbuild reports CE6770 “View Entity is out of sync with the OQL Query” | a check error that names the attribute and suggests `long`, the type the view gives the column | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-WHILE` | `while <condition>` accepts a body without `begin` and an `end` without `while` | an error: a while loop is `while <condition> begin … end while;`, like `loop … begin … end loop;` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-WIDGETPROP` | A property a built-in page element does not take (`Caption:` on a textbox, `Label:` on a button, a misspelt key) is accepted and dropped on write | a refusal (MDL-WIDGET52), with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
@@ -8944,6 +8945,14 @@ RETRIEVE $RecentOrders FROM Sales.Order
 
 With `FIRST` the result is a single entity object (Mendix’s “First object” range). Otherwise the result is a list, including with `LIMIT`/`OFFSET`. A bare `LIMIT 1` is a list of one (a script file without the header reads it differently; see [Language Versions and Migration](#language-versions-and-migration)). `describe` prints the object range as `FIRST`.
 
+A WHERE clause cannot reference a constant. `WHERE Total > @Sales.MinimumTotal` parses, and `mxcli check` refuses it (MDL-XPATH03): Mendix rejects a constant in any XPath constraint with CE0161, in a data source and an access rule as much as in a retrieve. Assign the constant to a variable and compare with the variable:
+
+```
+DECLARE $Minimum Decimal = @Sales.MinimumTotal;
+RETRIEVE $LargeOrders FROM Sales.Order
+  WHERE Total > $Minimum;
+
+```
 ### [RETRIEVE by Association](#retrieve-by-association)
 
 Retrieves objects by following an association from an existing object:
@@ -8957,7 +8966,11 @@ RETRIEVE $Customer FROM $Order/Sales.Order_Customer;
 
 ```
 
-The association path uses the format `$Variable/Module.AssociationName`.
+The association path uses the format `$Variable/Module.AssociationName`. A bare
+name (`$Order/Order_Customer`) is resolved against the variable’s entity — through
+its generalizations, from either end of the association — when exactly one
+association of that name fits, and stored qualified; a name that fits none, or
+more than one, is refused by `mxcli check -p --references` and by `exec`.
 
 ### [RETRIEVE from Variable List](#retrieve-from-variable-list)
 
@@ -10878,6 +10891,8 @@ WIDGET_TYPE widgetName (Property: value, ...) [{ children }]
 
 ```
 
+**Each built-in widget takes its own properties.** A property the widget does not take — `Caption:` on a `TEXTBOX` (an input’s label is `Label:`), `Label:` on an `ACTIONBUTTON`, `Visible:` on a `SNIPPETCALL` (Mendix stores no visibility for one), a misspelt key — is refused under `mdl 1;` by `check` and by `exec`, with nothing written (MDL-WIDGET52). Without the header it is dropped as before and warned about (MDL-V1-WIDGETPROP). The message lists the properties that widget takes.
+
 **The list below is not the boundary.** The built-in Mendix widgets are documented here because they have fixed, hand-written property sets. Every **pluggable or custom widget** installed in the project is also written by its own name, with a body derived from the widget’s definition — see [Any installed widget](#any-installed-widget) below. If a widget is in `widgets/`, MDL can name it.
 
 ## [Widget Categories](#widget-categories)
@@ -10980,7 +10995,7 @@ CREATE PAGE MyModule.Task_Tabs (
 | `BadgeParams` | The badge template’s parameters, resolved against the enclosing data container | `BadgeParams: ({1} = OpenCount)` |
 | `Visible` | Visibility condition | `Visible: $Panel/ShowDone` |
 
-A tab page has no `Class`, `Style` or `CaptionParams`: Mendix stores none for it. A `BadgeParams` without a `Badge`, or a `Badge` that is not a quoted template, is refused (MDL-WIDGET51); `Badge` on any other widget is not stored, and `check` says so (MDL-WIDGET07).
+A tab page has no `Class`, `Style` or `CaptionParams`: Mendix stores none for it. A `BadgeParams` without a `Badge`, or a `Badge` that is not a quoted template, is refused (MDL-WIDGET51); `Badge` on any other widget is not stored, and is refused (MDL-WIDGET52).
 
 ## [Data Widgets](#data-widgets)
 
@@ -11203,7 +11218,7 @@ All input widgets share common properties:
 
 | Property | Description | Example |
 | --- | --- | --- |
-| `Label` | Field label text | `Label: 'Customer Name'` |
+| `Label` | Field label text — not `Caption:`, which is a button’s (MDL-WIDGET52) | `Label: 'Customer Name'` |
 | `Attribute` | Entity attribute to bind to | `Attribute: Name` |
 | `Editable` | Editability: `Always`, `Never`, `true`/`false`, or a condition expression (bare or quoted) | `Editable: Never` |
 | `Visible` | Visibility expression | `Visible: '$showField'` |
@@ -18179,11 +18194,15 @@ list holding a number) is not silently ignored — the rule runs with its defaul
 and the run reports a warning naming the option, listed with the rules that could
 not run and kept out of the score.
 
-QUAL004 counts a microflow as called only when something **in the model** runs
-it (a call, a schedule, a page or widget, a published service, a project
-setting). A call from an MDL test script (`tests/*.test.mdl`) is not in the
+QUAL004 counts a microflow or page as used when anything in the catalog’s
+reference graph points at it — exactly what `mxcli refs` lists: a call, a page
+or widget, the navigation (a home page or home microflow, a menu item), a
+schedule, a published service, an event handler, a project setting. Every edge
+kind counts, including ones the catalog adds later, so the rule cannot fall
+behind it. A call from an MDL test script (`tests/*.test.mdl`) is not in the
 model, so a helper used only by tests is reported; give such helpers a prefix
-and list it in `entry_point_prefixes`.
+and list it in `entry_point_prefixes`. If `refs` finds nothing for a document
+you know is live, the gap is in the catalog, not the rule.
 
 ### [CONV018 options](#conv018-options)
 
@@ -19505,6 +19524,35 @@ a `change`, a `create` — is not caught; move it into a microflow and call that
 The same handler turns an unexpected error in a test without `@throws` into a
 FAIL reading `exception during execution: <message>`.
 
+### [A call with its own error handling](#a-call-with-its-own-error-handling)
+
+A call that already has an `on error` clause keeps it and gets no second
+handler, so a test runs the statement exactly as production code does. What the
+test then reports depends on the clause (measured on Mendix 11.13 with a Java
+action that throws):
+
+| Clause on the call | Without `@throws` | With `@throws` |
+| --- | --- | --- |
+| none | FAIL `exception during execution: <message>` | PASS when the message matches |
+| `on error rollback` | same as none — it is Mendix’s default spelled out, so the runner’s handler takes its place | same as none |
+| `on error continue` | the error is swallowed; the assertions decide (`$r` is empty) | FAIL `expected an exception but none was thrown` |
+| custom handler that ends normally | FAIL `not every assertion was evaluated` when an assertion reads the call’s result; an assertion on what the handler did is evaluated | FAIL `expected an exception but none was thrown` |
+| custom handler that re-raises (`raise error`) | ERROR with the message — the error leaves the test microflow | ERROR with the message |
+
+A custom handler that ends normally rejoins the flow after every statement that
+reads the failed call’s output, because that variable does not exist on the
+error path. The assertions read exactly that, so the runner counts the
+assertions it evaluated and fails the test when the count is short, instead of
+reporting a pass for assertions that never ran. To test the handler’s path,
+assert on something the handler sets: `declare $Failed Boolean = false;` before
+the call, `set $Failed = true;` inside its handler, and `@expect $Failed = true`.
+That assertion does not read the call’s result, so it is evaluated, and passes
+only when the handler ran.
+
+Under the Docker / `--legacy-runner` path an error that leaves the test — the
+re-raising row above — ends the whole runner: that test is reported as an ERROR
+that started and gave no verdict, and every later test as not executed.
+
 ## [`@setup`](#setup)
 
 Names a **microflow** to call before the test’s own statements — a fixture in a
@@ -19928,6 +19976,14 @@ This keeps a suite behaving the same under `--local` and `--attach`. Note that
 what the startup microflow writes is not covered by `@cleanup rollback` — it
 runs at boot, outside any test’s transaction.
 
+The generated startup flow, `MxTest.RegisterEndpoint`, **applies entity
+access**, so it can call your after-startup microflow whichever way that one is
+set: Mendix refuses a microflow that does not apply entity access calling one
+that does (CE0114), and allows the other direction. Your microflow still runs
+with its own setting. A build error located in `MxTest.RegisterEndpoint` or
+`MxTest.RegisterTestEndpoint` is reported as mxcli’s, not your project’s — those
+documents exist only for the run.
+
 ### [`@cleanup`: what happens to a test’s data](#cleanup-what-happens-to-a-tests-data)
 
 `rollback` is the **default**, so a test’s database writes do not survive it.
@@ -20121,13 +20177,52 @@ page /p/Order_Overview  title="Orders"  STILL LOADING  rows=0  text=37  console-
 
 ```
 
+The sign-in form is not waited for: the client keeps a request open behind it, so
+it would otherwise run out the whole `--wait` and then read as still loading. Once
+the form holds still it is measured, and it fails as the sign-in form.
+
 A page with a list view, data grid or gallery always reports `rows=`, `rows=0`
 included, so an empty list does not read the same as a page without one.
+
+When the browser ends up somewhere other than the URL it was sent to, the verdict
+says where, as `url=`, right after the page — the title and heading that follow
+describe the page at *that* URL. A `/p/` URL that ends anywhere else fails: the
+runtime answers every `/p/<x>` with a redirect to `/#/<x>`, and the client sends one
+it has no page for to the home page, with HTTP 200 throughout (ako/mxcli#998). The
+match is exact, so `/p/Items` and `/p/items/` fail where `/p/items` passes.
+
+```
+page /p/doesnotexist  url=/  title="Mendix - Homepage"  h="Welcome to your homepage"  text=1925  console-errors=0
+  ALERT  The page you requested was not found. You are redirected to the home page.
+  FAIL   the browser ended on /, not on /p/doesnotexist: the client sends a /p/ URL it has no page for to the home page
+
+```
+
+A page that ends on the sign-in form (`url=/login.html#/items`) fails for that
+reason only.
+
+A page the signed-in user’s roles may not open ends on the sign-in form too, but
+with `messageCode=403` in the URL: the runtime refuses the client’s session request
+for that page with 403, and the client sends the browser to
+`/login.html?messageCode=403#/<page>`. The form shows no message, so the URL is the
+only thing that tells it from “not signed in”. It fails as access denied, naming who
+the check signed in as; signing in again would get the same answer, so the check
+does not:
+
+```
+page /p/secret  url=/login.html?messageCode=403#/secret  ACCESS DENIED  title="Login"  h="Sign in"  text=34  console-errors=1
+  ERR    [Startup] An error occurred while creating a new session. i_: Internal server error …
+  HTTP   403 POST /xas/
+  FAIL   access denied: signed in as demo_user (user role User), the runtime refused /p/secret (403)
+
+```
+
+Check the page’s allowed module roles (`mxcli -p app.mpr -c "show access on page Module.Page"`) against the user role’s (`describe user role R`).
 
 | Exit status | Meaning |
 | --- | --- |
 | 0 | every page passed |
-| 1 | a page failed: still loading when measured, HTTP error, sign-in form instead of the page (or a 401 from the runtime), error banner or error dialog, console error, failed same-origin request, or a failed `--assert-*` |
+| 1 | a page failed: still loading when measured, HTTP error, access denied to the signed-in user (403), sign-in form instead of the page (or a 401 from the runtime), a `/p/` URL that ended elsewhere (no page has that URL), error banner or error dialog, console error, failed same-origin request, or a failed `--assert-*` |
 | 2 | the check could not run (no Node/Playwright, sign-in rejected, bad flag) |
 
 A warning banner or validation message is shown but does not fail the page.
@@ -20141,12 +20236,34 @@ A warning banner or validation message is shown but does not fail the page.
 | `-p app.mpr` only | a demo user of the project (an administrator first), when demo users are enabled |
 | none | nobody; a secured page fails with “the sign-in form is showing” |
 
+The sign-in happens on the **host of the pages checked**, not on `--base-url`: a
+session’s cookies belong to the host they were set on, so one signed in on
+`localhost` is not sent to `127.0.0.1` or to another name for the same app. A page
+given as a full URL on another host (`mxcli playwright check http://frontend.local:8180/ -p app.mpr`) gets a session of its own; before ako/mxcli#1216 it was checked with
+the base URL’s session, showed the sign-in form on every run, and signed in again
+on each.
+
 The session is saved as a Playwright storage state under
 `<project>/.mxcli/playwright-check/<host>-<user>.json` (or `~/.mxcli/playwright-check/`
 without `-p`) and reused by the next check, so repeated checks do not sign in again —
-on the unlicensed runtime every sign-in takes one of a handful of session slots. When
-the runtime no longer knows the session (it restarted), the check signs in once more
-and reloads only the affected pages. `--fresh-login` ignores the saved session.
+on the unlicensed runtime every sign-in takes one of a handful of session slots, and
+a reused session stays one session however many checks run. When the runtime no
+longer knows the session (it restarted), the check signs in once more and reloads
+only the affected pages.
+
+- `--fresh-login` signs the saved session out, then signs in again.
+- `--sign-out` ends the run signed out and keeps nothing for the next check — for a
+  last check in a script that should leave no session behind.
+- A session the run signed in that got no page past the sign-in form is signed out
+  rather than kept: kept, every later check would sign in again beside it. A page
+  the user’s roles may not open does not count — the runtime knew the session and
+  refused the page — so that session is kept and reused, and is not renewed either.
+
+Signing out is best effort and never changes the verdict; a sign-out that does not
+complete is reported on stderr, and that session expires on its own. When the
+runtime refuses a sign-in, the check reads `<project>/.mxcli/runtime.log` for the
+cause — the unlicensed runtime’s session cap shows on the sign-in page only as
+“Sign in failed”.
 
 The sign-in types into the Mendix login form, so the “setting `.value` leaves the
 field empty” problem of hand-written `eval` logins does not arise. When the app root
@@ -20180,8 +20297,9 @@ mxcli playwright check /p/Customer_Overview -p app.mpr \
 | `--assert-text` |  | Text the page must contain (repeatable) |
 | `--assert-count` |  | `SELECTOR OP N` that must hold (repeatable) |
 | `--screenshot` |  | Also write a PNG here; the path is printed |
-| `--wait` | `4s` | Longest a page may keep changing after it mounts before it is measured |
-| `--fresh-login` | `false` | Ignore the saved session |
+| `--wait` | `15s` | Longest a page may keep loading after it mounts (open requests, changing text) before it is measured; the sign-in form is measured as soon as it holds still |
+| `--fresh-login` | `false` | Sign the saved session out and sign in again |
+| `--sign-out` | `false` | Sign out when the check is done instead of keeping the session |
 | `--allow-console-errors` | `false` | Report console errors without failing on them |
 
 The check needs Node and the Playwright package (`require('playwright')` or the
@@ -20591,6 +20709,32 @@ mxcli diff-local -p app.mpr --ref main..feature-branch
 
 # Three-dot range (changes since common ancestor)
 mxcli diff-local -p app.mpr --ref main...feature-branch
+
+```
+
+With three dots the old side is the merge base of the two revisions, labelled
+`(merge base of main and feature-branch)`, so the diff shows only what the
+branch changed. With two dots it is `main`’s tip, so anything `main` changed
+since the branch split also shows up, reversed. An empty side means `HEAD`, as
+it does to git (`--ref main..` is `main..HEAD`).
+
+### [What diff-local shows](#what-diff-local-shows)
+
+Each changed `.mxunit` is rendered as MDL at both revisions and the two
+renderings are diffed. Domain models, microflows, nanoflows, pages, snippets,
+layouts, enumerations, modules and the project settings render as MDL — a
+domain model’s entity access rules as the `grant` statements `describe entity`
+prints, the settings as `describe settings` prints them, except that configuration
+constant values are masked, since they often hold secrets. A changed value
+still shows, as `value <masked: old value>` against `value <masked: new value>`.
+
+A unit that changed only in properties its rendering leaves out — navigation,
+project or module security, a page’s allowed roles, an entity index — is
+printed as one line naming the properties that changed, never their values,
+rather than counted in the summary and left blank:
+
+```
+Modified: ModuleSecurity MyFirstModule: changed in properties the MDL rendering does not show: ModuleRoles (1 -> 2 items)
 
 ```
 ### [MPR v2 Requirement](#mpr-v2-requirement)
@@ -21231,7 +21375,7 @@ stopped: pid 30133 in 300ms
 | Command | Does | Exit |
 | --- | --- | --- |
 | `run --local … --detach` | starts the loop in its own session (it survives the calling shell), writes `.mxcli/run-state.json` and `.mxcli/run.log`, returns once the app serves. A failed boot prints the reason and the last log lines. A second run for the same project is refused. | 0 / 1 |
-| `run status` | one line: URL, pid, uptime, last build and how it was applied, a build in progress, a change still pending. A state file whose process is gone is reported as stopped, with any leftover processes. | 0 running, 3 stopped, 4 starting |
+| `run status` | one line: URL, pid, uptime, last build and how it was applied, a build in progress, a change still pending. A state file whose process is gone is reported as stopped, with any leftover processes. A run whose runtime stopped on its own says why when its log does — `stopped: trial licence time limit reached at 18:43:16 (runtime.log); restart with mxcli run restart -p …`. | 0 running, 3 stopped, 4 starting |
 | `run wait [--timeout 5m]` | blocks until the watch loop has applied the model as it is now, or failed to; prints `applied: build #N via reload|restart in …` or `failed:` with the CE codes / SCSS error lines. `--ready` waits for the boot instead; `--since N` for any build newer than N. | 0 applied, 1 failed, 2 timeout, 3 not running |
 | `run stop` | asks the run to shut down, waits until it is gone, then stops anything left in its process session — so no orphaned `runtimelauncher` or mxbuild JVM, even from a run killed with `-9`. Nothing running is a no-op. | 0 |
 | `run restart` | `run stop`, then `--detach` again with the arguments recorded in the state file. | as `--detach` |
@@ -21249,6 +21393,23 @@ a change, and `wait` says so (exit 1).
 `run status|wait|stop` also work on a foreground `run --local` started in another
 terminal — every run publishes its state. On Windows, `run stop` ends the process
 tree without a graceful shutdown.
+
+### [`.mxcli/run-local.json`](#mxclirun-localjson)
+
+Besides `run-state.json`, a run publishes **`.mxcli/run-local.json`** (mode 0600): the
+app and admin ports, the admin password and the boot configuration — how `mxcli oql`,
+`mxcli log`, `constant set --apply`, and any tool that calls the admin API, reach the
+app.
+
+- **Written** once the app serves, carrying the run’s pid.
+- **Removed** when that run ends — a requested stop, or the runtime stopping on its own
+  (the trial licence’s time limit, a crash) — immediately after `run-state.json`
+  records `"phase": "stopped"`, `"ended"` and a one-line `"reason"`. `run stop`
+  removes it for a run that was killed outright. No other process removes it: a
+  `run --local --setup` (the SessionStart hook) or a refused second run leaves it alone.
+- **Missing?** Check `mxcli run status -p app.mpr`, not the credentials. It reports a
+  stopped run with its reason, or a live run whose handshake is gone (`mxcli run restart` republishes it). A 401/403 from the admin API without the handshake means
+  the connection fell back to default settings; `oql` and `log` say so.
 
 ## [Why](#why)
 
@@ -21298,6 +21459,16 @@ every browser session — `--watch` prints `browser sessions were dropped; log i
     `~/.mxcli/postgres/server.log`. Stop it with
     `pg_ctl -D "$HOME/.mxcli/postgres/data" stop`. To remove it, stop it first and
     then delete `~/.mxcli/postgres` (this permanently deletes its databases).
+    The fallback never replaces a **stopped system cluster** for the same port
+    (`/var/lib/postgresql/<ver>/<name>`, `/var/lib/pgsql/data`,
+    `/var/lib/postgres/data`, Homebrew’s): a new cluster there would hold none of the
+    app’s data while looking healthy, so `--ensure-db` stops, names the data
+    directory and prints the command that starts it (e.g.
+    `sudo pg_ctlcluster 16 main start`). If that cluster is not this app’s and cannot
+    be started, `MXCLI_ENSURE_DB_NEW_CLUSTER=1` creates the user-owned cluster anyway.
+    Whenever a new cluster is initialized, the output says
+    `WARNING: created a NEW, EMPTY PostgreSQL cluster`; an existing user-owned cluster
+    is restarted without it.
     A server whose `postgres` superuser has a password — **every Windows install**,
     where the installer always sets one — needs that login:
     `--ensure-db --db-admin-user postgres --db-admin-password <password>`, or set
@@ -27389,6 +27560,7 @@ INDEX (OrderDate DESC);
 
 - `String` requires an explicit length: `String(200)`. Use `String(unlimited)` for unbounded text.
 - `EXTENDS` must appear **before** the opening parenthesis, not after the closing one.
+- A member name must be unique along the generalization chain: a specialization cannot declare an attribute or own an association named like a member it inherits (from `System.User` and the other System entities too), and a generalization cannot gain one a specialization already has. An entity’s attributes and associations share that name space; names differing only in case do not collide. `mxcli check` refuses it (MDL-MEMBER01); Mendix reports it as CE0069 “Duplicate member name”.
 - Boolean attributes without an explicit `DEFAULT` automatically default to `FALSE`.
 - `AutoNumber` attributes are only valid on persistent entities.
 - The `@Position` annotation is optional and only affects the visual layout in Mendix Studio Pro.
@@ -29095,7 +29267,7 @@ A replace (`OR REPLACE` or `OR MODIFY`) is refused when the stored page holds a 
 
 The page declaration block `( ... )` contains comma-separated key-value properties:
 
-- **Params** – Page parameters. Each parameter has a `$`-prefixed name and a type — either an entity (`Module.Entity`) or a primitive (`String`, `Integer`, `Decimal`, `Boolean`, `DateTime`). Parameters are passed when the page is opened (e.g., from a microflow `SHOW PAGE` or from a data view). Primitive parameters require Mendix 11.6+.
+- **Params** – Page parameters. Each parameter has a `$`-prefixed name and a type — either an entity (`Module.Entity`) or a primitive (`String`, `Integer`, `Decimal`, `Boolean`, `DateTime`). Parameters are passed when the page is opened (e.g., from a microflow `SHOW PAGE` or from a data view). Primitive parameters require Mendix 11.6+. A parameter cannot be named with a platform-reserved word — `Context`, `Type`, `Id`, `Owner`, `Object`, `CurrentUser` or a Java keyword, in any case and even quoted: Mendix reports CE7247 “The name ‘Context’ is a reserved word.”, and `mxcli check` refuses it (MDL-PARAM01). The same holds for snippet, Java action and JavaScript action parameters.
 - **Title** – The page title displayed in the browser tab or page header.
 - **Layout** – The layout the page is based on. Must be a qualified name referring to an existing layout (e.g., `Atlas_Core.Atlas_Default`, `Atlas_Core.PopupLayout`).
 - **Folder** – Optional folder path within the module. Nested folders use `/` separator.
@@ -29208,6 +29380,12 @@ when a control is genuinely meant to be inert, so that a dead one always means a
 mistake.
 
 The same values serve `OnClick:` (an alias of `Action:`) and `OnChange:`.
+
+A flow or page that takes no parameters may be called with an empty argument
+list, as a flow body writes it: `Action: CALL MICROFLOW Module.Name()` stores
+exactly what `Action: CALL MICROFLOW Module.Name` stores, and `DESCRIBE` writes
+it without the brackets. The same holds for a microflow or nanoflow data source
+and for `USE FRAGMENT Name()`.
 
 #### [Action settings](#action-settings)
 
@@ -30122,7 +30300,7 @@ CREATE [OR REPLACE] LAYOUT module.Name
     class: 'layout-atlas layout-atlas-responsive-topbar'
 )
 {
-    SCROLLCONTAINER name {
+    SCROLLCONTAINER name [( layoutmode: 'Headline' | 'Sidebar' )] {
         REGION top | right | bottom | left | center ( region_properties ) {
             widgets
         }
@@ -30294,13 +30472,20 @@ CREATE OR MODIFY LAYOUT MyModule.Layout_Framed (
 - Only web layouts can be built on another layout.
 - `DESCRIBE LAYOUT` prints this form, with one block per stored argument.
 
+### [Scroll container properties](#scroll-container-properties)
+
+| Property | Values | Notes |
+| --- | --- | --- |
+| `layoutmode` | `Headline`, `Sidebar` | The frame. `Headline` runs the top region across the full width and starts the left one under it; `Sidebar` runs the left region the full height and puts the top bar beside it (Atlas’s `Atlas_SideBar` and `Atlas_TopBar`). Unset is `Headline`, and `DESCRIBE LAYOUT` prints it only when it is `Sidebar`. Change it on a stored layout with `ALTER LAYOUT … { SET (layoutmode: 'Sidebar') ON layoutContainer; }` |
+
 ### [Region properties](#region-properties)
 
 | Property | Values | Notes |
 | --- | --- | --- |
 | `size` | integer | Unset is Studio Pro’s `200` |
 | `sizemode` | `Fixed`, `Pixels`, `Auto` | Unset is `Auto` |
-| `class` | CSS class | e.g. `region-topbar`, `region-content` |
+| `togglemode` | `None`, `PushContentAside`, `SlideOverContent`, `ShrinkContentInitiallyOpen`, `ShrinkContentInitiallyClosed` | How a `SIDEBARTOGGLE` opens and closes the region. Unset is `None` |
+| `class` | CSS class | e.g. `region-topbar`, `region-content`. The only appearance property a region stores: `style` on one is refused (MDL-WIDGET52) |
 
 ## [The four elements only a layout has](#the-four-elements-only-a-layout-has)
 
@@ -30341,16 +30526,17 @@ CREATE OR MODIFY LAYOUT MyModule.App_Default
 
 ```
 
-A sidebar layout, with a navigation tree in the left region:
+A sidebar layout, with a navigation tree in the left region running the full
+height (`layoutmode: 'Sidebar'`; leave it out and the top region spans the page):
 
 ```
 CREATE LAYOUT MyModule.App_Sidebar
 (
     layouttype: 'Responsive',
-    class: 'layout-atlas layout-atlas-responsive-default'
+    class: 'layout-atlas layout-atlas-responsive-sidebar'
 )
 {
-    SCROLLCONTAINER layoutContainer {
+    SCROLLCONTAINER layoutContainer (layoutmode: 'Sidebar') {
         REGION left (size: 232, sizemode: 'Pixels', class: 'region-sidebar') {
             NAVIGATIONTREE navMenu (profile: 'Responsive')
         }
@@ -39409,7 +39595,7 @@ rather than trusting a list here:
 
 | RefKind | Edge |
 | --- | --- |
-| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation |
+| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow |
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
 | `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
@@ -39420,11 +39606,11 @@ rather than trusting a list here:
 | `datasource` | page or widget reads an entity |
 | `action` | widget calls a microflow / nanoflow |
 | `show_page` | flow or widget action opens a page |
-| `home_page` / `login_page` / `menu_item` | navigation profile references a page |
+| `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
-| `publish` | published REST operation runs a microflow |
-| `event` | entity event handler runs a microflow |
+| `publish` | published service runs a microflow: a REST operation, an OData resource’s read / insert / update / delete microflow, an OData action, a REST or OData service’s custom authentication microflow |
+| `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
 | `validate` | attribute validation rule uses a regular expression |
@@ -39442,6 +39628,11 @@ over), so it would mostly double existing edges.
 outside the call graph runs the microflow, so nothing in the model calls it.
 They are what stops `GRAPH_DEAD_ASSETS`, `LIST CALLERS OF` and lint rule QUAL004
 from reporting a live scheduled job, API handler or event handler as unused.
+`GRAPH_DEAD_ASSETS` and QUAL004 count an edge of any kind; `LIST CALLERS OF`
+counts the kinds that invoke. The source of a service’s edge is the service
+itself (`PUBLISHED_ODATA_SERVICE`, `PUBLISHED_REST_SERVICE`,
+`BUSINESS_EVENT_SERVICE`, `CONSUMED_ODATA_SERVICE`) with its catalog id in
+`SourceId`; a published REST operation’s edge comes from the operation.
 `sync` is not one — it names an entity a profile downloads, which is a use of a
 type, so `SHOW CALLERS` excludes it for the same reason it excludes
 `datasource`.
@@ -41352,7 +41543,8 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Set security level | `ALTER APP SECURITY ( SecurityLevel: OFF|PROTOTYPE|PRODUCTION );` |  |
 | Toggle demo users | `ALTER APP SECURITY ( EnableDemoUsers: TRUE|FALSE );` |  |
 | Toggle guest access | `ALTER APP SECURITY ( EnableGuestAccess: TRUE, GuestUserRole: UserRole );` / `( EnableGuestAccess: FALSE )` | Anonymous users; role required (CE0133) |
-| Rename admin user | `ALTER APP SECURITY ( AdminUserName: 'appadmin' );` | Default `MxAdmin`; the password is not settable from MDL |
+| Rename admin user | `ALTER APP SECURITY ( AdminUserName: 'appadmin' );` | Default `MxAdmin` |
+| Set admin password | `ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );` | Resolves CE0129 “Administrator password has not been set”; `''` is refused |
 | Create demo user | `CREATE DEMO USER 'name' ( Password: 'pass', [Entity: Module.Entity,] UserRoles: (UserRole, ...) );` | The clause form `PASSWORD … (…)` warns MDL-DEPR137 |
 | Drop demo user | `DROP DEMO USER [IF EXISTS] 'name';` | `IF EXISTS` makes a cleanup script re-runnable |
 

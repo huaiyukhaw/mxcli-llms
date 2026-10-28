@@ -1,3 +1,7 @@
+## 2026-10-28 -- mxcli v0.28.0 @ 8b6f421
+- +218 / -26 lines
+- Sections changed: Three-dot range (changes since common ancestor), [Widget Types](#widget-types), [Bundled Starlark Rules](#bundled-starlark-rules), [Description](#description-34), [Examples](#examples-50), [Full Refresh Tables](#full-refresh-tables), [How tests execute](#how-tests-execute), [Input Widgets](#input-widgets-1) (+11 more)
+
 ## 2026-10-27 -- mxcli v0.28.0 @ 2be9331
 - +543 / -232 lines
 - Sections changed: [ALTER MICROFLOW / NANOFLOW](#alter-microflow--nanoflow), [Microflow Statements](#microflow-statements), [Annotations](#annotations-1), [Description](#description-30), [Description](#description-31), [Description](#description-32), [Description](#description-33), [Description](#description-34) (+232 more)
