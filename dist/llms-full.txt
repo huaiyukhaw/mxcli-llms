@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ 8b6f421
-Generated: 2026-10-28T07:50:58Z
+Version:   mxcli v0.28.0 @ 26c19dc
+Generated: 2026-10-29T07:56:08Z
 
 ---
 
@@ -5883,7 +5883,7 @@ Keywords are case-insensitive, and lowercase is canonical: `describe` writes the
 
 ## [One Spelling per Keyword](#one-spelling-per-keyword)
 
-Each keyword has one spelling, and a page action uses the words a microflow uses: `show page`, `save changes`, `cancel changes`, `close page`, `create object`, `delete`, `open link`, `sign out`, `complete task`, `call microflow M.F`, `call nanoflow M.F`. A validation message is `error message '…'` (after `not null`, `unique`, `required`, in a validation rule and after `on delete restrict`); a delete behaviour is the SQL referential action, `on delete cascade` / `restrict` / `set null`; a reference set’s type is `ReferenceSet`; a REST call that returns nothing says `returns nothing`.
+Each keyword has one spelling, and a page action uses the words a microflow uses: `show page`, `save changes`, `cancel changes`, `close page`, `create object`, `delete`, `open link`, `sign out`, `complete task`, `open user task`, `open workflow`, `call microflow M.F`, `call nanoflow M.F`, `call workflow M.WF`. A validation message is `error message '…'` (after `not null`, `unique`, `required`, in a validation rule and after `on delete restrict`); a delete behaviour is the SQL referential action, `on delete cascade` / `restrict` / `set null`; a reference set’s type is `ReferenceSet`; a REST call that returns nothing says `returns nothing`.
 
 ## [One Verb per Job](#one-verb-per-job)
 
@@ -6631,7 +6631,7 @@ different now. Where the old output can still be asked for, the entry says how.
 | String escapes in flow expressions | A string literal in a flow expression stores its value as Studio Pro spells it: `''` doubled, never a backslash escape in the stored expression. Only how a `\` in the MDL literal is *read* depends on the header (`MDL-V1-ESCAPE`). | both | [visitor\_string\_escapes.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/visitor/visitor_string_escapes.go), [mendixexpr.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/mendixexpr/mendixexpr.go) |
 | Pluggable widget schema kept | An unchanged pluggable widget keeps its stored `Type` and `Object` (the widget’s schema) instead of being rebuilt from mxcli’s template, so a widget upgraded in Studio Pro stays upgraded. A changed one keeps its stored schema and every property the statement does not change — a caption edit no longer resets a column’s attribute or a row click describe cannot print. Layouts included. A rewrite does not upgrade a widget to the installed package (only one whose data context the statement changes is rebuilt): use `mxcli widget sync`. | both | [cmd\_pages\_pluggable\_passthrough.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_pluggable_passthrough.go), [cmd\_pages\_pluggable\_patch.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_pluggable_patch.go) |
 | Text-template attribute binding | `{1} = $Order.Total` binds the attribute and renders with its formatting, as Studio Pro stores it, instead of `toString($Order/Total)`. Write `{1} = toString($Order/Total)` to keep the old output. Without the header the binding warns (`MDL-V1-TEMPLATEATTR`). | both | [cmd\_pages\_template\_attr.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/cmd_pages_template_attr.go) |
-| Gallery row click | A row click on a gallery with single-click selection is refused (`MDL-WIDGET36`), with nothing written, because `mx check` fails such a page; without the header it is written and warns (`MDL-V1-GALLERYCLICK`). | `mdl 1` | [validate\_widget\_language.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/validate_widget_language.go) |
+| Gallery row click | A row click on a gallery with single-click selection — by `create page`, or by an `alter page … set` that leaves the gallery so — is refused (`MDL-WIDGET36`), with nothing written, because `mx check` fails such a page; without the header it is written and warns (`MDL-V1-GALLERYCLICK`). | `mdl 1` | [validate\_widget\_language.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/validate_widget_language.go) |
 | `create constant … private` | Was never stored. Without the header it parses, does nothing and warns (`MDL-DEPR138`); `fmt --upgrade` deletes it; `mdl 1` refuses it. Set a private value with `mxcli constant set`. | both | [visitor\_deprecations.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/visitor/visitor_deprecations.go) |
 | Commit events | A bare `commit $X;` commits *with* events, Studio Pro’s default; older releases stored it *without*. `check` names the affected flows (`MDL067`; `exec -p` leaves out a flow the project already stores with events), and `fmt --upgrade -p` writes `without events` where the stored flow has it. | both | [commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/upgrade/commit_events.go), [flow\_commit\_events.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/executor/flow_commit_events.go) |
 | `date` as a type | Mendix has no date-only type: `date` is an alias of `DateTime` and builds exactly what `DateTime` builds. Without the header it warns (`MDL-DEPR160`); `fmt --upgrade` writes `DateTime`; `mdl 1` refuses `date`. | both | [deprecation.go](https://github.com/mendixlabs/mxcli/blob/main/mdl/deprecation/deprecation.go) |
@@ -6646,7 +6646,7 @@ refuse the spelling; until then it only warns.
 
 ### [Changes of meaning (`MDL-V1-*`)](#changes-of-meaning-mdl-v1-)
 
-24 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
+25 constructs mean something different under the `mdl 1;` header. Without the header each keeps the meaning in the second column and warns with its code.
 
 | Code | Without the header (mdl 0) | Under `mdl 1;` | Decided at | Rewritten by `fmt --upgrade` |
 | --- | --- | --- | --- | --- |
@@ -6673,6 +6673,7 @@ refuse the spelling; until then it only warns.
 | `MDL-V1-TEMPLATEATTR` | a text-template parameter bound to a non-String attribute (`{1} = $Order.Total`) was stored as `toString($Order/Total)` by earlier mxcli releases | an attribute reference, rendered with the attribute’s formatting, as Studio Pro stores it | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-VIEWAUTONUMBER` | a view entity attribute declared `autonumber` over an AutoNumber column passes check, and mxbuild reports CE6770 “View Entity is out of sync with the OQL Query” | a check error that names the attribute and suggests `long`, the type the view gives the column | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-WHILE` | `while <condition>` accepts a body without `begin` and an `end` without `while` | an error: a while loop is `while <condition> begin … end while;`, like `loop … begin … end loop;` | parse | yes: `fmt --upgrade --header` |
+| `MDL-V1-WIDGETENUM` | A value an enumeration property of a pluggable widget declares no key for (`onClickTrigger: triple`) is written as given, and the widget ignores it | a refusal (MDL-WIDGET08) that names the keys, with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
 | `MDL-V1-WIDGETPROP` | A property a built-in page element does not take (`Caption:` on a textbox, `Label:` on a button, a misspelt key) is accepted and dropped on write | a refusal (MDL-WIDGET52), with nothing written | exec | no: decided by exec against the project; `check -p` reports it |
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
@@ -11366,8 +11367,26 @@ ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
 | `OPEN LINK 'https://…'` | Open a web address |
 | `SIGN OUT` | Sign the user out |
 | `COMPLETE TASK 'Outcome'` | Complete a workflow user task |
+| `OPEN USER TASK` | Open the user task’s page (Studio Pro’s “Show user task page”) |
+| `OPEN WORKFLOW with (DefaultPage: Module.Page)` | Open the workflow’s admin page, or `DefaultPage` when the workflow overrides none (“Show workflow admin page”) |
+| `CALL WORKFLOW Module.Workflow` | Start a workflow with the data container’s object as its context |
 
 The snake-case spellings (`SAVE_CHANGES`, `SHOW_PAGE`, …) and `MICROFLOW …` without `CALL` are deprecated aliases (MDL-DEPR020).
+
+The workflow events take their own settings in the `with ( … )` list:
+`complete task` takes `ClosePage` and `Commit` (both default `true`), `call workflow` takes `ClosePage` (default `true`) and a `Confirmation`, `open user task` takes `AssignOnOpen` (Studio Pro’s “Auto-assign”, default `true`) and
+`OpenWhenAssigned` (`true` is “Who can open: Users with access”, default
+`false`), and `open workflow` requires `DefaultPage` (without it Mendix reports
+CE1834). `open user task` must sit inside a data container of
+`System.WorkflowUserTask` and `open workflow` inside one of `System.Workflow`, or
+mx check reports CE1843. A task inbox opens each task from its row:
+
+```
+DATAGRID dgTasks (DataSource: DATABASE FROM System.WorkflowUserTask, onClick: OPEN USER TASK) {
+  COLUMN (Attribute: Name, Caption: 'Task')
+}
+
+```
 
 **Button styles:**
 
@@ -19444,6 +19463,10 @@ FAIL  the board is 81 squares
 
 ```
 
+A test with several `@expect` lines passes only when every one of them holds, and
+it reports the first that does not. The Docker / `--legacy-runner` path evaluates
+them all, and adds how many more failed — `(and 1 more failure in this test)`.
+
 `@expect` cannot be combined with `@throws`: a body expected to fail produces no
 result to assert on, so the combination is refused rather than ignored.
 
@@ -23232,6 +23255,77 @@ there still deletes its row and the user assignments that are not demo users. A 
 key its version does not declare is reported and left alone, and, like every
 mxcli write, the command is refused while Studio Pro has the project open.
 
+### [The repair reaches forward, not back](#the-repair-reaches-forward-not-back)
+
+A merge compares each document both branches changed with its revision in the
+merge base, the commit the two branches share. The repair completes the
+property names from its own commit on, and so does any Studio Pro save of the
+document; the revisions before it in history keep their gaps. A merge or rebase
+whose base is one of those revisions still fails on every such document,
+whichever branch carries the full set. Measured with `mx merge`, Studio Pro’s
+merge engine, on 11.13.0, for an access rule an mxcli before 0.26 created: the
+exception when the other branch had been saved by Studio Pro, the same exception
+when it had been repaired by this command, and a clean merge once the repaired
+revision is the base.
+
+So run the repair once, on the main branch, in a commit of its own, when few
+branches are open, and start new branches from it. An older branch still merges
+cleanly unless it changed a document that was incomplete in its merge base;
+that branch needs the steps below.
+
+### [Getting past a merge that fails with “do not have the same properties”](#getting-past-a-merge-that-fails-with-do-not-have-the-same-properties)
+
+Studio Pro looks for an unfinished merge or rebase when it opens a project and
+runs it again, so a project whose merge fails does not open until the merge is
+aborted. The way through is to make your branch stop changing the documents the
+merge cannot compare, merge, and redo your edits to them afterwards.
+
+1. **Abort** from the command line: `git merge --abort`, or `git rebase --abort`.
+2. **Find the documents.** The exception names only the first element it meets.
+   The merge cannot compare a document that an older mxcli left incomplete in
+   the merge base *and* that both branches changed since:
+   
+   ```
+   upstream=origin/main                     # the branch you are merging
+   base=$(git merge-base HEAD $upstream)
+   git worktree add ../merge-base $base
+   mxcli fix property-sets -p ../merge-base/app.mpr --dry-run   # NEEDS <unit id> [type]
+   git worktree remove ../merge-base
+   comm -12 <(git diff --name-only $base HEAD -- mprcontents | sort) \
+            <(git diff --name-only $base $upstream -- mprcontents | sort)
+   
+   ```
+   
+   The units in both lists are the ones to take back. A unit’s file is
+   `mprcontents/<first two>/<next two>/<unit id>.mxunit`.
+3. **Take your edits back.** Note what you changed in those documents
+   (`mxcli diff-local -p app.mpr --ref $base..HEAD` prints it as MDL), then put
+   each one back to its merge-base version, re-index it, and commit:
+   
+   ```
+   git checkout $base -- mprcontents/01/31/0131b342-dc00-4619-9e90-64c9de7e2a50.mxunit
+   mxcli fix hashes -p app.mpr --repair     # the .mpr indexes every unit by its hash
+   git commit -am "Take back edits the merge cannot compare"
+   
+   ```
+4. **Merge** again in Studio Pro. Your branch no longer changes those
+   documents, so the merge takes the other branch’s version without comparing
+   them. Merge rather than rebase: a rebase replays your commits one at a time,
+   and the first one that changed such a document fails again.
+5. **Redo the edits** in Studio Pro, or by running the MDL from step 3, and
+   commit. That revision carries the full property set, so a merge based on it
+   or on anything later is unaffected.
+
+Never get past the error by deleting and re-creating an entity, attribute or
+association: the new element gets a new GUID, and on the next deployment the
+runtime drops the old one’s table or column, with its data.
+
+Measured with `mx merge` on 11.13.0 (`testdata/pedapp`, an access rule an mxcli
+before 0.26 created, and both branches editing the same domain model): the merge
+fails with the exception before step 3 and succeeds after it, the merged project
+keeps both branches’ other changes, and `mx check` reports exactly what it
+reports on the untouched project.
+
 ## [Git states that crash Studio Pro](#git-states-that-crash-studio-pro)
 
 Studio Pro 11.13 fails to open a project with *“Unable to find ‘system’
@@ -23268,6 +23362,76 @@ mxcli diag -p app.mpr
 
 prints mxcli’s diagnostics followed by a *Project* section with both checks.
 
+## [One commit, all the steps: `mxcli git commit`](#one-commit-all-the-steps-mxcli-git-commit)
+
+Studio Pro’s *Commit* does more than `git commit`: it keeps the ContentsHash
+index in step, stages exactly the files a Mendix repository should ship, and
+attaches the mx\_metadata note. `mxcli git commit` is that sequence for commits
+made outside Studio Pro:
+
+```
+mxcli git commit -m "Add order history page" -p app.mpr
+mxcli git commit -m "Fix stock filter" -p app.mpr --push
+mxcli git commit -m "WIP" -p app.mpr --dry-run
+
+```
+
+In order it:
+
+1. repairs ContentsHash mismatches from the files on disk (`MISSING` and
+   `ORPHAN` entries have no automatic repair and refuse the commit);
+2. stages everything, then unstages the files Studio Pro never commits:
+   `project-settings.user.json`, `*.mpr.lock`, `*.mpr.bak`, and the project’s
+   own `.mendix-cache/`, `deployment/`, `theme-cache/` and `.mxcli/`, the
+   folders Studio Pro, mxbuild and mxcli create beside the `.mpr`. A folder of
+   the same name further down, such as `resources/deployment/`, is committed;
+3. runs `git commit` with your message and your git identity;
+4. computes the mx\_metadata note from the new commit and attaches it, and
+   prints the `git push origin <branch> refs/notes/mx_metadata` command —
+   `--push` runs it for you, because the branch and the notes ref must travel
+   together.
+
+The commit is refused while Studio Pro has the project open (the `.mpr.lock`
+beside it), and during an unresolved merge — `git add -A` would otherwise
+commit the conflict markers. `--dry-run` verifies and reports (including
+ContentsHash drift, which it does not repair — a dry run writes nothing),
+and reports what it would commit without committing. It stages into a copy of
+the index, so whatever you had staged is left exactly as it was.
+
+## [Auditing a repository: `mxcli git doctor`](#auditing-a-repository-mxcli-git-doctor)
+
+A repository that has known only plain git misses several things Studio Pro
+wrote when it committed, and they are invisible one by one. `mxcli git doctor`
+reports all of them in one read-only pass; `--fix` repairs:
+
+```
+mxcli git doctor                       # report only; exits 1 while an issue remains
+mxcli git doctor -p app.mpr --fix      # repair, computing real notes from the model
+mxcli git doctor --fix --version 10.21.0
+
+```
+
+| Check | `--fix` |
+| --- | --- |
+| local git config: `core.autocrlf=False` (a checkout must not rewrite line endings inside `.mxunit` files), `mendix.commits-since-gc`, `mendix.lineEndingResetDone` | sets them |
+| the remote URL as configured: Studio Pro can only use HTTPS | rewrites SSH (`git@host:org/app.git`, `ssh://…`) to HTTPS; other non-HTTPS URLs are reported unchanged. A `url.<base>.insteadOf` rule in your git config that makes git use another URL is reported, and left alone |
+| the remote’s `refs/notes/mx_metadata` | reported only — push the notes ref together with the branch |
+| the local `refs/notes/mx_metadata` holds the remote’s notes: `git clone` and a plain `git fetch` never fetch them, so a fresh clone or a CI checkout has none | fetches them, as a fast-forward only; refused when the local ref has notes the remote does not |
+| each commit on the checked-out branch and its mx\_metadata note: missing notes make Studio Pro show `(unknown)`; a malformed note it cannot read at all | computes real notes from the model (`-p`), falling back to a template note with a `--version` ModelerVersion where the model at a commit cannot be read (MPR v1 history, a revision without the `.mpr`); when no version is known the newest valid note in history supplies it |
+
+Notes Studio Pro wrote are never touched, with or without `--fix`. `--fix`
+does not push.
+
+The commits are judged only once the local notes ref holds the remote’s. Until
+then the report names the unfetched ref and the command that fetches it, rather
+than calling every commit the remote annotates unannotated. In CI, fetch the
+notes before the audit:
+
+```
+git fetch origin refs/notes/mx_metadata:refs/notes/mx_metadata
+mxcli git doctor -p app.mpr
+
+```
 ## [Commit metadata: `mxcli git note`](#commit-metadata-mxcli-git-note)
 
 Studio Pro attaches a git note under `refs/notes/mx_metadata` to every commit
@@ -29307,12 +29471,12 @@ The widget tree inside `{ ... }` defines the page content. Widgets are nested hi
 
 | Widget | Description | Key Properties |
 | --- | --- | --- |
-| `TEXTBOX` | Single-line text input | `Label`, `Attribute`, `Password`, `SubmitBehaviour` (`OnEndEditing` default, `WhileEditing`), `SubmitOnInputDelay` (ms, default 300) |
-| `TEXTAREA` | Multi-line text input | `Label`, `Attribute`, `SubmitBehaviour`, `SubmitOnInputDelay` |
-| `CHECKBOX` | Boolean toggle | `Label`, `Attribute` |
-| `RADIOBUTTONS` | Radio button group | `Label`, `Attribute` |
-| `DATEPICKER` | Date/time selector | `Label`, `Attribute` |
-| `COMBOBOX` | Dropdown selector | `Label`, `Attribute`; association mode adds `DataSource`, `CaptionAttribute`; database mode `optionsSourceDatabaseDataSource`, `CaptionAttribute`, `optionsSourceDatabaseValueAttribute` |
+| `TEXTBOX` | Single-line text input | `Label`, `Attribute`, `Password`, `OnChange`, `OnEnter`, `OnLeave`, `OnEnterKeyPress` (an action run when the user presses Enter in the box; the stored name `OnEnterKeyPressAction` is accepted too), `SubmitBehaviour` (`OnEndEditing` default, `WhileEditing`), `SubmitOnInputDelay` (ms, default 300), `KeyboardType` (the keyboard a native app opens: `Default`, `NumberPad`, `DecimalPad`, `EmailAddress`, `PhonePad`, `URL`) |
+| `TEXTAREA` | Multi-line text input | `Label`, `Attribute`, `OnChange`, `OnEnter`, `OnLeave`, `SubmitBehaviour`, `SubmitOnInputDelay` |
+| `CHECKBOX` | Boolean toggle | `Label`, `Attribute`, `OnChange`, `OnEnter`, `OnLeave` |
+| `RADIOBUTTONS` | Radio button group | `Label`, `Attribute`, `OnChange`, `OnEnter`, `OnLeave` |
+| `DATEPICKER` | Date/time selector | `Label`, `Attribute`, `OnChange`, `OnEnter`, `OnLeave` |
+| `COMBOBOX` | Dropdown selector | `Label`, `Attribute`; association mode adds `DataSource`, `CaptionAttribute`; database mode `optionsSourceDatabaseDataSource`, `CaptionAttribute`, `optionsSourceDatabaseValueAttribute`; custom content as the mode’s body block (`optionssourceassociationcustomcontent { … }`, `optionssourcedatabasecustomcontent { … }`) |
 | `FILEMANAGER` | File upload/download, inside a data view on a `System.FileDocument` specialization | `Label`, `Type` (`Upload`, `Download`, `Both` default), `MaxFileSize` (MB, default 5), `AllowedExtensions`, `ShowFileInBrowser` |
 
 **Display Widgets**
@@ -29379,7 +29543,25 @@ success, because a no-action widget is perfectly legal Mendix. Write `NOTHING`
 when a control is genuinely meant to be inert, so that a dead one always means a
 mistake.
 
-The same values serve `OnClick:` (an alias of `Action:`) and `OnChange:`.
+The same values serve `OnClick:` (an alias of `Action:`), `OnChange:` and a
+text box’s `OnEnterKeyPress:` — Studio Pro’s *On enter key press*, which runs
+when the user presses Enter in the box (a search field that searches on Enter):
+
+```
+TEXTBOX tbSearch (Label: 'Search', Attribute: SearchText,
+  OnEnterKeyPress: CALL MICROFLOW Module.ACT_Search(Query = $currentObject))
+
+```
+
+Only a text box has that action — Mendix stores it on no other widget, a text
+area included — so on any other widget the key is refused with that reason.
+
+Every input widget (text box, text area, date picker, check box, radio
+buttons, drop-down) also has Studio Pro’s *On enter* and *On leave* — focus
+moving into and out of the widget, not the Enter key — spelled `OnEnter:` and
+`OnLeave:`, with the same values. The stored names `OnEnterAction:`,
+`OnLeaveAction:` and `OnEnterKeyPressAction:` are accepted as the same
+properties; `DESCRIBE` prints the short ones.
 
 A flow or page that takes no parameters may be called with an empty argument
 list, as a flow body writes it: `Action: CALL MICROFLOW Module.Name()` stores
@@ -30806,7 +30988,7 @@ Mendix security operates at two levels. **Module roles** define permissions with
 ## [Synopsis](#synopsis-40)
 
 ```
-CREATE MODULE ROLE module.RoleName [ DESCRIPTION 'text' ]
+CREATE [ OR MODIFY ] MODULE ROLE module.RoleName [ DESCRIPTION 'text' ]
 
 ```
 ## [Description](#description-40)
@@ -30815,14 +30997,14 @@ Creates a new module role within a module. Module roles are the foundation of Me
 
 Each module role belongs to exactly one module. The role name must be unique within the module. By convention, common role names include `User`, `Admin`, `Viewer`, and `Manager`.
 
-If the module does not exist, the statement returns an error.
+If the module does not exist, the statement returns an error. If the role exists, `CREATE MODULE ROLE` returns an error; `CREATE OR MODIFY` updates it instead, so a security script can be re-run. Without `DESCRIPTION`, `CREATE OR MODIFY` keeps the role’s stored description; `DESCRIPTION ''` clears it.
 
 ## [Parameters](#parameters-42)
 
 [`module.RoleName`](#modulerolename)
 Qualified name consisting of the module name and the new role name, separated by a dot. The module must already exist.
 [`DESCRIPTION 'text'`](#description-text)
-Optional human-readable description of the role’s purpose.
+Optional human-readable description of the role’s purpose. Left out, a new role has none and an existing role keeps its own.
 ## [Examples](#examples-52)
 
 Create a basic module role:
@@ -30846,6 +31028,13 @@ mdl 1;
 CREATE MODULE ROLE HR.Manager DESCRIPTION 'Can manage employees';
 CREATE MODULE ROLE HR.Employee DESCRIPTION 'Self-service access';
 CREATE MODULE ROLE HR.Viewer DESCRIPTION 'Read-only access';
+
+```
+
+Make sure a role exists, keeping whatever description it has:
+
+```
+CREATE OR MODIFY MODULE ROLE HR.Manager;
 
 ```
 ## [See Also](#see-also-77)
@@ -31426,6 +31615,8 @@ Mendix applications can have multiple navigation profiles (Responsive, Tablet, P
 
 ```
 CREATE [ OR MODIFY ] NAVIGATION profile
+    [ APP TITLE 'text' ]
+    [ APP ICON { module.Collection.Image | NONE } ]
     HOME { PAGE module.PageName | MICROFLOW module.Flow | NANOFLOW module.Flow }
     [ HOME { PAGE | MICROFLOW | NANOFLOW } module.Name FOR UserRole ]
     [ LOGIN PAGE module.PageName ]
@@ -31501,6 +31692,14 @@ nanoflow home, still runs with a warning).
 Optional role-specific home page. Users with this role see a different home page than the default. Multiple role-specific home pages can be specified. Each one replaces the stored home page of its role only, and a role the statement does not mention keeps its home page.
 
 The role is a **user role**, written as a bare name (`FOR Administrator`). User roles are project-level and have no module part. A module-qualified name here — a module role, which often shares the name — produces a project Mendix cannot load: `StorageLoadException: … is not a valid UserRoleIdentifier`, raised before checking runs. `mxcli check --references` refuses it.
+
+[`APP TITLE 'text'`](#app-title-text)
+
+Studio Pro’s *Application title*: the prefix of every browser tab, which reads `Mendix - <page title>` in a new project until it is set. The text is written as the title’s item in the project’s **default language**, as a menu caption is, and the title’s other languages are kept; translate it with [`CREATE OR MODIFY TRANSLATIONS`](#translations) without `IN <Module>`, since the navigation is a project-level document. Omitting the clause keeps the stored title. DESCRIBE NAVIGATION prints the stored title, Studio Pro’s default `'Mendix'` included.
+
+[`APP ICON module.Collection.Image` / `APP ICON NONE`](#app-icon-modulecollectionimage--app-icon-none)
+
+Studio Pro’s *Application icon*, an image from an image collection, resolved like any image reference: `mxcli check --references` reports one that does not exist and `exec` refuses it before writing. It must be a square PNG at least 512 pixels wide; anything else fails `mx check` with CE6859, so `exec` refuses a stored image that is not one, naming its size. `NONE` clears it. Omitting the clause keeps the stored icon.
 
 [`LOGIN PAGE module.PageName`](#login-page-modulepagename)
 
@@ -31607,6 +31806,8 @@ Full navigation with role-specific homes and menus:
 
 ```
 CREATE OR MODIFY NAVIGATION Responsive
+    APP TITLE 'Order Desk'
+    APP ICON MyModule.Images.Logo
     HOME PAGE MyModule.Home_Web
     HOME PAGE MyModule.AdminHome FOR Administrator
     LOGIN PAGE Administration.Login
@@ -31624,8 +31825,8 @@ CREATE OR MODIFY NAVIGATION Responsive
 
 Native mobile navigation. A native profile’s home is a page or a nanoflow
 (`HOME NANOFLOW`); mxcli writes its home pages and `SYNC` block only, and refuses a
-`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE`, `ON SYNC ERROR` and
-`PROGRESSIVE WEB APP` on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
+`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE`, `ON SYNC ERROR`,
+`PROGRESSIVE WEB APP`, `APP TITLE` and `APP ICON` on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
 
 ```
 CREATE OR MODIFY NAVIGATION NativePhone
@@ -40608,10 +40809,12 @@ Mendix 11.12, upgrading Data Widgets 3.4 → 3.11.3:
 | --- | --- | --- | --- |
 | a real mxcli-built app | 0 errors | 36 CE0463 (7 mxcli-authored, 29 Studio Pro’s own) | 0 errors |
 
-mxcli’s equivalent, `mxcli widget sync`, is partial today (see
-[below](#reconciling-stored-widgets-after-a-package-upgrade-mxcli-widget-sync));
-for the rest, run the update in Studio Pro. Avoid `mx update-widgets` on an MPR v2
-project — it collapses `mprcontents/` back to the single-file v1 layout.
+Apply that update with `mxcli fix widgets -p app.mpr`: it runs Mendix’s own `mx update-widgets` and writes the result back in the MPR v2 layout (see
+[Repairing the model](#repairing-the-model-mxcli-fix)). Do not run
+bare `mx update-widgets` on an MPR v2 project — it collapses `mprcontents/` back to
+the single-file v1 layout. Studio Pro’s “Update all widgets” does the same job.
+`mxcli widget sync` reconciles schemas in mxcli’s own code and is partial today (see
+[below](#reconciling-stored-widgets-after-a-package-upgrade-mxcli-widget-sync)).
 
 **Re-running a page’s description does not upgrade its widgets either.** A
 `create or modify` (or `create or replace`) of a stored page, snippet or layout
@@ -40621,7 +40824,15 @@ changes keeps every property the statement does not change, so editing a column
 caption leaves the other columns, the row click and the grid’s data source as
 they were. (A widget whose data context the statement changes is rebuilt from
 mxcli’s template instead, since its stored bindings no longer apply.) So a widget
-stays at its stored package version until you sync it.
+stays at its stored package version until you update it with `mxcli fix widgets`.
+
+This changed during the beta. Earlier builds rebuilt every pluggable widget of a
+rewritten page from the installed `.mpk`, so re-running `describe` output also
+upgraded it — and usually cleared its CE0463 — while silently resetting whatever the
+statement could not say (a specialized column binding, a row click). If a script
+relied on that side effect to clear CE0463, run `mxcli fix widgets` instead;
+`mxcli docker check` passing is not enough, because it updates the widgets of a
+temporary copy only (`--no-update-widgets` checks the project as stored).
 
 **Two widgets do not yet author cleanly against Data Widgets 3.10+.** Freshly created
 `gallery` and `dropdownfilter` widgets produce CE0463 on those packages; `datagrid2`,
@@ -40729,9 +40940,11 @@ Everything above keeps a widget correct **as it is authored**. When you later up
 the widget package, the instances already stored in your pages go stale and Mendix
 reports CE0463 on each one. Studio Pro fixes this with “Update all widgets”; mxbuild
 has `mx update-widgets`, which works but **destroys `mprcontents/`** on an MPR v2
-project, collapsing it to a single-file v1 layout.
+project, collapsing it to a single-file v1 layout. `mxcli fix widgets` runs it and
+restores the v2 layout, and is the complete fix.
 
-`mxcli widget sync` is the equivalent that preserves the v2 layout:
+`mxcli widget sync` is the alternative that does the reconciliation in mxcli’s own
+code:
 
 ```
 mxcli widget sync -p app.mpr --dry-run     # preview; names every property
@@ -41743,7 +41956,7 @@ CREATE PAGE MyModule.Customer_Edit
 
 - Layout: `LAYOUTGRID`, `ROW`, `COLUMN`, `CONTAINER`, `CUSTOMCONTAINER`
 - Input: `TEXTBOX`, `TEXTAREA`, `CHECKBOX`, `RADIOBUTTONS`, `DATEPICKER`, `COMBOBOX`
-  - `COMBOBOX` modes: enumeration `(Attribute: EnumAttr)`; association `(Attribute: Assoc, DataSource: DATABASE Mod.Target, CaptionAttribute: Name)`; database `(optionsSourceDatabaseDataSource: <source>, Attribute: TargetAttr, CaptionAttribute: Name, optionsSourceDatabaseValueAttribute: ValueAttr)` — the datasource’s key selects database mode, the generic `DataSource:` association mode
+  - `COMBOBOX` modes: enumeration `(Attribute: EnumAttr)`; association `(Attribute: Assoc, DataSource: DATABASE Mod.Target, CaptionAttribute: Name)`; database `(optionsSourceDatabaseDataSource: <source>, Attribute: TargetAttr, CaptionAttribute: Name, optionsSourceDatabaseValueAttribute: ValueAttr)` — the datasource’s key selects database mode, the generic `DataSource:` association mode. Custom content (several attributes per option) is a body block of the mode: `{ optionssourceassociationcustomcontent { … } }` in association mode, `{ optionssourcedatabasecustomcontent { … } }` in database mode, its widgets bound to the option entity
 - Display: `DYNAMICTEXT`, `DATAGRID`, `GALLERY`, `LISTVIEW`, `IMAGE`, `STATICIMAGE`, `DYNAMICIMAGE`
 - Actions: `ACTIONBUTTON`, `LINKBUTTON`, `NAVIGATIONLIST`
 - Structure: `DATAVIEW`, `HEADER`, `FOOTER`, `CONTROLBAR`, `SNIPPETCALL`
@@ -42224,6 +42437,15 @@ body on Mendix 10 too, and Studio Pro could not open the project.
 | User tasks | `USER TASK ... OUTCOMES (...)` | Yes | Yes |
 | Parallel splits | `PARALLEL SPLIT` | Yes | Yes |
 
+Below Mendix 11.3 a workflow’s main flow has no stored start or end activity:
+11.1 and 11.2 keep them implicit, and 10.x and 11.0 do not have the start
+activity type at all. mxcli writes the shape the project’s version stores, and
+the header’s `annotation '…'` is then the workflow’s own note rather than the
+start activity’s; `describe` prints it the same way on every version. Before
+this, mxcli wrote the 11.3 shape on every version: a 10.24 or 11.0 project no
+longer loaded, and 11.1 and 11.2 failed `mx check` with CE6671 and CE6689
+(ako/mxcli#1754).
+
 ### [Navigation](#navigation-2)
 
 | Feature | MDL Syntax | 9.x | 10.0+ |
@@ -42267,6 +42489,35 @@ What *is* version-specific is the optional/default-value half: `PageParameter.Is
 ### [Design Properties (Atlas v2 vs v3)](#design-properties-atlas-v2-vs-v3)
 
 Atlas UI v3 (Mendix 11.0+) introduced new design properties like “Card style” and “Disable row wrap” for containers. These don’t exist in the Atlas v2 theme bundled with 10.x, causing CE6083.
+
+### [Properties Stored in an Older Shape](#properties-stored-in-an-older-shape)
+
+Some properties kept their meaning and changed how they are stored. mxcli builds the current shape and, on every write, rewrites it into the shape the project’s version stores. `describe` reads both shapes ([ako/mxcli#1209](https://github.com/ako/mxcli/issues/1209), [ako/mxcli#1163](https://github.com/ako/mxcli/issues/1163)). The older shapes were measured on Studio Pro-authored 9.24 documents and with `mx convert` 9.24.30:
+
+| Property | Below | Stored as |
+| --- | --- | --- |
+| A widget’s design property | 10.2 | `Type` (`Toggle` / `DropDown`), `StringValue`, `BooleanValue` on the entry, instead of a typed `Value` |
+| A data view’s page or snippet parameter | 10.0 | `PageParameter` / `SnippetParameter` names on the data source, instead of a `SourceVariable` |
+| A data view’s editability | 10.7 | `Editable: true|false`, instead of `Editability` |
+| A text box’s, text area’s or date picker’s placeholder | 10.11 | `Placeholder` text, instead of a `PlaceholderTemplate` |
+| Any data source’s `ForceFullObjects` | 10.8 | Not stored |
+| The `PersistentId` of a workflow, activity, outcome or boundary event | 10.21 | Not stored |
+| A constant’s value in a configuration (`alter settings constant … in configuration`) | 10.9 | A flat `Value` string on the override, instead of a `Settings$SharedValue` under `SharedOrPrivateValue` |
+| A page’s flow call argument that is the enclosing object (`call microflow M.F(P = $currentObject)`, `call nanoflow …`) | 10.10 | Not stored: Studio Pro infers it. A page parameter, snippet parameter or widget argument is stored as before, as a `Variable` |
+
+What an older shape cannot hold is refused, naming the element, rather than dropped:
+
+- a Spacing, colour-picker or toggle-button-group design property below 10.2;
+- conditional data view editability below 10.7;
+- a placeholder with parameters below 10.11;
+- a data view fed by another widget below 10.0;
+- a private constant value in a configuration below 10.9;
+- a page’s flow call argument that is any other expression (a literal, an attribute path) below 10.10;
+- an aggregate over an expression (`sum $L of …`), `reduce`, `all` or `any` below 10.0. The plain `count`, `sum`, `average`, `minimum` and `maximum` are written on every version ([ako/mxcli#1163](https://github.com/ako/mxcli/issues/1163)).
+
+Before this, `describe` on 9.24 printed none of these properties, so a describe → exec round trip removed them. Writing a data view on 9.24 was refused outright.
+
+A published OData service is not an older shape of the same document. Before 10.4 it is a different document (`Rest$PublishedODataService`, not `ODataPublish$PublishedODataService2`), which mxcli does not write. `create published odata service` is refused below 10.4 with MDL-VERSION01, by `check -p` and by `exec` before anything is written. Mendix 9.24 cannot load a project that holds the 10.4 document.
 
 ### [Widget Type Definitions](#widget-type-definitions)
 
