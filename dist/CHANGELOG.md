@@ -1,3 +1,7 @@
+## 2026-10-30 -- mxcli v0.28.0 @ aed6c20
+- +217 / -26 lines
+- Sections changed: [Annotations](#annotations-1), [BSON Differences Across Versions](#bson-differences-across-versions), [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions), [Caching](#caching), [Description](#description-30), [Description](#description-32), [Description](#description-33), [Description](#description-81) (+11 more)
+
 ## 2026-10-29 -- mxcli v0.28.0 @ 26c19dc
 - +274 / -23 lines
 - Sections changed: [Action Widgets](#action-widgets), [Auditing a repository: `mxcli git doctor`](#auditing-a-repository-mxcli-git-doctor), [BSON Differences Across Versions](#bson-differences-across-versions), [Behaviour changes to know about](#behaviour-changes-to-know-about), [Description](#description-34), [Description](#description-40), [Examples](#examples-52), [Examples](#examples-58) (+13 more)

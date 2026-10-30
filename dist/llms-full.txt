@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ 26c19dc
-Generated: 2026-10-29T07:56:08Z
+Version:   mxcli v0.28.0 @ aed6c20
+Generated: 2026-10-30T07:58:51Z
 
 ---
 
@@ -2772,7 +2772,7 @@ This runs Mendix’s own `mx check` tool on a temporary copy of the project. It 
 
 - BSON serialization errors (malformed internal data)
 - Security configuration problems (missing access rules, CE0066 errors)
-- Widget definition mismatches (CE0463 errors)
+- Widget definition mismatches (CE0463 errors), each labelled either a *stale widget definition*, which `mxcli fix widgets` clears, or one that *persists after update-widgets*
 - Missing required properties on widgets
 - Broken cross-references between documents
 
@@ -8631,11 +8631,17 @@ $Order = CREATE Sales.Order (Status = 'New');
 Positions are optional. A microflow written without them is laid out by mxcli: the
 main line runs left to right and wraps onto a new row once it passes two canvas
 widths (2880 px); a guard — `if … then …; return; end if` — drops its branch into the
-lane below while the main line carries on above it; and a `case` of four or more
-branches leaves the decision in three groups (top, right, bottom) so its lines do not
-cross. A statement that carries `@position` is never moved, and becomes the start of
-the row for the statements after it — so either place everything or nothing: a few
-hand-placed statements are not measured against what is laid out around them.
+lane below while the main line carries on above it; a custom error handler’s row hangs
+in that same lane, 130 px under its activity; and a `case` of four or more branches
+leaves the decision in three groups (top, right, bottom) so its lines do not cross.
+Whatever reaches down into the lane — a decision, a loop, an activity with an error
+handler of its own — waits for the lane to clear, so two consecutive handlers never
+share a row; a plain activity does not wait. A statement that carries `@position` is
+never moved, and becomes the start of the row for the statements after it; the
+statements before it keep the places the builder derives for them, and only a
+`@position` on the first statement moves the start event. So either place everything
+or nothing: a few hand-placed statements are not measured against what is laid out
+around them.
 
 To re-arrange a flow that already exists — one drawn in Studio Pro, or one whose
 positions no longer fit after edits — run `mxcli layout flows`. It applies this
@@ -16690,6 +16696,8 @@ mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 The catalog is cached in `.mxcli/catalog.db` next to the MPR file. On subsequent refreshes, mxcli checks whether the project has changed and only rebuilds if necessary (unless `FORCE` is specified).
 
+A catalog with the MDL source index (`REFRESH CATALOG FULL SOURCE`) keeps it on every later rebuild, including the ones `SEARCH` and `SHOW REFERENCES` start when the project has changed. Those rebuilds describe again only the documents that changed, and the documents that reference them. Every other row is carried over from the cache, so a rebuild after one edit costs about as much as `REFRESH CATALOG FULL`. Everything is described again when something outside the described documents changes (a folder, a module, the project settings, a Java action), when another mxcli build wrote the cache, and with `FORCE`.
+
 ## [When to Refresh](#when-to-refresh)
 
 - **After opening a project** – Run `REFRESH CATALOG` to enable queries
@@ -22563,7 +22571,9 @@ project into MPRv1), mx check compiles the theme into `theme-cache/` and
 So `docker build` copies the project to a temporary directory (in `$TMPDIR`)
 and runs all three there. Widget definitions are normalised on that copy, so the
 build uses the normalised model while the project keeps its own; run
-`mxcli fix widgets` to apply the normalisation to the project. The only thing
+`mxcli fix widgets` to apply the normalisation to the project. (So the build’s
+pre-build check does not report a stale widget definition; `mxcli docker check`,
+which checks the project as stored, does.) The only thing
 written is the output directory (`.docker/build/` by default, or `-o`). Build
 output, caches and VCS folders (`deployment/`, `.docker/`, `.git/`,
 `node_modules/`, …) are not copied.
@@ -22639,10 +22649,11 @@ mxcli docker check -p app.mpr
 ## [What It Does](#what-it-does-3)
 
 1. **Resolves the `mx` binary** – Takes the `mx` next to `--mxbuild-path`, else the first it finds on PATH, in a Studio Pro installation, or in the download cache at `~/.mxcli/mxbuild/<version>/modeler/mx`. It does not download one (see [Getting mx](#getting-mx))
-2. **Runs `mx check`** – Executes the Mendix project checker against a temporary copy of the `.mpr` file, as a local process; despite the `docker` in its name, it does not use Docker
+2. **Runs `mx check`** – Executes the Mendix project checker against a temporary copy of the project **as stored**, as a local process; despite the `docker` in its name, it does not use Docker
 3. **Reports results** – Outputs errors, warnings, and deprecations to the console
+4. **Explains CE0463** – Only when the check found a CE0463, re-checks the copy after `mx update-widgets` and labels each one (see [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions))
 
-If the project has errors, the command exits with a non-zero status code.
+If the stored project has errors, the command exits with a non-zero status code.
 
 Before `mx check` it also warns, without failing, about two problems `mx check`
 cannot see: an MPR v2 `ContentsHash` index that disagrees with the `.mxunit`
@@ -22673,27 +22684,84 @@ cached version, is used when the project’s own is not there. `mx check` accept
 another patch of the same minor; `mx update-widgets` does not and the check then
 runs without it (see `mxcli docker check --help`). Pass `--mxbuild-path ~/.mxcli/mxbuild/<version>` to choose one.
 
+## [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions)
+
+CE0463 (“The definition of this widget has changed”) means a stored pluggable
+widget instance does not match its widget package. Its commonest cause is
+harmless to fix: the package was upgraded after the widget was placed (any
+Marketplace or widget install does this), and Studio Pro’s “Update all widgets”
+resyncs it. But until it is resynced, MxBuild and `mxcli run --local` refuse
+the project, so `docker check` reports it.
+
+When the check of the stored project finds a CE0463, `docker check` runs
+`mx update-widgets` on the same temporary copy, checks it again, and labels each
+CE0463 of the stored project:
+
+| Label | Meaning | Fix |
+| --- | --- | --- |
+| `stale widget definition — `mxcli fix widgets` fixes it` | the resync clears it | `mxcli fix widgets -p app.mpr` updates the project’s widgets and keeps MPR v2 |
+| `persists after update-widgets` | the resync does not clear it: something in the stored widget is wrong in a way a resync does not repair (if mxcli wrote the widget, that is an mxcli defect worth reporting) | not a resync; see [Pluggable Widgets](#pluggable-widgets-across-mendix-versions) |
+
+The verdict and the exit status are always the stored project’s. The re-check
+costs a second `mx check`, so it runs only when there is a CE0463 to explain.
+
+`mx check` does not print the page a CE0463 is on, so widgets of the same name on
+different pages print the same line; the labels count them (`(4×)`, or
+`(2 of 3)` when a resync clears only some of them).
+
+| Flag | Checks | Exit status | Labels |
+| --- | --- | --- | --- |
+| *(none)* | the project as stored | the stored project’s | yes, when there is a CE0463 |
+| `--no-update-widgets` | the project as stored | the stored project’s | no: update-widgets never runs |
+| `--update-widgets` | only a copy normalised by `mx update-widgets` first | the normalised copy’s | no |
+
+`--update-widgets` is how `docker check` behaved by default in earlier
+releases. It reports 0 errors for a project whose only errors are stale widget
+definitions, which then still fails to build: use it only when you mean to ask
+“would this pass after `mxcli fix widgets`?”. `--no-update-widgets` is kept for
+scripts that pass it; its verdict is the default’s.
+
+If `mx update-widgets` fails during the re-check (it refuses a project whose
+Mendix version is not exactly its own, `exit status 4`), the CE0463s are left
+unlabelled and the output says so.
+
 ## [Example Output](#example-output-1)
 
 A clean project:
 
 ```
-Using mx: /home/vscode/.mxcli/mxbuild/11.6.3.12345/modeler/mx
+Using mx: /home/vscode/.mxcli/mxbuild/11.13.0/modeler/mx
+Checking a temporary copy (mx writes into the project it checks; the project on disk is not changed).
 Checking project /workspaces/app/app.mpr...
+Checking app for errors...
 The app contains: 0 errors.
 Project check passed.
 
 ```
 
-A project with errors:
+A project whose Data grid 2 package was upgraded after its grids were placed
+(measured on Mendix 11.13.0; the long CE0463 message is shortened here):
 
 ```
-Using mx: /home/vscode/.mxcli/mxbuild/11.6.3.12345/modeler/mx
 Checking project /workspaces/app/app.mpr...
-CE0001: Entity 'MyModule.Customer' has no access rules configured.
-CE0463: Widget definition changed for 'DataGrid2'.
-The app contains: 2 errors.
-project check failed: exit status 1
+Checking app for errors...
+[error] [CE0463] "The definition of this widget has changed. ..." at Data grid 2 'dataGrid2_1'
+[error] [CE0463] "The definition of this widget has changed. ..." at Data grid 2 'dataGrid21'
+...
+The app contains: 11 errors.
+
+The stored project has 11 CE0463 errors. Re-checking the temporary copy after
+  `mx update-widgets` to tell stale widget definitions from other causes...
+CE0463 in the stored project:
+  at Data grid 2 'dataGrid2_1' (4×): stale widget definition — `mxcli fix widgets` fixes it
+  at Data grid 2 'dataGrid21' (4×): stale widget definition — `mxcli fix widgets` fixes it
+  at Data grid 2 'dataGrid2_2' (2×): stale widget definition — `mxcli fix widgets` fixes it
+  at Data grid 2 'dataGrid2_3': stale widget definition — `mxcli fix widgets` fixes it
+All 11 are stale widget definitions. This updates them in the project, as Studio
+  Pro's "Update all widgets" does:
+    mxcli fix widgets -p /workspaces/app/app.mpr
+As stored: 11 errors. After update-widgets: 0 errors.
+Error: project check failed: exit status 1
 
 ```
 ## [When to Use](#when-to-use)
@@ -22701,7 +22769,7 @@ project check failed: exit status 1
 `mxcli docker check` is faster than a full build (`mxcli docker build`) because it only validates the project structure without compiling or packaging. This makes it useful for:
 
 - **Quick validation** after making MDL changes
-- **Pre-build gate** – `mxcli docker build` runs `mx check` automatically before building (use `--skip-check` to bypass)
+- **Pre-build gate** – `mxcli docker build` runs `mx check` automatically before building (use `--skip-check` to bypass). That check runs on the build’s widget-normalised copy, as `docker check --update-widgets` does, so it does not report stale widget definitions; `docker check` does
 - **CI pipelines** – fail fast on invalid projects before spending time on a full build
 - **Iterative development** – check after each MDL script execution to catch errors early
 
@@ -23207,13 +23275,20 @@ mxcli fix hashes -p app.mpr --repair   # rewrite mismatched hashes from the file
 
 The repair treats the files as the source of truth and never changes them. It
 updates every hash in one SQLite transaction, and, like every mxcli write, is
-refused while Studio Pro has the project open (the `.mpr.lock` beside it). An
-MPR v1 project keeps unit contents inside the `.mpr`, has no index to drift,
-and the command says so.
+refused while Studio Pro has the project open (the `.mpr.lock` beside it).
+
+An MPR v1 project (below Mendix 10.18) keeps each unit’s contents inside the
+`.mpr`, in the same row as its `ContentsHash`, and Studio Pro fills the hash
+there too, with the same formula over the stored contents. No file can drift
+from it, but mxcli before this release replaced a unit’s contents and left the
+old hash in place, or stored none for a new unit. On v1 the command compares
+each hash with the contents beside it, reports `MISMATCH` only, and `--repair`
+rewrites the hash from the contents.
 
 `mxcli exec` and `mxcli docker check` run the verify too and print a one-line
 warning when it finds a mismatch or a missing file. It never fails them;
-measured on a 900-unit project, the whole verify takes about 0.2 s.
+measured on a 900-unit project, the whole verify takes about 0.2 s. They skip
+MPR v1, where the verify reads every unit’s contents.
 
 ## [Property names Studio Pro’s merge compares: `mxcli fix property-sets`](#property-names-studio-pros-merge-compares-mxcli-fix-property-sets)
 
@@ -23254,6 +23329,20 @@ the old random GUID and still finds the role by name, so renaming the role
 there still deletes its row and the user assignments that are not demo users. A unit holding a *value* in a
 key its version does not declare is reported and left alone, and, like every
 mxcli write, the command is refused while Studio Pro has the project open.
+
+The values the command adds were measured with Mendix’s own tools on specific
+Mendix versions. A key that no measurement covers on your version is not
+filled, but the command still finds it. Studio Pro writes the same property
+names on every element of a type, so the command also lists each name that
+some elements of a type carry and others lack:
+
+```
+  MIXED     Microflows$Nanoflow.ExportLevel: on 14 of 15 element(s); without it: 71e6faf6-… [Microflows$Nanoflow ACT_Login]
+
+```
+
+It leaves those names as they are and exits 1. Report them with your Mendix
+version so the value can be measured.
 
 ### [The repair reaches forward, not back](#the-repair-reaches-forward-not-back)
 
@@ -28844,6 +28933,20 @@ against the flow as stored before any operation runs.
 
 A fragment is written exactly as the same statements are in `CREATE MICROFLOW`, between `BEGIN` and `END`.
 
+### [Editing an activity](#editing-an-activity)
+
+`REPLACE` by one activity of the same kind — the same action, with a
+filter’s or find’s expression, a retrieve’s `WHERE`, a member’s value or a
+call’s argument changed — edits the stored activity rather than putting a new
+one in its place. The activity keeps its element ID, its place and its size,
+and so do its action and every element under it that pairs up: a member of a
+change or create by its attribute or association, an argument by its
+parameter, anything else by its property and type. A member taken out goes
+with its ID, which no other member inherits; a part of another type (a `FIND`
+where a `FILTER` was) is new. Studio Pro, which compares and merges by element
+ID, then shows the activity as changed rather than one removed and another
+added. An activity replaced by another kind of activity, or by several, is new.
+
 ### [Inside a loop body](#inside-a-loop-body)
 
 Inside a loop body, plain activities are inserted, replaced and dropped the
@@ -28894,6 +28997,13 @@ added, removed, reordered or changed inside a loop body is spliced; under
 makes it — for a decision inside a loop body, `REPLACE BODY OF` that loop.
 Re-running the script that created a flow after another script spliced a
 decision into it takes that decision out again, when it has the shape above.
+
+A statement changed where it stands edits its stored activity, as above, and
+so does each of several adjacent statements changed in their own places. The
+report says which: `Modified microflow: M.F (spliced: 1 edited in place)` for
+a node that kept its element ID — an activity of the same kind, a decision’s
+condition, a return’s value — and `replaced with new element IDs` for one
+that did not.
 
 ## [Examples](#examples-42)
 
@@ -29044,7 +29154,16 @@ clears a description. A new action gets no descriptions and the return value nam
 ### [The Java Source File](#the-java-source-file)
 
 The statement writes `javasource/<module>/actions/<Name>.java` the way mxbuild
-generates it, byte for byte, so the next build leaves it unchanged. The action’s
+generates it, byte for byte, so the next build leaves it unchanged.
+
+The body is only in this file, not in the model, so commit `javasource/`
+together with the `.mpr` and `mprcontents/`. A commit of the model alone gives a
+clone an action with no logic. `mxcli exec` names each file it writes there on
+its own line, for example
+`Wrote javasource/sales/actions/JA_Ping.java (Java action body; commit it with the model)`,
+and ends the run with `Files changed outside the model: N (…)`. A rewrite that
+leaves the file’s content as it was is not reported. `RENAME JAVA ACTION` moves
+the file and `DROP JAVA ACTION` removes it; both are reported the same way. The action’s
 documentation – the `/** ... */` before `CREATE` – is the class javadoc above
 `public class`; a rewrite without one keeps the stored documentation, in the model
 and in the file. (Before ako/mxcli#1700 the file had no javadoc, so every rewrite
@@ -29256,6 +29375,14 @@ Two things are written: the model unit
 `javascriptsource/<Module>/actions/<Name>.js`. The `.js` file is generated with
 the JSDoc header, the exported `async function`, and the supplied body placed
 between the `BEGIN USER CODE` / `END USER CODE` markers.
+
+The body is only in the `.js` file, not in the model, so commit
+`javascriptsource/` together with the `.mpr` and `mprcontents/`. A commit of
+the model alone gives a clone an action with no logic. `mxcli exec` names each
+file it writes there on its own line, for example
+`Wrote javascriptsource/sales/actions/JS_Ping.js (JavaScript action body; commit it with the model)`,
+and ends the run with `Files changed outside the model: N (…)`. A rewrite that
+leaves the file’s content as it was is not reported.
 
 > **The `AS $$ ... $$` body is mandatory.** Like Java actions, every `CREATE`
 > needs a code body; omitting it reports `no viable alternative at input '...'`.
@@ -35667,6 +35794,15 @@ Moves a document to a different folder or module. Every top-level document type 
 
 Entity moves only support moving to a module (not to a folder), because entities are embedded in domain model documents.
 
+A Java or JavaScript action keeps its source in a directory named after its module
+(`javasource/<module>/actions/`, `javascriptsource/<module>/actions/`). A
+cross-module move takes the source file along, and rewrites a Java source’s
+`package` line the way mxbuild would, so the action keeps its code. A source left
+behind builds without error, but the app then calls a generated stub that throws
+“not implemented”. If the target module’s directory already holds a source file
+of that name, the move is refused before anything changes. A move within the
+module, into a folder, leaves the source where it is.
+
 A `FOLDER` clause on `CREATE OR MODIFY` moves an existing document as well, so a
 script that already creates a document does not need a separate `MOVE` to place
 it.
@@ -37193,6 +37329,16 @@ data, copied into `modelsdk/version` by `go generate`, or, for keys that data
 lacks, from `modelsdk/canon/studiopro_property_floors.json`. Writers that derive
 a value for a newer key leave it out on older versions themselves, so the
 refusal only fires for something the statement asked for.
+
+An element whose `$Type` the project’s version does not have yet is refused the
+same way, wherever it sits in the unit (`canon.UndeclaredTypeError`,
+ako/mxcli#1774). Each type’s introduction version is in
+`modelsdk/canon/mendixmodelsdk_type_versions.json`, extracted from the Mendix
+Model SDK by `modelsdk/canon/gen_type_versions.go`. The check runs after the
+property shapes are lowered for the version, so a type with an older shape is
+written in that shape instead of being refused. The SDK’s deletion versions are
+in the file too, but they are not enforced: a type the SDK renamed or moved
+keeps its storage name.
 
 The doctype integration gate measures this on every script. A new gap fails it.
 To record a new measurement into the table, run the gate with
@@ -40791,6 +40937,19 @@ version you actually have at the moment you create the widget.
    widget’s compiled `editorConfig.js`. mxcli statically extracts those **dynamic property
    rules** and applies them, so a freshly-created widget carries exactly the defaults
    Studio Pro would give it.
+   
+   A property the widget hides must hold its default, or the build fails with CE0463.
+   So a hidden property you leave out is written at its default; one you set to its
+   default draws an MDL-WIDGET10 warning (the value is ignored); and one you set to
+   anything else is an MDL-WIDGET10 **error**, which `exec` refuses before writing.
+   `describe` leaves out a hidden property that holds its default. For example, a
+   Timeline grouped by `'day'` hides `groupByMonthOptions`, and one with
+   `customVisualization: true` hides both format enumerations.
+   
+   This only covers rules mxcli recognises. `mxcli widget describe <name> -p app.mpr`
+   ends with “*N* of *M* editor hide-rules recognized”. A rule it cannot read hides
+   nothing as far as `check` knows, so a value set behind one reaches `mx check`
+   unwarned.
 
 The result: widgets created by mxcli open cleanly across Mendix 10.x and 11.x with the
 widget packages bundled with those releases — verified on Mendix 11.12 with Data
@@ -40830,9 +40989,11 @@ This changed during the beta. Earlier builds rebuilt every pluggable widget of a
 rewritten page from the installed `.mpk`, so re-running `describe` output also
 upgraded it — and usually cleared its CE0463 — while silently resetting whatever the
 statement could not say (a specialized column binding, a row click). If a script
-relied on that side effect to clear CE0463, run `mxcli fix widgets` instead;
-`mxcli docker check` passing is not enough, because it updates the widgets of a
-temporary copy only (`--no-update-widgets` checks the project as stored).
+relied on that side effect to clear CE0463, run `mxcli fix widgets` instead.
+`mxcli docker check` checks the project as stored and labels each CE0463 a widget
+resync would clear as a *stale widget definition*, so it shows which ones
+`mxcli fix widgets` fixes (`--update-widgets` checks a resynced copy only, and
+hides them).
 
 **Two widgets do not yet author cleanly against Data Widgets 3.10+.** Freshly created
 `gallery` and `dropdownfilter` widgets produce CE0463 on those packages; `datagrid2`,
@@ -41407,7 +41568,7 @@ Re-running is free: a second run reports 0 units changed, because [idempotent wr
 | --- | --- | --- |
 | `mxcli fix widgets` | **yes** | the fix — after any headless install |
 | `mxcli fix design-properties` | **yes** | the fix — after any headless install |
-| `mxcli docker check` | no | runs the widget resync on a temporary copy so the *check* is not tripped by CE0463; the stored model stays stale (`--no-update-widgets` checks it as stored) |
+| `mxcli docker check` | no | checks the project as stored, so it reports the CE0463 a headless install leaves, and labels each one the widget resync clears as a stale widget definition (the resync runs on a temporary copy only) |
 | `mxcli widget sync` | yes, partial | reconciles widget schemas in mxcli’s own code; clears 7 of 40 on the reference fixture |
 
 CE6087 is distinct from `CE6083`, which is a *missing* design-property declaration and is fixed by installing everything the package ships — something `install` and `update` already do.
@@ -42435,7 +42596,30 @@ body on Mendix 10 too, and Studio Pro could not open the project.
 | --- | --- | --- | --- |
 | Basic workflows | `CREATE WORKFLOW` | Yes | Yes |
 | User tasks | `USER TASK ... OUTCOMES (...)` | Yes | Yes |
+| Multi-user tasks | `MULTI USER TASK ...` | 9.22+ | Yes |
+| Multi-user task rules majority and threshold | `DECIDE BY MAJORITY ...`, `DECIDE BY THRESHOLD ...` | No | Yes |
+| Waiting for all users | `AWAIT ALL USERS` | No | 10.2+ |
+| Deciding by a microflow | `DECIDE BY MICROFLOW ...` | No | 10.3+ |
+| Group targeting | `TARGETING GROUPS XPATH ...`, `TARGETING GROUPS MICROFLOW ...` | No | 11.2+ |
 | Parallel splits | `PARALLEL SPLIT` | Yes | Yes |
+| Waiting for a notification | `WAIT FOR NOTIFICATION` | No | Yes |
+| Waiting for a timer | `WAIT FOR TIMER` | No | 10.6+ |
+| A timer boundary event of no kind | `BOUNDARY EVENT TIMER ...` | No | 10.14+ (MDL-WF07 refuses it from 11.0) |
+| Interrupting and non-interrupting timer boundary events | `BOUNDARY EVENT [NON] INTERRUPTING TIMER ...` | No | 10.20+ |
+| Locking and unlocking a workflow | `LOCK WORKFLOW ...`, `UNLOCK WORKFLOW ...` | No | Yes |
+
+Every write refuses an element whose type the project’s Mendix version does not
+have yet, naming the type, the version that introduced it and the project’s
+version (“this Mendix 9.24.30 project cannot store
+Workflows$WaitForNotificationActivity (Mendix 10.0.0+)”). The versions are each
+type’s own, from the Mendix Model SDK. Below their versions, the wait
+activities, the timer boundary events and a lock or unlock naming a workflow are
+also refused up front, by `check -p` and by `exec` before anything is written,
+with MDL-VERSION01. Before this, such a type was written, and the project did not load
+(`TypeCacheUnknownTypeException`, [ako/mxcli#1774](https://github.com/ako/mxcli/issues/1774)).
+Where an older version stores the same thing in another shape (the parallel
+split’s end marker, user tasks), that shape is written instead, as listed under
+“Properties Stored in an Older Shape”.
 
 Below Mendix 11.3 a workflow’s main flow has no stored start or end activity:
 11.1 and 11.2 keep them implicit, and 10.x and 11.0 do not have the start
@@ -42502,6 +42686,9 @@ Some properties kept their meaning and changed how they are stored. mxcli builds
 | A text box’s, text area’s or date picker’s placeholder | 10.11 | `Placeholder` text, instead of a `PlaceholderTemplate` |
 | Any data source’s `ForceFullObjects` | 10.8 | Not stored |
 | The `PersistentId` of a workflow, activity, outcome or boundary event | 10.21 | Not stored |
+| The end of a parallel split path (`Workflows$EndOfParallelSplitPathActivity`, a type introduced in 10.21) | 10.21 | Not stored: a path holds its activities and nothing more (Studio Pro 9.4) |
+| A user task (`Workflows$SingleUserTaskActivity` / `MultiUserTaskActivity`, types introduced in 10.12) | 10.12 | A `Workflows$UserTask` whose `UserTaskCompletion` is a `SingleInputCompletion`, or a `MultiInputCompletion` holding the rule, the participants and, from 10.2, `AwaitAllUsers` (Studio Pro 9.24, [ako/mxcli#1771](https://github.com/ako/mxcli/issues/1771)) |
+| A user task’s targeting (`targeting users xpath […]`, `targeting users microflow …`, none) | 11.2 | A `UserSource` (`XPathBasedUserSource`, `MicroflowBasedUserSource`, `EmptyUserSource`) holding the same value, instead of a `UserTargeting` ([ako/mxcli#1771](https://github.com/ako/mxcli/issues/1771)) |
 | A constant’s value in a configuration (`alter settings constant … in configuration`) | 10.9 | A flat `Value` string on the override, instead of a `Settings$SharedValue` under `SharedOrPrivateValue` |
 | A page’s flow call argument that is the enclosing object (`call microflow M.F(P = $currentObject)`, `call nanoflow …`) | 10.10 | Not stored: Studio Pro infers it. A page parameter, snippet parameter or widget argument is stored as before, as a `Variable` |
 
@@ -42513,6 +42700,8 @@ What an older shape cannot hold is refused, naming the element, rather than drop
 - a data view fed by another widget below 10.0;
 - a private constant value in a configuration below 10.9;
 - a page’s flow call argument that is any other expression (a literal, an attribute path) below 10.10;
+- a user task targeting groups (`targeting groups xpath …`, `targeting groups microflow …`) below 11.2, where a task targets users only;
+- a multi-user task below 9.22, `decide by majority` or `decide by threshold` below 10.0, `decide by microflow` below 10.3, `await all users` below 10.2, and a boundary event on a user task below 10.14. The user-task features are also refused up front, by `check -p` and by `exec` before anything is written, with MDL-VERSION01 ([ako/mxcli#1771](https://github.com/ako/mxcli/issues/1771));
 - an aggregate over an expression (`sum $L of …`), `reduce`, `all` or `any` below 10.0. The plain `count`, `sum`, `average`, `minimum` and `maximum` are written on every version ([ako/mxcli#1163](https://github.com/ako/mxcli/issues/1163)).
 
 Before this, `describe` on 9.24 printed none of these properties, so a describe → exec round trip removed them. Writing a data view on 9.24 was refused outright.
@@ -42522,6 +42711,8 @@ A published OData service is not an older shape of the same document. Before 10.
 ### [Widget Type Definitions](#widget-type-definitions)
 
 Pluggable widget PropertyTypes change between Mendix versions. A widget template extracted from 11.6 may have more or fewer properties than the widget installed in a 10.24 project. The [widget augmentation system](#widget-template-system) handles this by reconciling templates against the project’s `.mpk` files.
+
+The schema itself also gained keys over time. A key the project’s version does not declare is left out of the schema mxcli writes, by the same version data the property floor uses. For example, a return type’s `AssignableTo` arrived in 9.20, so a 9.0–9.19 schema stores `EntityProperty`, `IsList` and `Type`, as Studio Pro 9.1 and 9.4 do ([ako/mxcli#1163](https://github.com/ako/mxcli/issues/1163)).
 
 ## [Widget Template Versions](#widget-template-versions)
 
