@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.28.0 @ aed6c20
-Generated: 2026-10-30T07:58:51Z
+Version:   mxcli v0.29.0 @ 763288f
+Generated: 2026-10-31T07:54:44Z
 
 ---
 
@@ -2716,7 +2716,7 @@ This catches everything Level 1 catches, plus:
 - Page layouts that don’t exist in the project
 - Association endpoints pointing to missing entities
 - A plain `create` whose name already exists in the project
-- A statement the project’s Mendix version cannot store (`MDL-VERSION01`, e.g. `create view entity` below 10.18) — the same version gates `exec` refuses with
+- A statement the project’s Mendix version cannot store (`MDL-VERSION01`, e.g. `create view entity` below 10.21) — the same version gates `exec` refuses with
 
 This is the check you should run before executing a script. It’s fast (reads the project but doesn’t modify it) and catches most mistakes.
 
@@ -8972,6 +8972,13 @@ RETRIEVE $Lines FROM $Order/Sales.OrderLine_Order;
 RETRIEVE $Customer FROM $Order/Sales.Order_Customer;
 
 ```
+
+What it binds follows the association: from the FROM entity of a Reference, the one
+object it points at; from its TO entity, the list of objects pointing at it (one object
+when the owner is Both); over a Reference set, a list from either end. A self-reference
+is followed from its FROM end, so a Reference from an entity to itself gives the one
+object and a Reference set the list. `mxcli check -p --references` reports a list used
+as an object (MDL-RETRIEVE03) and an object used as a list (MDL-RETRIEVE01).
 
 The association path uses the format `$Variable/Module.AssociationName`. A bare
 name (`$Order/Order_Customer`) is resolved against the variable’s entity — through
@@ -16696,7 +16703,30 @@ mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 The catalog is cached in `.mxcli/catalog.db` next to the MPR file. On subsequent refreshes, mxcli checks whether the project has changed and only rebuilds if necessary (unless `FORCE` is specified).
 
-A catalog with the MDL source index (`REFRESH CATALOG FULL SOURCE`) keeps it on every later rebuild, including the ones `SEARCH` and `SHOW REFERENCES` start when the project has changed. Those rebuilds describe again only the documents that changed, and the documents that reference them. Every other row is carried over from the cache, so a rebuild after one edit costs about as much as `REFRESH CATALOG FULL`. Everything is described again when something outside the described documents changes (a folder, a module, the project settings, a Java action), when another mxcli build wrote the cache, and with `FORCE`.
+### [Incremental rebuilds](#incremental-rebuilds)
+
+A rebuild after a save does not start from scratch. The cache records which document every row came from, and the next rebuild of the same level (fast, `FULL` or `FULL SOURCE`) starts from the cached catalog and produces again only the rows of:
+
+- the documents that changed, were added or were deleted (a document moved to another existing folder counts as changed);
+- the documents whose references name one of them, before or after the change. A document’s rows can depend on what it names: what a delete removes depends on the association it retrieved over. A specialization counts as naming what its generalization holds.
+
+The rows of every other document stay as they are, and only the documents being rebuilt are read and decoded. On a 4,753-document project a refresh after one edit takes under a second, against several seconds for a full build. The progress output then shows one line, `incremental: N units rebuilt, M carried over`, instead of a count per table.
+
+The rebuild is a full one, as before, when:
+
+- something changes that no per-document pass reads: a folder, a module, the project settings, the security settings or the navigation;
+- the cache was written by another mxcli build or at another level;
+- `FORCE` is given.
+
+An incremental rebuild produces exactly the rows a full one would. Only the internal row IDs (the `Id` column of `refs` and `permissions`) and the order of rows in an unsorted query can differ.
+
+With the MDL source index, an entity in a document being rebuilt is described again only when its own definition changed, not when another entity of its module did. A change to an association or annotation describes every entity of that module again, and a change to a document that is never described (a Java action, a constant, an image collection) describes everything.
+
+### [The unit store (MPR v2)](#the-unit-store-mpr-v2)
+
+An MPR v2 project keeps each document in its own file under `mprcontents/`, and a refresh reads all of them. mxcli keeps a compressed copy of those files in `.mxcli/cache/unit-contents.db` and reads a document from its own file only when the file has changed since mxcli last read it (its size or modification time differs, or the `.mpr` records another content hash). A refresh after a save therefore opens one or two files instead of thousands. That matters most on Windows, where a virus scanner inspects every file a process opens.
+
+The store is a cache: deleting it costs one slower refresh, and a store that cannot be read or written is ignored. It is about half the size of `mprcontents/`, and its directory has its own `.gitignore`, so it is never committed even where `.mxcli/` is not ignored.
 
 ## [When to Refresh](#when-to-refresh)
 
@@ -20258,6 +20288,32 @@ Check the page’s allowed module roles (`mxcli -p app.mpr -c "show access on pa
 
 A warning banner or validation message is shown but does not fail the page.
 
+### [An app on this machine, by its own host name, behind a proxy](#an-app-on-this-machine-by-its-own-host-name-behind-a-proxy)
+
+An app on this machine is reached directly, whatever name the URL gives it. This
+matters where the environment sets a proxy — a dev container, a Claude Code
+session — and the app is checked by a host name of its own, such as an
+`/etc/hosts` entry `frontend.local` for `127.0.0.1` (the usual way to give two
+local apps separate cookie jars). Chromium takes its proxy from `http_proxy` /
+`https_proxy`, and for a WebSocket it prefers the HTTPS proxy even for `ws://`.
+With only `https_proxy` set and `no_proxy` listing `localhost` and `127.0.0.1`,
+the page loaded directly while the runtime’s dev channel,
+`ws://frontend.local:8180/mxdevtools/`, went to the proxy, which cannot reach
+this machine and answered 502. A page that rendered failed on two console errors
+(ako/mxcli#1800):
+
+```
+  ERR    WebSocket connection to 'ws://frontend.local:8180/mxdevtools/' failed: Error during WebSocket handshake: Unexpected response code: 502
+
+```
+
+The browser that `playwright check`, `run --page-check` and `run --screenshot`
+start now adds a host that resolves only to this machine (loopback, or an address
+of one of its interfaces) to `no_proxy`. Nothing is ignored: the channel connects,
+as it does on `127.0.0.1`, and a console error the page does have still fails it.
+A remote URL, such as a `--hub` preview, still goes through the proxy. A browser
+of your own needs the same entry in `no_proxy`.
+
 ### [Signing in](#signing-in)
 
 | Flags | Signs in as |
@@ -22264,9 +22320,9 @@ Under the hood the debugger spans two runtime APIs, which `mxcli debug` hides:
 | `mxcli debug unbreak <Module.Flow> --activity <#n|caption>` | Clear a breakpoint |
 | `mxcli debug breaks` | List the breakpoints set this session (name → object ID) |
 | `mxcli debug paused` | Paused microflows + full state (variables) |
-| `mxcli debug inspect <var> [--list] [--flow <debug_id>]` | Inspect one variable of a paused flow; `--list` inspects a list variable (`get_list`) |
+| `mxcli debug inspect <var> [--list] [--flow <debug_id>]` | Inspect one variable of a paused flow — an object’s members, or a primitive’s value (String, enumeration, …); `--list` inspects a list variable (`get_list`) |
 | `mxcli debug step [over|into|out] [--flow <debug_id>]` | Advance one step (default `over`) |
-| `mxcli debug continue [--all]` | Resume the paused flow (or all with `--all`) |
+| `mxcli debug continue [--flow <debug_id>] [--all]` | Resume the paused flow (or all with `--all`) |
 
 **Selecting an activity:** `--activity '#2'` (the index from `activities`) or a
 caption substring like `--activity 'Retrieve'` (case-insensitive; must match one).
@@ -22324,6 +22380,11 @@ server-side (browser console only) — only `INFO`/`WARNING`/`ERROR` reach `runt
   shutdown; a manual `enable` is your responsibility.
 - **Use the same `-p` for every command.** The session token and breakpoint record
   live under `<projectDir>/.mxcli/`.
+- **A request the runtime refuses is an error, with the runtime’s reason** — for
+  example `the runtime refused add_breakpoint (status 2): Failed to parse condition: …` for a bad `--if`. An activity or flow the *running* app does not
+  have yet (rebuild or restart after changing the model) and `Invalid session token` (the runtime restarted, or another debugger such as Studio Pro started a
+  session — run `mxcli debug enable`) are the other common ones. A command that
+  printed success was accepted by the runtime.
 
 # [Measuring Agent Sessions](#measuring-agent-sessions)
 
@@ -24870,6 +24931,12 @@ was a nightly or development build. A
 file, so a `./mxcli` that is a symlink to the `PATH` binary never has the
 download written through it. If the download fails, the older `./mxcli` is
 kept with a warning rather than leaving the project without a binary.
+
+On Windows (Git Bash, MSYS2 or Cygwin) the script fetches the
+`mxcli-windows-<arch>.exe` asset and installs it, or links the `PATH` binary,
+as `./mxcli.exe`. Git Bash, PowerShell and cmd can all run it as `./mxcli`. A
+non-executable `./mxcli` beside it, such as the Linux build that `mxcli new`
+leaves on Windows, is removed.
 
 ## [Re-running mxcli init](#re-running-mxcli-init)
 
@@ -34794,6 +34861,7 @@ The target may also be an attribute (`Module.Entity.Attribute`), an enumeration,
 | `type` | an attribute, parameter or variable is typed as the enumeration |
 | `value` | an expression names the enumeration value |
 | `mapping` | an import or export mapping maps the entity |
+| `split` | a microflow, nanoflow or rule branches on an object being the entity (an inheritance split) |
 
 `IMPACT OF` an enumeration includes the uses of each of its values, with a `Target` column naming which one.
 
@@ -40526,7 +40594,7 @@ Everything mxcli can do, organized by use case.
 | --- | --- | --- |
 | Create entity | `CREATE PERSISTENT ENTITY` | Full support |
 | Create non-persistent entity | `CREATE NON-PERSISTENT ENTITY` | Full support |
-| Create view entity (OQL) | `CREATE VIEW ENTITY ... AS SELECT` | 10.18+ |
+| Create view entity (OQL) | `CREATE VIEW ENTITY ... AS SELECT` | 10.21+ |
 | Modify entity | `ALTER ENTITY ... ADD/MODIFY/DROP ATTRIBUTE` | Full support |
 | Create association | `CREATE ASSOCIATION ... FROM ... TO` | Full support |
 | Create enumeration | `CREATE ENUMERATION` | Full support |
@@ -42532,7 +42600,7 @@ The tables below show exactly which features are available on each Mendix versio
 | Calculated attributes | `CALCULATED BY Module.Microflow` | Yes | Yes | Yes | Yes |
 | Entity generalization | `EXTENDS Module.ParentEntity` | Yes | Yes | Yes | Yes |
 | ALTER ENTITY | `ALTER ENTITY ... ADD/DROP/RENAME` | – | Yes | Yes | Yes |
-| View entities | `CREATE VIEW ENTITY ... AS SELECT` | – | – | Yes | Yes |
+| View entities | `CREATE VIEW ENTITY ... AS SELECT` | – | – | 10.21+ | Yes |
 
 ### [Microflows](#microflows-1)
 
@@ -42540,11 +42608,26 @@ The tables below show exactly which features are available on each Mendix versio
 | --- | --- | --- | --- | --- | --- |
 | Basic microflows | `CREATE MICROFLOW ... BEGIN ... END` | Yes | Yes | Yes | Yes |
 | Loop in branches | `LOOP inside IF/ELSE` | Yes | Yes | Yes | Yes |
+| Loops over a list, while loops | `LOOP $Item IN $List ...`, `WHILE ...` | 9.0.4+ | Yes | Yes | Yes |
+| Show page with arguments | `SHOW PAGE Module.Page (Param = $Value)` | 9.7+ | Yes | Yes | Yes |
+| Calls in a task queue | `CALL MICROFLOW ... IN QUEUE ...`, `CALL JAVA ACTION ... IN QUEUE ...` | 9.10+ | Yes | Yes | Yes |
+| Find and filter by expression | `FIND $List WHERE ...`, `FILTER $List WHERE ...` | 9.0.3+ | Yes | Yes | Yes |
+| Call external action | `CALL EXTERNAL ACTION Module.Service.Action (...)` | 9.19+ (with arguments: –) | Yes (with arguments: 10.2+) | Yes | Yes |
+| Range of a list | `RANGE $List OFFSET ... LIMIT ...` | 9.24+ | Yes | Yes | Yes |
 | SEND REST REQUEST | `SEND REST REQUEST Module.Service.Op` | – | 10.1+ | Yes | Yes |
-| Execute database query | `EXECUTE DATABASE QUERY ...` | – | – | Yes | Yes |
-| Show page with params | `SHOW PAGE ... WITH PARAMS` | – | – | – | Yes |
+| SEND REST REQUEST arguments, result, body | `... WITH (...)`, `$R = SEND REST REQUEST ...`, `... BODY $Var` | – | 10.2+, 10.4+, 10.5+ | Yes | Yes |
+| Transform JSON with a data transformer | `$Out = TRANSFORM $Json WITH Module.Transformer` | – | – | – | 11.4+ |
+| Execute database query | `EXECUTE DATABASE QUERY ...` | 9.24+ | Yes | Yes | Yes |
 | REST query parameters | `SEND REST REQUEST with QUERY params` | – | – | – | Yes |
-| DB query runtime connection | `EXECUTE DATABASE QUERY CONNECTION ...` | – | – | – | Yes |
+| DB query runtime connection | `EXECUTE DATABASE QUERY ... CONNECTION (...)` | – | – | – | 11.1+ |
+
+Below its version, each of these is refused by `check -p` and by `exec` before
+anything is written, with MDL-VERSION01, wherever it sits in the flow and in what
+an `alter microflow` or `alter nanoflow` inserts. The versions are the Mendix
+Model SDK’s own for the type each writes; before this, `check -p` passed them and
+the write refused them part-way through the script
+([ako/mxcli#1811](https://github.com/ako/mxcli/issues/1811)). A `FIND` or
+`FILTER` `BY Member = value` writes the older find and filter every version has.
 
 ### [Pages](#pages-6)
 
@@ -42559,6 +42642,8 @@ The tables below show exactly which features are available on each Mendix versio
 | Page parameters (entity) | `Params: ( $Item: Module.Entity )` | 9.4+ | Yes | Yes | Yes |
 | Page parameters (primitive) | `Params: ( $Qty: Integer )` | – | – | – | 11.6+ |
 | Page variables | `Variables: ( ... )` | – | 10.20+ | 10.20+ | Yes |
+| Snippet parameters | `CREATE SNIPPET ... (Params: ( ... ))` | 9.21+ | Yes | Yes | Yes |
+| Workflow actions on a button | `action: open user task`, `open workflow`, `call workflow ...`; `complete task '...'` | 9.0.2+; 9.19+ | Yes | Yes | Yes |
 | Design properties (Atlas v3) | `DesignProperties: (...)` | – | – | – | Yes |
 
 [::: tip Widget Templates
@@ -42578,10 +42663,16 @@ Pluggable widget templates are currently extracted from Mendix 11.6. When used o
 | Feature | MDL Syntax | 10.0+ | 10.1+ | 10.4+ | 10.6+ | 11.0+ |
 | --- | --- | --- | --- | --- | --- | --- |
 | OData client | `CREATE CONSUMED ODATA SERVICE` | Yes | Yes | Yes | Yes | Yes |
-| Business events | `CREATE BUSINESS EVENT SERVICE` | Yes | Yes | Yes | Yes | Yes |
-| REST client (basic) | `CREATE CONSUMED REST SERVICE ... ( ... ) { OPERATION ... }` | – | Yes | Yes | Yes | Yes |
+| Business events (9.24+) | `CREATE BUSINESS EVENT SERVICE` | Yes | Yes | Yes | Yes | Yes |
+| REST client with no operation | `CREATE CONSUMED REST SERVICE ... ( ... ) { }` | – | Yes | Yes | Yes | Yes |
+| REST client basic authentication | `authentication: basic (...)` | – | 10.2+ | Yes | Yes | Yes |
+| REST client operations | `... { OPERATION ... }` | – | – | Yes | Yes | Yes |
+| REST client from an OpenAPI document | `CREATE CONSUMED REST SERVICE ... ( OpenAPI: ... )` | – | – | – | 10.21+ | Yes |
 | REST client headers | `Headers: ('Name': 'Value')` | – | – | Yes | Yes | Yes |
-| Database Connector | `CREATE DATABASE CONNECTION` | – | – | – | Yes | Yes |
+| Database Connector | `CREATE DATABASE CONNECTION` | Yes | Yes | Yes | Yes | Yes |
+| Database Connector queries | `CREATE DATABASE CONNECTION ... { QUERY ... }` | – | – | – | 10.12+ | Yes |
+| Scheduled events | `CREATE SCHEDULED EVENT ... ( Repeat: ... )` | Yes (9.12+) | Yes | Yes | Yes | Yes |
+| Module JAR dependencies, exclusions | `ALTER MODULE ... ADD JAR DEPENDENCY`, `... ADD EXCLUSION` | Yes; 10.12+ | Yes | Yes | Yes | Yes |
 | REST client query params | `QUERY $param: Type` | – | – | – | – | Yes |
 
 A REST client operation’s `body: json from $X` is stored as Mendix 11’s JSON
@@ -42594,8 +42685,13 @@ body on Mendix 10 too, and Studio Pro could not open the project.
 
 | Feature | MDL Syntax | 9.x | 10.0+ |
 | --- | --- | --- | --- |
-| Basic workflows | `CREATE WORKFLOW` | Yes | Yes |
-| User tasks | `USER TASK ... OUTCOMES (...)` | Yes | Yes |
+| Basic workflows | `CREATE WORKFLOW`, `ALTER WORKFLOW` | 9.0.2+ | Yes |
+| User tasks | `USER TASK ... OUTCOMES (...)` | 9.19+ | Yes |
+| A workflow parameter | `PARAMETER $WorkflowContext: Module.Entity` | 9.18+ | Yes |
+| A jump | `JUMP TO ...` | 9.0.5+ | Yes |
+| Calling a workflow from a workflow | `CALL WORKFLOW ...`; with `(WorkflowContext = ...)` | 9.6+; 9.18+ | Yes |
+| An overview page | `OVERVIEW PAGE ...` | 9.11+ | Yes |
+| Annotations | `ANNOTATION '...'` | 9.15+ | Yes |
 | Multi-user tasks | `MULTI USER TASK ...` | 9.22+ | Yes |
 | Multi-user task rules majority and threshold | `DECIDE BY MAJORITY ...`, `DECIDE BY THRESHOLD ...` | No | Yes |
 | Waiting for all users | `AWAIT ALL USERS` | No | 10.2+ |
@@ -42607,15 +42703,27 @@ body on Mendix 10 too, and Studio Pro could not open the project.
 | A timer boundary event of no kind | `BOUNDARY EVENT TIMER ...` | No | 10.14+ (MDL-WF07 refuses it from 11.0) |
 | Interrupting and non-interrupting timer boundary events | `BOUNDARY EVENT [NON] INTERRUPTING TIMER ...` | No | 10.20+ |
 | Locking and unlocking a workflow | `LOCK WORKFLOW ...`, `UNLOCK WORKFLOW ...` | No | Yes |
+| Starting a workflow, setting a task outcome, opening a user task or a workflow (microflow) | `CALL WORKFLOW`, `SET TASK OUTCOME`, `OPEN USER TASK`, `OPEN WORKFLOW` | 9.0.2+ | Yes |
+| Aborting and restarting a workflow (microflow) | `WORKFLOW OPERATION ABORT ...`, `WORKFLOW OPERATION RESTART ...` | 9.2+ | Yes |
+| Pausing and continuing a workflow (microflow) | `WORKFLOW OPERATION PAUSE ...`, `WORKFLOW OPERATION CONTINUE ...` | 9.3+ | Yes |
+| Getting workflow data (microflow) | `GET WORKFLOW DATA ... AS ...` | 9.10+ | Yes |
+| Retrying and unpausing a workflow (microflow) | `WORKFLOW OPERATION RETRY ...`, `WORKFLOW OPERATION UNPAUSE ...` | 9.12+ | Yes |
+| Notifying a workflow (microflow) | `NOTIFY WORKFLOW ... TARGET ...` | No | Yes |
+| Getting an object’s workflows, or a workflow’s activity records (microflow) | `GET WORKFLOWS FOR ...`, `GET WORKFLOW ACTIVITY RECORDS ...` | No | 10.4+ |
 
 Every write refuses an element whose type the project’s Mendix version does not
 have yet, naming the type, the version that introduced it and the project’s
 version (“this Mendix 9.24.30 project cannot store
 Workflows$WaitForNotificationActivity (Mendix 10.0.0+)”). The versions are each
 type’s own, from the Mendix Model SDK. Below their versions, the wait
-activities, the timer boundary events and a lock or unlock naming a workflow are
-also refused up front, by `check -p` and by `exec` before anything is written,
-with MDL-VERSION01. Before this, such a type was written, and the project did not load
+activities, the timer boundary events, a lock or unlock naming a workflow, and
+the workflow actions of a microflow (in `create microflow` and in what `alter microflow` inserts) are also refused up front, by `check -p` and by `exec`
+before anything is written, with MDL-VERSION01
+([ako/mxcli#1787](https://github.com/ako/mxcli/issues/1787)). So is a workflow itself on 9.0.0 and 9.0.1, which
+predate Workflows$Workflow (9.0.2): `create workflow`, `create or modify workflow` and `alter workflow` ([ako/mxcli#1809](https://github.com/ako/mxcli/issues/1809)), and what a
+workflow states whose version is later still, listed above: on a stamped 9.x
+project the write refuses every workflow with a parameter below 9.18 and every
+user task below 9.19 ([ako/mxcli#1811](https://github.com/ako/mxcli/issues/1811)). Before this, such a type was written, and the project did not load
 (`TypeCacheUnknownTypeException`, [ako/mxcli#1774](https://github.com/ako/mxcli/issues/1774)).
 Where an older version stores the same thing in another shape (the parallel
 split’s end marker, user tasks), that shape is written instead, as listed under
@@ -42637,6 +42745,15 @@ longer loaded, and 11.1 and 11.2 failed `mx check` with CE6671 and CE6689
 | Navigation profiles | `ALTER NAVIGATION ...` | Yes | Yes |
 | Menu items | `MENU ITEM ...` | Yes | Yes |
 | Home pages | `HOME PAGE Module.Page` | Yes | Yes |
+| A progressive web app’s settings | `PROGRESSIVE WEB APP ( ... )` | 9.0.3+ | Yes |
+| A native profile’s home page | `CREATE OR MODIFY NAVIGATION NativePhone HOME PAGE ...` | 9.4+ | Yes |
+| Menu item icons | `MENU ITEM '...' ( ..., Icon: Module.Collection.icon )` | 9.20+ | Yes |
+| A not-found page | `NOT FOUND PAGE Module.Page` | No | 10.13+ |
+
+Each “+” version above that is not a whole major is the Model SDK’s version of a
+type or property mxcli writes for the feature, with no older shape; below it,
+`check -p` and `exec` refuse the statement with MDL-VERSION01 before anything is
+written ([ako/mxcli#1811](https://github.com/ako/mxcli/issues/1811)).
 
 ### [OQL (View Entity queries)](#oql-view-entity-queries)
 
@@ -42662,7 +42779,7 @@ The Mendix metamodel evolves across versions. The reflection data shows ~42% typ
 
 ### [View Entities (10.x vs 11.x)](#view-entities-10x-vs-11x)
 
-View entities exist in both 10.18+ and 11.x, but the BSON structure differs. In Mendix 10.x, the `OqlViewEntitySource` object has an `Oql` field that stores the OQL query inline (in addition to the separate `ViewEntitySourceDocument`). Mendix 11.0 removed the inline `Oql` field. The writer detects the project version and includes the inline field for 10.x projects.
+View entities arrived in Mendix 10.18 with the query stored inline. mxcli stores it in a separate `ViewEntitySourceDocument`, which the entity’s source names; both are 10.21 types, so `create view entity` needs 10.21 and is refused by `check -p` below it ([ako/mxcli#1811](https://github.com/ako/mxcli/issues/1811)); before, `check -p` passed it on 10.18 to 10.20 and the write refused it. The BSON structure also differs between 10.x and 11.x. In Mendix 10.x, the `OqlViewEntitySource` object has an `Oql` field that stores the OQL query inline (in addition to the separate `ViewEntitySourceDocument`). Mendix 11.0 removed the inline `Oql` field. The writer detects the project version and includes the inline field for 10.x projects.
 
 ### [Page Parameters (9.4+, with an 11.5 tail)](#page-parameters-94-with-an-115-tail)
 
@@ -43407,6 +43524,23 @@ retrieve $L from Mod.Line where [Mod.Line_Header = $h] first;
 
 ```
 
+The reverse is reported as **MDL-RETRIEVE01** (ako/mxcli#1793): the one object a
+Reference gives from its FROM entity, taken as a list. An aggregate of it (`count`, `sum`,
+…) is CE0013 “Input variable ‘P’ must be of type ‘List’.”, a list operation (`head`,
+`filter`, …) CE0097, a `loop` CE0100 and a list parameter CE0117 — measured on 11.13.0.
+A **self-reference** (`Mod.Order_Parent` from `Mod.Order` to `Mod.Order`) is always
+followed from its FROM end, from an `Order` and from a specialization of it alike: a
+Reference gives the one object, a Reference set the list. `range`, `add`, `remove` and
+`clear` over the object are not reported — mx check does not type their variable.
+
+```
+$P = retrieve over Mod.Order_Parent from $Order (a Mod.Order) is one Mod.Order — a
+Reference followed from its FROM end, which is how Mendix follows a self-reference — so
+`count` cannot take it: mxbuild rejects it with CE0013 "Input variable 'P' must be of
+type 'List'." [MDL-RETRIEVE01]
+
+```
+
 A flow already stored with such a member describes with a `-- WARNING` on the change
 line. `create or modify` will not splice over it: without the header it rebuilds the flow
 (which repairs it), and under `mdl 1;` it refuses with the drop-and-create advice.
@@ -43857,10 +43991,66 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 | --- | --- |
+| October 30, 2026 | [Release: mxcli v0.29.0](#release-mxcli-v0290) |
 | October 23, 2026 | [Release: mxcli v0.28.0](#release-mxcli-v0280) |
 | October 15, 2026 | [Release: mxcli v0.27.0](#release-mxcli-v0270) |
 | October 11, 2026 | [Release: mxcli v0.26.0](#release-mxcli-v0260) |
 | April 23, 2026 | [Introducing mxcli](#introducing-mxcli) |
+
+# [Release: mxcli v0.29.0](#release-mxcli-v0290)
+
+*October 30, 2026*
+
+v0.29.0 is about **writing what your project’s own Mendix version stores, and committing it the way Studio Pro does**. A statement your Mendix 9 or 10 project can’t store is now refused at check time, before it can leave you with a project Studio Pro won’t open. And a team that commits with plain git can keep its history in the shape Studio Pro expects.
+
+## [What’s new](#whats-new)
+
+**Commit the way Studio Pro does.** Studio Pro’s *Commit* does more than `git commit`: it keeps the contents hashes in step, leaves out the files a Mendix repository never ships, and attaches the `mx_metadata` note it uses for its version check and history. `mxcli git commit` does all of that in one line:
+
+```
+mxcli git commit -m "Add order approval" -p app.mpr --push
+
+```
+
+`--push` pushes the note along with the branch. `--dry-run` shows what would be committed without writing anything. The commit is refused while Studio Pro has the project open, or while a merge is unresolved.
+
+**Audit a repository.** `mxcli git doctor` reports what a plain-git history has drifted on: missing local git config, an SSH remote Studio Pro can’t use, commits without a note, and notes Studio Pro can’t read. It exits 1 while an issue remains, so it can gate CI. `--fix` repairs them.
+
+**Your Mendix version decides what gets written.** mxcli now knows which element types and property shapes each Mendix version has, measured against Studio Pro. Workflows, aggregates, constant overrides and `$currentObject` arguments are written in the shape Mendix 9 and early 10.x expect. Before, they were refused or left the project unloadable. A statement the version can’t store, such as `notify workflow` on 9.x or a loop feature from a later release, now fails `check -p` with MDL-VERSION01 and names the clause. `alter microflow` is gated the same way as `create`.
+
+**Workflows say more.** A user task takes a `task name`. Workflow and task texts take template parameters (`display 'Approval for {1}' with ({1} = $WorkflowContext/Title)`), and a timer boundary event takes a caption. A non-interrupting timer can repeat, with `repeat every 1 day at most 3 times` after its delay.
+
+A new warning, MDL-WF20, catches a user task whose page has no way to complete one of its outcomes. That mistake passes the build and leaves every instance waiting at the task.
+
+**Edit inside a loop.** `alter microflow` and `create or modify` now insert, drop or move an activity inside a loop body, where they used to refuse. If you want the old behaviour, `replace body of <loop>` replaces just the body, keeping the loop’s IDs.
+
+**Fewer settings lost on a rewrite.** A page’s own design properties, a native text style, a tab page’s badge, a text area’s line count, a layout’s sidebar mode, a read-only data view, and return value mappings on a button’s flow call now survive describe → exec. You can also write them in MDL. Java actions get an `extra code` clause. And `alter app security (AdminPassword: '…')` clears CE0129 without opening Studio Pro.
+
+**Faster on large projects.** On an MPR v2 app with 4,753 units, `show modules` used to open 4,511 files and `describe page` 3,176, on every run. Each command now opens only the files it needs. A catalog refresh after a save reads one file or none, and a source-index rebuild describes only what changed.
+
+**The debugger works end to end.** `mxcli debug break` sets the breakpoint, `continue` resumes the paused flow, and `inspect` prints a String or enumeration value. When the runtime refuses a request, the command now fails with the runtime’s reason instead of reporting success.
+
+**`check` catches more of what `mx check` would refuse.** Examples are a property the widget doesn’t take (`Caption:` on a text box), a member the entity lacks, a duplicate member name on an inheritance chain, an unknown `[%UserRole_X%]`, and Java action types that can’t be stored. Renames and moves of constants, enumerations and attributes now update the expressions and XPath constraints that refer to them. `diff-local` also shows every change, settings and grants included.
+
+## [Upgrading](#upgrading)
+
+Download the `v0.29.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.29.0):
+
+```
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.29.0/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+```
+
+Then refresh a project’s skills, commands and the companion mod with `mxcli init --sync-skills`.
+
+Behaviour changes worth knowing:
+
+- `docker check` now checks the project as stored. Before, it ran `mx update-widgets` on a copy first, so a project with stale widgets got “0 errors” and was then refused by `run --local` and the build. Stale widgets now fail the check, and each CE0463 that `mxcli fix widgets` would clear is labelled as such.
+- `check -p` refuses more: anything your project’s Mendix version can’t store, and several mistakes it used to pass that `mx check` then rejected. A script that passed before may need a fix, but it would not have built.
+
+Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHANGELOG.md)
 
 # [Release: mxcli v0.28.0](#release-mxcli-v0280)
 
@@ -43868,7 +44058,7 @@ News, release announcements, and demos from the mxcli team.
 
 v0.28.0 is about **changing one thing without restating the rest**. You can now edit a menu item, a REST operation or a single widget in place, and a flow can take a reworded note or decision caption without being rebuilt.
 
-## [What’s new](#whats-new)
+## [What’s new](#whats-new-1)
 
 **Edit menus in place.** Adding one menu item used to mean restating the whole menu. Now:
 
@@ -43894,7 +44084,7 @@ Items are addressed by their caption path, and mxcli never guesses. An address t
 
 **Security.** The deprecated v1 BSON driver is gone, so mxcli now runs on `mongo-driver/v2` alone, and a test stops it from coming back. Go moves to 1.27.3, and the npm advisories in the bundled widget and the VS Code extension are cleared.
 
-## [Upgrading](#upgrading)
+## [Upgrading](#upgrading-1)
 
 Download the `v0.28.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.28.0):
 
@@ -43928,7 +44118,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new-1)
+## [What’s new](#whats-new-2)
 
 **All-or-nothing `exec`.** Before, a statement that failed at write time left every statement before it in place: a created module stayed, and a `drop` ahead of the failing `create` was not undone. Now mxcli backs up the `.mpr` and every unit file a run touches before the first write, and restores them if anything fails. The message reads “Nothing was written: statement N was rolled back”.
 
@@ -43944,7 +44134,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **Security.** The MongoDB BSON driver is upgraded for the October 2026 advisories, which release scanners flagged on the published binaries.
 
-## [Upgrading](#upgrading-1)
+## [Upgrading](#upgrading-2)
 
 Download the `v0.27.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.27.0):
 
@@ -43975,7 +44165,7 @@ All of mxcli and MDL on one page: the idea, getting started with the bootstrap p
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new-2)
+## [What’s new](#whats-new-3)
 
 **Documents that survive Studio Pro’s merge.** Mendix’s merge and diff engine compares an element’s property *names* between two revisions and throws when they differ. So when mxcli left out a key, or wrote one the project’s Mendix version doesn’t have, the document became unmergeable the first time Studio Pro saved it, even though `mx check`, the build and the runtime were all green. Every element mxcli writes now carries exactly the property set Studio Pro writes for that version. The set comes from a table measured with `mx convert` across Mendix 10.24, 11.6 and 11.12–11.15. For a project an older mxcli already wrote to, run:
 
@@ -43995,7 +44185,7 @@ mxcli fix property-sets -p app.mpr
 
 **The dev loop.** `mxcli run --local --detach` runs the app as a background service, and `mxcli playwright check` gives a text verdict for a list of pages in one call. `run --local` and `test --local` also work on Windows without Developer Mode, including domain model changes under `--watch`.
 
-## [Upgrading](#upgrading-2)
+## [Upgrading](#upgrading-3)
 
 Download the `v0.26.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.26.0):
 

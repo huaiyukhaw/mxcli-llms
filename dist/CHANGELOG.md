@@ -1,3 +1,7 @@
+## 2026-10-31 -- mxcli v0.29.0 @ 763288f
+- +214 / -24 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.29.0](#release-mxcli-v0290), [BSON Differences Across Versions](#bson-differences-across-versions), [Caching](#caching), [Commands](#commands-3), [Description](#description-69), [Feature Availability Matrix](#feature-availability-matrix), [Important behaviour](#important-behaviour) (+14 more)
+
 ## 2026-10-30 -- mxcli v0.28.0 @ aed6c20
 - +217 / -26 lines
 - Sections changed: [Annotations](#annotations-1), [BSON Differences Across Versions](#bson-differences-across-versions), [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions), [Caching](#caching), [Description](#description-30), [Description](#description-32), [Description](#description-33), [Description](#description-81) (+11 more)
