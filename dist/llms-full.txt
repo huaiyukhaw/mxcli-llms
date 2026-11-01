@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.29.0 @ 763288f
-Generated: 2026-10-31T07:54:44Z
+Version:   mxcli v0.29.0 @ ddde38d
+Generated: 2026-11-01T08:36:54Z
 
 ---
 
@@ -8643,6 +8643,11 @@ statements before it keep the places the builder derives for them, and only a
 or nothing: a few hand-placed statements are not measured against what is laid out
 around them.
 
+That is the default style. A project can choose another — the ELSE branch as a
+column under its decision, a guard’s early return kept on the line, no wrapping —
+in a committed `layout-config.yaml`; flows written without `@position` then follow
+it. See [Choosing a layout style](#choosing-a-layout-style).
+
 To re-arrange a flow that already exists — one drawn in Studio Pro, or one whose
 positions no longer fit after edits — run `mxcli layout flows`. It applies this
 same layout to the stored flow and changes nothing but coordinates; see
@@ -15782,7 +15787,66 @@ The flow is described to MDL, every layout annotation (`@position`, `@anchor`,
 dropped, and it is built again as `CREATE` would build it. Only the geometry of
 that build is kept.
 
-## [Only positions change](#only-positions-change)
+## [Choosing a layout style](#choosing-a-layout-style)
+
+Teams draw flows differently, so the style is a project setting. Put a
+`layout-config.yaml` in the project’s `.claude/` directory or next to the
+`.mpr` and commit it — everyone working on the project then lays flows out the
+same way:
+
+```
+flows:
+  preset: true-right-false-down
+
+```
+
+| Preset | What it draws |
+| --- | --- |
+| `happy-line` (default) | The TRUE path on one horizontal line, the ELSE branch in a lane under it, left to right. |
+| `true-right-false-down` | The TRUE path on the line; the ELSE branch stacked top to bottom as a column under its decision, rejoining the merge from below. A CASE or split by type the same way: its first outcome on the line, every other outcome a column under it. |
+
+A preset is a set of options, and an option overrides its preset:
+
+| Option | Values |
+| --- | --- |
+| `if-else` | `lanes` (default), `true-right-else-column` |
+| `case-split` | `lanes` (default): a CASE’s or type split’s outcomes are stacked as lanes, each left to right. `first-right-rest-columns`: the first outcome, as written, stays on the line; every other one is a column under the decision, side by side in the order written. Put the happy case first. |
+| `wrap` | `rows` (default): past the row width the main line continues on a new row, back at the left. `off`: the main line never wraps. |
+| `max-row-width` | Where a row wraps, in px, from 640 to 20000. Default 2880 (two screens of Studio Pro canvas). |
+| `guard` | `return-below` (default): a guard’s early return goes in the lane below and the happy path stays on the line. `true-right`: the early return carries straight on to the right, and the happy path drops from the decision’s bottom onto a new line below. |
+
+A *guard* is an `if … then … return; end if` with no `else`. It has its own
+option because teams that want TRUE on the right for IF/ELSE mostly still want
+their guards to keep the happy path straight.
+
+An unknown key or value is an error, not a silent fallback to the default.
+`mxcli layout config -p app.mpr` shows the style in force and the file it came
+from. `CREATE MICROFLOW` / `CREATE NANOFLOW` without `@position` use it too.
+
+To try a style without committing it, pass `--style`:
+
+```
+mxcli layout flows -p app.mpr --module Sales --style true-right-false-down --dry-run
+
+```
+### [The style a flow was drawn in travels with it](#the-style-a-flow-was-drawn-in-travels-with-it)
+
+A flow laid out in a style other than the default gets one line at the end of
+its documentation, which Studio Pro shows in the documentation pane:
+
+```
+@mxcli-layout: if-else=true-right-else-column
+
+```
+
+`DESCRIBE` and `CREATE OR MODIFY` use that line for that flow, whatever the
+project file says now. So a flow drawn in one style describes without `@position`
+noise after the project switches to another, and its description rebuilds the
+same geometry. Laying a flow out in the default style removes the line. If the
+line is deleted or unreadable, nothing breaks: `DESCRIBE` then prints the
+positions it can no longer derive, and a warning says why.
+
+## [What changes](#what-changes)
 
 The result is patched onto the stored flow rather than written in its place, so
 nothing but layout changes:
@@ -15790,6 +15854,8 @@ nothing but layout changes:
 - positions and sizes of activities, events, splits, merges and loops;
 - positions of parameters and notes (a note keeps its size);
 - the connection sides and curves of sequence flows.
+- the `@mxcli-layout:` line in the flow’s documentation (above) — the rest of
+  the documentation is left byte for byte.
 
 Element IDs, captions, expressions and every property MDL cannot express are
 left exactly as stored. That is also why this works on flows drawn in Studio
@@ -15828,6 +15894,7 @@ writes nothing.
 | `Module.Flow ...` | Lay out these microflows or nanoflows. |
 | `--module <name>` | Lay out every microflow and nanoflow in this module (repeatable). |
 | `--dry-run` | Report what would move, write nothing. |
+| `--style <preset>` | Lay out in this preset instead of the project’s `layout-config.yaml`. |
 | `--include-marketplace` | Also lay out flows in Marketplace modules. A module update replaces them, so this is normally pointless. |
 
 Either name flows or pass `--module`; laying out every flow in a project is too
@@ -17953,7 +18020,7 @@ The linting system provides:
 | --- | --- | --- |
 | MDL | MDL001-MDL007 | Naming conventions, empty microflows, domain model size |
 | Security | SEC001-SEC010 | Access rules, password policy, demo users, PII exposure |
-| Convention | CONV001-CONV020 | Best practice conventions, error handling |
+| Convention | CONV001-CONV021 | Best practice conventions, error handling |
 | Quality | QUAL001-QUAL004 | Complexity, documentation, long microflows |
 | Architecture | ARCH001-ARCH003 | Cross-module data, entity business keys |
 | Design | DESIGN001 | Entity attribute count |
@@ -18024,6 +18091,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **CONV013** | Error handling on external calls – Ensures external service calls have error handling |
 | **CONV014** | No continue error handling – Warns against using CONTINUE error handling without logging |
 | **CONV020** | Created object never persisted – A microflow creates an object of a persistent entity without commit, and never commits, returns or passes it on, so the object is discarded when the microflow ends ([details](#conv020-details)) |
+| **CONV021** | Create/change then commit – A Create or Change object activity without commit, directly followed by a Commit of the same object; one create/change with Commit set does both ([details](#conv021-details)) |
 | **MDL-FLOW01** | Un-describable branch structure – Decision branches that re-enter each other’s paths, so `DESCRIBE MICROFLOW` cannot render them as nested `IF`s without changing what they mean |
 | **MDL-MAP04** | First over an object-rooted import mapping – An `import from mapping` or `rest call … returns mapping` activity already in the model stores Studio Pro’s *First* (`ForceSingleOccurrence` or `Range.SingleObject`) over a mapping that returns one object. `mx check` reports 0 errors; the activity throws `key not found: Path(QName(None,),None,)` when it runs. `mxcli check` refuses the same statement in a script under the same ID; this finds activities written before that check existed, or with `exec --no-check`. A list-rooted mapping’s *First* is legitimate and is not reported |
 
@@ -18052,6 +18120,37 @@ an association value on another object, `delete`, `rollback`, or the bare
 variable anywhere in an expression. The check is flow-insensitive: a commit on
 one branch only, or only in an error handler, counts, so that case is not
 reported. When the rule cannot tell, it stays quiet.
+
+### [CONV021 details](#conv021-details)
+
+```
+$Order = create Shop.Order (Code = 'A1');
+commit $Order;
+
+```
+
+is two activities doing what one does. Studio Pro’s Create object and Change
+object activities have a **Commit** option (Yes, Yes without events, No), and the
+expected way to model “create and save” or “change and save” is that option, not
+a separate Commit activity:
+
+```
+$Order = create Shop.Order (Code = 'A1') commit;
+
+```
+
+The suggestion carries the commit’s settings over: a Commit with events becomes
+Commit **Yes**, one without events **Yes without events** (`commit without events`), and **Refresh in client** is kept if either activity had it (`refresh`).
+
+The rule reports a pair only when merging it cannot change what the microflow
+does:
+
+- it is in a **microflow**, the create/change has Commit **No**, and the commit
+  names the object it creates or changes;
+- the commit **directly** follows it on the normal flow (not an error handler
+  flow), and no other flow leads into the commit;
+- neither activity has **custom error handling**, which merging would move or
+  drop.
 
 ## [Running Built-in Rules](#running-built-in-rules)
 
@@ -29603,7 +29702,7 @@ Pages define the user interface of a Mendix application. Each page has a layout,
 ```
 CREATE [ OR REPLACE ] PAGE module.Name [ FOLDER 'path' ]
 (
-    [ Params: ( $param : Module.Entity | Type [, ...] ), ]
+    [ Params: ( $param : Module.Entity | Type [optional] [, ...] ), ]
     Title: 'title',
     Layout: Module.LayoutName
     [, Variables: ( $name : type = <expression> [, ...] ) ]
@@ -29625,7 +29724,7 @@ A replace (`OR REPLACE` or `OR MODIFY`) is refused when the stored page holds a 
 
 The page declaration block `( ... )` contains comma-separated key-value properties:
 
-- **Params** – Page parameters. Each parameter has a `$`-prefixed name and a type — either an entity (`Module.Entity`) or a primitive (`String`, `Integer`, `Decimal`, `Boolean`, `DateTime`). Parameters are passed when the page is opened (e.g., from a microflow `SHOW PAGE` or from a data view). Primitive parameters require Mendix 11.6+. A parameter cannot be named with a platform-reserved word — `Context`, `Type`, `Id`, `Owner`, `Object`, `CurrentUser` or a Java keyword, in any case and even quoted: Mendix reports CE7247 “The name ‘Context’ is a reserved word.”, and `mxcli check` refuses it (MDL-PARAM01). The same holds for snippet, Java action and JavaScript action parameters.
+- **Params** – Page parameters. Each parameter has a `$`-prefixed name and a type — either an entity (`Module.Entity`) or a primitive (`String`, `Integer`, `Decimal`, `Boolean`, `DateTime`). Parameters are passed when the page is opened (e.g., from a microflow `SHOW PAGE` or from a data view). Primitive parameters require Mendix 11.6+. A parameter is required unless it says `optional` (`$Sale: Shop.Sale optional`, Studio Pro’s unticked *Required*, Mendix 11.5+): an optional parameter lets the page be opened with no argument, from a menu item for example, where a required one is CE1571. `describe page` prints it, and a snippet parameter cannot be optional. A parameter cannot be named with a platform-reserved word — `Context`, `Type`, `Id`, `Owner`, `Object`, `CurrentUser` or a Java keyword, in any case and even quoted: Mendix reports CE7247 “The name ‘Context’ is a reserved word.”, and `mxcli check` refuses it (MDL-PARAM01). The same holds for snippet, Java action and JavaScript action parameters.
 - **Title** – The page title displayed in the browser tab or page header.
 - **Layout** – The layout the page is based on. Must be a qualified name referring to an existing layout (e.g., `Atlas_Core.Atlas_Default`, `Atlas_Core.PopupLayout`).
 - **Folder** – Optional folder path within the module. Nested folders use `/` separator.

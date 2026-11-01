@@ -1,3 +1,7 @@
+## 2026-11-01 -- mxcli v0.29.0 @ ddde38d
+- +103 / -4 lines
+- Sections changed: [Annotations](#annotations-1), [Choosing a layout style](#choosing-a-layout-style), [Convention Rules](#convention-rules), [Description](#description-34), [Flags](#flags-1), [Only positions change](#only-positions-change), [Rule Categories](#rule-categories), [Synopsis](#synopsis-34) (+1 more)
+
 ## 2026-10-31 -- mxcli v0.29.0 @ 763288f
 - +214 / -24 lines
 - Sections changed: [Blog](#blog), [Release: mxcli v0.29.0](#release-mxcli-v0290), [BSON Differences Across Versions](#bson-differences-across-versions), [Caching](#caching), [Commands](#commands-3), [Description](#description-69), [Feature Availability Matrix](#feature-availability-matrix), [Important behaviour](#important-behaviour) (+14 more)
