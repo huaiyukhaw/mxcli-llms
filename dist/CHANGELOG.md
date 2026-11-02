@@ -1,3 +1,7 @@
+## 2026-11-02 -- mxcli v0.29.0 @ 3c017b3
+- +138 / -25 lines
+- Sections changed: Later: report only what is not in the baseline, Record today's findings, [Adding Concord (optional)](#adding-concord-optional), [Auditing a repository: `mxcli git doctor`](#auditing-a-repository-mxcli-git-doctor), [Baseline: Report Only New Findings](#baseline-report-only-new-findings), [Delete, check and run](#delete-check-and-run), [Input Widgets](#input-widgets-1), [Marketplace and custom widgets](#marketplace-and-custom-widgets) (+5 more)
+
 ## 2026-11-01 -- mxcli v0.29.0 @ ddde38d
 - +103 / -4 lines
 - Sections changed: [Annotations](#annotations-1), [Choosing a layout style](#choosing-a-layout-style), [Convention Rules](#convention-rules), [Description](#description-34), [Flags](#flags-1), [Only positions change](#only-positions-change), [Rule Categories](#rule-categories), [Synopsis](#synopsis-34) (+1 more)

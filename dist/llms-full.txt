@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.29.0 @ ddde38d
-Generated: 2026-11-01T08:36:54Z
+Version:   mxcli v0.29.0 @ 3c017b3
+Generated: 2026-11-02T08:46:05Z
 
 ---
 
@@ -11265,7 +11265,11 @@ The classic drop-down (`DROPDOWN`, stored as `Forms$DropDown`) is not supported 
 the React client: on a project whose Web UI setting is `OptimizedClient: Yes`
 (`show settings`), mxbuild reports CE0582 and `check --references` reports
 **MDL-WIDGET40**. Use `COMBOBOX` over the same attribute. Under `No` and
-`MigrationMode` the drop-down builds, and nothing is reported.
+`MigrationMode` the drop-down builds, and nothing is reported. A drop-down the
+project already holds is reported by `mxcli lint` as **MPR012**, together with
+the other built-in widgets that are CE0582 under the React client: the static and
+dynamic image, the legacy data grid and the reference selector (measured on
+11.16; the template grid and the reference set selectors are not yet measured).
 
 ### [TEXTBOX](#textbox)
 
@@ -18019,7 +18023,7 @@ The linting system provides:
 | Category | Prefix | Focus |
 | --- | --- | --- |
 | MDL | MDL001-MDL007 | Naming conventions, empty microflows, domain model size |
-| Security | SEC001-SEC010 | Access rules, password policy, demo users, PII exposure |
+| Security | SEC001-SEC012 | Access rules, password policy, demo users, PII exposure |
 | Convention | CONV001-CONV021 | Best practice conventions, error handling |
 | Quality | QUAL001-QUAL004 | Complexity, documentation, long microflows |
 | Architecture | ARCH001-ARCH003 | Cross-module data, entity business keys |
@@ -18081,6 +18085,8 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **SEC002** | Password policy – Checks for secure password configuration |
 | **SEC003** | Demo users – Warns about demo users in production security level |
 | **SEC010** | Unreadable page data – A data grid, gallery, list view or combo box lists an entity that a user role allowed on the page cannot read (including its generalizations and specializations). At Production security it renders empty for that role and nothing else reports it. Info when the role reads only through an XPath-constrained rule; System entities use access measured from a deployed model, so a combo box over System.User gets its own message (it lists only the current user) |
+| **SEC011** | XPath through an unreadable association – A page data source’s XPath crosses an association that a user role allowed on the page may not read on the entity the step starts from (an association is a member of its FROM entity’s rules, and of its TO entity’s when the owner is Both). At Production security the page fails to open with “No access rights for Module$Entity/Module.Association”, while mxbuild reports nothing. Error. Entity access-rule XPaths are not checked: the runtime does not apply member access there (measured, 11.15) |
+| **SEC012** | Reachable page not readable – Predicts mxbuild’s CE2729: a page a user role can reach shows an attribute, or lists an entity, the role may not read. Reached means: a menu item (if the role may view the page), the role’s home page (its role-based one, else the profile’s; checked even when the role may not view it), and from there show-page actions, snippet calls, and microflows or nanoflows the role may execute, with their sub-microflows. Error. Measured against mxbuild 11.13 and 11.15; association reads, System entities, Marketplace modules and pages reachable only by URL are left out |
 
 ## [Convention Rules](#convention-rules)
 
@@ -18640,6 +18646,43 @@ mxcli lint -p app.mpr --exclude System --exclude Administration
 mxcli lint -p app.mpr --color
 
 ```
+## [Baseline: Report Only New Findings](#baseline-report-only-new-findings)
+
+On a mature app the existing backlog buries the findings about the change you
+just made. Record a baseline once, commit it, and compare against it afterwards:
+
+```
+# Record today's findings
+mxcli lint -p app.mpr --baseline lint-baseline.json --update-baseline
+
+# Later: report only what is not in the baseline
+mxcli lint -p app.mpr --baseline lint-baseline.json
+
+```
+
+The comparison prints a summary on stderr, so `--format json` and `--format sarif`
+stay clean:
+
+```
+Lint baseline lint-baseline.json: 1 new, 1518 already known, 0 fixed
+
+```
+
+- Only the **new** findings are reported, and the exit code follows them alone.
+- A finding is matched on its **rule and document** (the document’s id where the
+  rule gives one, so renaming a document keeps its findings), not on its message.
+  Rewording a rule therefore does not make its findings new, while a further
+  finding of the same rule in the same document is.
+- A rule that **fails to run** is never absorbed by the baseline.
+- A run scoped with `--modules`, `--documents` or `--rules` sees only part of the
+  project: it reports new findings but not how many were fixed, and
+  `--update-baseline` refuses it, since recording it would drop every finding
+  outside the scope.
+- A missing or unreadable baseline file is an error, not “everything is new”.
+
+The file is sorted JSON, so re-recording an unchanged project rewrites the same
+bytes and a committed baseline diffs only where findings changed.
+
 ## [CI Integration](#ci-integration)
 
 ### [GitHub Actions](#github-actions)
@@ -23254,17 +23297,18 @@ of routing through MCP, see
 | --- | --- |
 | `--mcp <url>` | Enable the MCP backend. The URL is what the **server** must see; its host drives the `Host` header and must stay `localhost` — e.g. `http://localhost/mcp`. |
 | `--mcp-dial <addr>` | The TCP address mxcli actually connects to, independent of the URL host. From a devcontainer this is typically `host.docker.internal:<port>`. |
-| `--mcp-concord <url>` | Optional second MCP server (“Concord”) for operations PED lacks: **delete**, **save**, **validate**, **run** (default port `7783`). |
-| `--mcp-concord-dial <addr>` | Dial override for Concord. |
-| `--mcp-save` | After the command, save all changes in Studio Pro (requires `--mcp-concord`). |
-| `--mcp-check` | After the command, run Studio Pro’s consistency check and print the report (requires `--mcp-concord`). |
-| `--mcp-run` | After the command, start the app in Studio Pro and print its URL (requires `--mcp-concord`). |
+| `--mcp-check` | After the command, run Studio Pro’s project-wide error check (`ped_check_errors`) and print the report. Needs Studio Pro 11.15+. |
+| `--mcp-run` | After the command, start the app in Studio Pro (the `mendix_app` handler) and print its URL. Needs Studio Pro 11.16+. |
 | `--mcp-verbose` | Print each PED tool call the backend makes (to stderr). |
 | `--mcp-trace` | Print each MDL command with the PED tool calls it makes (implies `--mcp-verbose`). |
 
-If `--mcp-dial` is omitted and the URL host is `localhost`/`127.0.0.1`, mxcli
-defaults the dial target to `host.docker.internal:<port>` — the right behaviour
-from inside a devcontainer.
+If `--mcp-dial` is omitted, mxcli connects to the URL’s own host first. For a
+`localhost`/`127.0.0.1` URL it then falls back to `host.docker.internal:<port>`
+when that name resolves — the Docker host, which is where Studio Pro is when
+mxcli runs in a devcontainer. Loopback comes first because the Docker name
+resolves on more machines than containers: Docker Desktop for Windows adds it to
+the hosts file, pointing at the LAN address, where Studio Pro does not listen.
+With `--mcp-dial` given, that address is the only one tried.
 
 ## [From a devcontainer (the common case)](#from-a-devcontainer-the-common-case)
 
@@ -23346,25 +23390,26 @@ see what actually goes over the wire — for debugging, or just to understand th
   This makes the statement-to-tool-call mapping (and surprises like a read-back
   reconstructing a dirty module) visible at runtime.
 
-## [Adding Concord (optional)](#adding-concord-optional)
+## [Delete, check and run](#delete-check-and-run)
 
-PED cannot delete documents, save, validate, or run the app. A companion server,
-**Concord**, fills those gaps (default port `7783`, usually reachable directly from
-the container — no bridge needed):
+Studio Pro’s own MCP server covers what used to need a second server:
+
+- **Saving** needs nothing: PED writes each change to disk as it lands.
+- **`DROP`** of a standalone document (enumeration, constant, microflow, nanoflow,
+  page, workflow, business-event service) calls `ped_delete_document`, which
+  Studio Pro 11.16 added. An older Studio Pro gets an error naming the version.
+- **`--mcp-check`** runs `ped_check_errors` over the whole project (11.15+).
+- **`--mcp-run`** starts the app through the `mendix_app` handler (11.16+), waits
+  up to two minutes and prints its URL. A project with model errors is not run;
+  the refusal is printed instead. The runtime log is `read_file /app-logs/app.log`
+  on the same server.
 
 ```
 mxcli exec changes.mdl -p app.mpr \
   --mcp http://localhost/mcp --mcp-dial host.docker.internal:7784 \
-  --mcp-concord http://localhost:7783/mcp \
-  --mcp-save --mcp-check
+  --mcp-check --mcp-run
 
 ```
-
-Here mxcli applies the script through PED, then asks Concord to **save** the
-project and run a **consistency check**, printing the report. `DROP` of standalone
-documents (enumerations, microflows, pages, …) also requires `--mcp-concord`,
-because the delete tool lives on Concord.
-
 ## [Same machine as Studio Pro](#same-machine-as-studio-pro)
 
 If mxcli runs on the host itself, point `--mcp-dial` at the loopback bridge
@@ -23394,8 +23439,8 @@ connected version supports. See also
 | --- | --- |
 | `connection refused` on dial | The bridge isn’t running, or the port is wrong. Re-run `socat` on the host and confirm PED’s port with `lsof` (it changes per session). |
 | Request rejected / 403-style error | The `Host` header guard. Keep the **URL host `localhost`** (`http://localhost/mcp`) and redirect the connection with `--mcp-dial` — never put the container/host address in the URL itself. |
-| Reads don’t reflect a change you just made | Expected for some edits until the project is saved — reads of an *unchanged* doc come from the local `.mpr`. A module you just wrote is reconstructed live; other doc types may need a save (`--mcp-save`) to appear locally. |
-| `DROP` / save / check / run fails or is rejected | Those need Concord — add `--mcp-concord` (and `--mcp-save` / `--mcp-check` / `--mcp-run`). |
+| Reads don’t reflect a change you just made | Expected for some edits until the project is saved — reads of an *unchanged* doc come from the local `.mpr`. A module you just wrote is reconstructed live. |
+| `DROP` / `--mcp-check` / `--mcp-run` reports it needs a newer Studio Pro | `DROP` and `--mcp-run` need Studio Pro 11.16+, `--mcp-check` 11.15+. On 11.16.0, `ped_delete_document` fails with `Session 'mcp-server' not found` for callers outside Studio Pro’s own agent session; delete the document in Studio Pro. |
 | Intermittent timeouts | The transport can be flaky across a bridge; a timed-out write may still have applied. Re-run `mxcli mcp capabilities` to re-establish, and prefer idempotent scripts. |
 
 ## [See also](#see-also-36)
@@ -23647,6 +23692,64 @@ ContentsHash drift, which it does not repair — a dry run writes nothing),
 and reports what it would commit without committing. It stages into a copy of
 the index, so whatever you had staged is left exactly as it was.
 
+## [Merging branches: `mxcli git merge`](#merging-branches-mxcli-git-merge)
+
+`git merge` cannot merge Mendix models: the `.mpr` is SQLite and every
+`.mxunit` is BSON, so two sides changing the model always meet a binary
+`CONFLICT (content)` — there is nothing for git’s textual merge to work on.
+Studio Pro’s *Merge Changes Here* resolves it with a model-aware merge, and
+that engine ships as a command: `mx merge BASE MINE THEIRS` over the three
+revisions’ project files (it runs on Linux devcontainers too).
+
+`mxcli git merge <ref>` puts the two together:
+
+```
+mxcli git merge feature/orders -p app.mpr
+mxcli git merge origin/main -p app.mpr --push
+
+```
+
+`git merge <ref>` runs first; a merge git resolves itself (disjoint files,
+a fast-forward) is annotated with the mx\_metadata note like `mxcli git commit` does. On a model-file conflict the base, ours (a clean checkout of
+HEAD) and theirs revisions are checked out into temporary worktrees and the
+three projects’ .mpr files go to `mx merge` (resolved for the project’s
+Mendix version; MINE is never the working tree mid-merge — the engine
+chokes on the conflicted state); the engine writes its result into MINE and
+it is copied back, so the engine owns the `.mpr`:
+
+- what the engine auto-resolves is copied back, hash-checked, staged and
+  committed as the normal two-parent merge commit, with the note attached.
+  The engine’s `.mpr` carries both sides’ document sets, so a unit one side
+  added while the other changed existing ones is kept, not dropped;
+- a conflict the engine reports as `ManualResolutionRequired` (exit 2) is
+  never merged silently: the merge is aborted, and **both sides’ changes are
+  printed for review** — at property level, from `mx diff` (“New type >
+  Length: 100 → 150” on ours, “→ 200” on theirs). Then decide:
+  `--plan <file>` resolves **per unit** from the plan template written beside
+  the .mpr (`<mpr>.merge-plan.json`, which `mxcli git commit` never stages):
+  set `"take"` to `ours`/`theirs` per unit. The engine runs again and the plan
+  decides **only the units it left open** — everything the engine merged
+  stays merged, so the template names just those units, and a plan that names
+  more or fewer (stale, or edited by hand) is refused. Each planned unit is
+  taken whole from its side, its conflict marker cleared (Studio Pro reports
+  a marker left in the index as CE0137), and the `.mpr` index repaired from
+  the files (modified-on-both units only; added/deleted/moved conflicts go to
+  Studio Pro). `--ours` or `--theirs` takes one side of every
+  conflicted unit, hash-gated: when the sides’ document sets differ (one side
+  added or deleted a unit), committing a whole side would orphan the other
+  side’s documents, so the commit is refused and the merge aborted. Any other
+  engine exit is mx failing, not a decision: it is reported and the merge is
+  aborted cleanly. Resolutions that must mix both sides *inside* one unit
+  stay in Studio Pro (*Version Control › Merge Changes Here*);
+- a conflict in non-model files (text sources) is left in place for manual
+  resolution, like plain git: resolve them, `git add` them, and re-run the
+  command — it finishes the merge (model conflicts included) and commits.
+
+Merging is still never done by plain `git merge` on a Mendix repository: use
+`mxcli git merge` or Studio Pro, never a textual merge of `mprcontents/`.
+Like every mxcli write, the command is refused while Studio Pro has the
+project open.
+
 ## [Auditing a repository: `mxcli git doctor`](#auditing-a-repository-mxcli-git-doctor)
 
 A repository that has known only plain git misses several things Studio Pro
@@ -23662,7 +23765,7 @@ mxcli git doctor --fix --version 10.21.0
 
 | Check | `--fix` |
 | --- | --- |
-| local git config: `core.autocrlf=False` (a checkout must not rewrite line endings inside `.mxunit` files), `mendix.commits-since-gc`, `mendix.lineEndingResetDone` | sets them |
+| local git config: `core.autocrlf=False` (a checkout must not rewrite line endings inside `.mxunit` files; any other value is rewritten), `mendix.commits-since-gc`, `mendix.lineEndingResetDone` — the `mendix.*` values are Studio Pro’s own bookkeeping and are only backfilled when missing | sets/backs them |
 | the remote URL as configured: Studio Pro can only use HTTPS | rewrites SSH (`git@host:org/app.git`, `ssh://…`) to HTTPS; other non-HTTPS URLs are reported unchanged. A `url.<base>.insteadOf` rule in your git config that makes git use another URL is reported, and left alone |
 | the remote’s `refs/notes/mx_metadata` | reported only — push the notes ref together with the branch |
 | the local `refs/notes/mx_metadata` holds the remote’s notes: `git clone` and a plain `git fetch` never fetch them, so a fresh clone or a CI checkout has none | fetches them, as a fast-forward only; refused when the local ref has notes the remote does not |
@@ -41310,6 +41413,16 @@ mxcli widget extract --mpk widgets/MyWidget.mpk    # writes a .def.json
 mxcli widget init -p app.mpr                        # extract defs for all project widgets
 
 ```
+
+A widget’s MDL keyword is the last segment of its ID (`com.mendix.widget.web.combobox.Combobox`
+→ `COMBOBOX`). When two installed widgets derive the same keyword, the pluggable one keeps it
+and the other is named with its vendor in front (`itvisors.keyboardshortcut.KeyboardShortcut`
+→ `ITVISORSKEYBOARDSHORTCUT`), or with `CUSTOM` in front for a legacy custom widget
+(`KeyboardShortcut.widget.KeyboardShortcut` → `CUSTOMKEYBOARDSHORTCUT`). `mxcli widget list`
+shows which name each widget got.
+
+`refresh catalog` refreshes these definitions too, but skips that step when no `.mpk` or
+`.def.json` file has changed since the last refresh by the same mxcli build.
 
 See [Marketplace Content](#marketplace-content) for downloading and installing packages.
 
