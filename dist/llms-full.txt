@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.29.0 @ 3c017b3
-Generated: 2026-11-02T08:46:05Z
+Version:   mxcli v0.30.0 @ 6094f47
+Generated: 2026-11-03T08:56:14Z
 
 ---
 
@@ -19841,6 +19841,12 @@ takes the same values as `run --local --db-type` (`postgresql`, the default, or
 `hsqldb`), keeps the `<project>_test` scratch name so it never shares files with
 a `run --local --db-type hsqldb` dev loop, and is refused with `--attach` and on
 the Docker path, which do not boot a database of their own.
+
+Either way, each `--local` run starts on an **empty** `<project>_test` database:
+the file database’s files are removed before the boot, and on PostgreSQL
+everything the app role owns inside `<project>_test` is dropped (`DROP OWNED BY CURRENT_USER`, run in that database only — the dev loop’s `<project>` database is
+untouched). Data a previous run committed, or an after-startup flow seeded under
+an earlier model, therefore cannot make an idempotent init skip seeding.
 
 ```
 mxcli test tests/ -p app.mpr --local --db-type hsqldb
@@ -43800,6 +43806,60 @@ log info node 'Orders' 'Order {1} shipped' with ({1} = $Order/Number);
 log info node 'Orders' $Msg;
 
 ```
+### [MDL-TEMPLATE02: A template’s braces that MxBuild refuses](#mdl-template02-a-templates-braces-that-mxbuild-refuses)
+
+```
+log: the message template has `{number}` — MxBuild rejects it (CE0712 "Brace should be
+followed by a number of digits or another brace.") [MDL-TEMPLATE02]
+
+```
+
+**Cause:** Every Mendix text template — a `log`, `show message` or `validation feedback`
+message, a `send email` subject or body, a `call rest service` URL or body, a Java action’s
+text-template argument, a workflow’s display, description and task texts, a dynamic text’s
+content and a button’s caption — reads its text with one grammar. A `{` opens a numbered
+placeholder (`{1}`, `{2}`, …) or is escaped as `{{`; a `}` needs no escape. Anything else is a
+build error, with the code `check` reports in its message:
+
+| Text | MxBuild |
+| --- | --- |
+| `{number}`, `{}`, `{ 1 }`, `{-1}`, `{"a": 1}` | CE0712 |
+| `{1` at the end of the text | CE0713 |
+| `{1x}`, `{1 }` | CE0714 |
+| `{0}` | CE0716 |
+| `{2147483648}` (past 32 bits) | CE0717 |
+| `{2}` with one parameter | CE0720 |
+
+Measured on mxbuild 10.24.24, 11.13.0 and 11.15.0, the same in every slot (ako/mxcli#1397).
+`check` and `exec` passed all of them before; `exec` now refuses a flow with one, `--no-check`
+included.
+
+**Solution:** Number the placeholders and fill them with `with (…)`; escape a literal brace:
+
+```
+log info node 'Orders' 'Item {1} not found' with ({1} = $Number);
+$R = call rest service post 'https://example.com/items' (
+  Body: template '{{"name": "{1}"}' with ({1} = $Name)
+) returns String;
+
+```
+### [MDL-REGEX01: A regular expression that ends in a lone backslash](#mdl-regex01-a-regular-expression-that-ends-in-a-lone-backslash)
+
+```
+return: the regular expression of replaceAll, '\', ends in an unescaped backslash — it
+builds, and the call fails each time it runs [MDL-REGEX01]
+
+```
+
+**Cause:** The second argument of `replaceAll`, `replaceFirst` and `isMatch` is a regular
+expression. One that ends in a lone `\` builds — MxBuild does not read the pattern — and
+fails every time it runs: the runtime throws `PatternSyntaxException "Unescaped trailing backslash"`, a nanoflow `"\ at end of pattern"`. A warning, since the build accepts it. The
+replacement (third argument) is literal text on both sides, so a backslash or `$` in it is
+inserted as written and is never reported.
+
+**Solution:** Match a backslash with `\\` — `'\\'` under `mdl 1;`, `'\\\\'` without the
+header, where `\\` is one backslash. See `mxcli syntax microflow expressions`.
+
 ### [MDL-JSONNUM01: A locale-dependent number in hand-built JSON](#mdl-jsonnum01-a-locale-dependent-number-in-hand-built-json)
 
 ```
@@ -44203,11 +44263,68 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 | --- | --- |
+| November 2, 2026 | [Release: mxcli v0.30.0](#release-mxcli-v0300) |
 | October 30, 2026 | [Release: mxcli v0.29.0](#release-mxcli-v0290) |
 | October 23, 2026 | [Release: mxcli v0.28.0](#release-mxcli-v0280) |
 | October 15, 2026 | [Release: mxcli v0.27.0](#release-mxcli-v0270) |
 | October 11, 2026 | [Release: mxcli v0.26.0](#release-mxcli-v0260) |
 | April 23, 2026 | [Introducing mxcli](#introducing-mxcli) |
+
+# [Release: mxcli v0.30.0](#release-mxcli-v0300)
+
+*November 2, 2026*
+
+v0.30.0 is about **catching before the build what would fail at build time or in production, and merging Mendix models from the command line**.
+
+## [What’s new](#whats-new)
+
+**Merge branches outside Studio Pro.** `git merge` can’t merge a Mendix model. The `.mpr` is SQLite and every `.mxunit` is BSON, so two branches that both change the model always conflict. `mxcli git merge <ref>` runs Studio Pro’s own merge engine (`mx merge`), which also works in a Linux devcontainer:
+
+```
+mxcli git merge feature/approvals -p app.mpr
+
+```
+
+Whatever the engine resolves is committed as a normal merge commit with Studio Pro’s `mx_metadata` note. If the engine needs a decision, nothing lands: the merge is aborted, both sides’ changes are printed unit by unit, and a plan file is written next to the project. Pick `ours` or `theirs` per unit in the plan and re-run with `--plan <file>`. Or take one side of every conflict with `--ours` / `--theirs`, or open the merge in Studio Pro for a mixed resolution.
+
+**Security errors before the build, and before production.** Two new lint rules cover access mistakes:
+
+- **SEC012** reports mxbuild’s CE2729 ahead of the build: a page a user role can reach that shows an attribute, or lists an entity, the role may not read. On a test project with a role that has no access, it finds the same 27 errors mxbuild does.
+- **SEC011** catches a mistake that nothing else does. A page’s data source XPath crosses an association the page’s roles can’t read, so at Production security the page opens to an error dialog, while mxbuild, `check` and `lint` were all clean. It reports the member to grant, and names the widget.
+
+**MPR012** now reports every widget measured as unsupported under the React client (CE0582), with its replacement. A new rule, **CONV021**, merges a create or change followed directly by its commit into one activity. And `check` warns on `trim($Value) != empty`, which is always true, because String functions return `''` and never `empty` (E015).
+
+**Lint a legacy project without the noise.** `mxcli lint --baseline lint-baseline.json --update-baseline` records today’s findings. Commit the file, and from then on `mxcli lint --baseline lint-baseline.json` reports only new findings, with an exit code that follows them alone. Custom lint rules can also read more of the model, including access rules, enumeration captions, constant values and project settings.
+
+**Optional page parameters.** `Params: ( $Sale: Shop.Sale optional )` is Studio Pro’s unticked *Required* (Mendix 11.5+): the page can be opened without an argument, from a menu item for example.
+
+**Lay out flows your way.** A committed `layout-config.yaml` chooses how `create microflow` and `mxcli layout flows` place what a script leaves unpositioned. Pick the `happy-line` default or `true-right-false-down`, and options such as ELSE as a column under its decision, guard clauses to the right, and a maximum row width.
+
+**`--mcp` uses Studio Pro alone.** The optional Concord server is gone. `--mcp-check` runs Studio Pro’s project-wide error check (11.15+), `--mcp-run` starts the app and prints its URL (11.16+), and DROP uses Studio Pro 11.16’s native delete. `--mcp http://localhost:<port>/mcp` now also reaches Studio Pro on a Windows machine running Docker Desktop.
+
+**Faster on large projects.** A catalog refresh after a save rebuilds only what the save changed, and no longer re-reads every widget package. `describe` decodes the one document it shows instead of every document of its type.
+
+## [Upgrading](#upgrading)
+
+Download the `v0.30.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.30.0):
+
+```
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.30.0/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+```
+
+Then refresh a project’s skills, commands and the companion mod with `mxcli init --sync-skills`. Every `mxcli init --tool <x>` now installs the bundled lint rules, and `lint` tells you when it runs without them.
+
+Behaviour changes worth knowing:
+
+- The Concord MCP flags `--mcp-concord`, `--mcp-concord-dial` and `--mcp-save` are removed. Studio Pro writes each change to disk as it lands, so there is nothing left to save.
+- Integer properties are written as 64-bit integers, as Studio Pro writes them. Documents an older mxcli wrote are not migrated, and reads accept either width.
+- The catalog schema moves to version 32, so a cached catalog is rebuilt once. The first command on a project after upgrading also builds the unit index, and now says so.
+- `git doctor` no longer reports or writes the `mendix.*` git config keys, which are Studio Pro’s own bookkeeping.
+
+Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHANGELOG.md)
 
 # [Release: mxcli v0.29.0](#release-mxcli-v0290)
 
@@ -44215,7 +44332,7 @@ News, release announcements, and demos from the mxcli team.
 
 v0.29.0 is about **writing what your project’s own Mendix version stores, and committing it the way Studio Pro does**. A statement your Mendix 9 or 10 project can’t store is now refused at check time, before it can leave you with a project Studio Pro won’t open. And a team that commits with plain git can keep its history in the shape Studio Pro expects.
 
-## [What’s new](#whats-new)
+## [What’s new](#whats-new-1)
 
 **Commit the way Studio Pro does.** Studio Pro’s *Commit* does more than `git commit`: it keeps the contents hashes in step, leaves out the files a Mendix repository never ships, and attaches the `mx_metadata` note it uses for its version check and history. `mxcli git commit` does all of that in one line:
 
@@ -44244,7 +44361,7 @@ A new warning, MDL-WF20, catches a user task whose page has no way to complete o
 
 **`check` catches more of what `mx check` would refuse.** Examples are a property the widget doesn’t take (`Caption:` on a text box), a member the entity lacks, a duplicate member name on an inheritance chain, an unknown `[%UserRole_X%]`, and Java action types that can’t be stored. Renames and moves of constants, enumerations and attributes now update the expressions and XPath constraints that refer to them. `diff-local` also shows every change, settings and grants included.
 
-## [Upgrading](#upgrading)
+## [Upgrading](#upgrading-1)
 
 Download the `v0.29.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.29.0):
 
@@ -44270,7 +44387,7 @@ Full changelog: [CHANGELOG.md](https://github.com/mendixlabs/mxcli/blob/main/CHA
 
 v0.28.0 is about **changing one thing without restating the rest**. You can now edit a menu item, a REST operation or a single widget in place, and a flow can take a reworded note or decision caption without being rebuilt.
 
-## [What’s new](#whats-new-1)
+## [What’s new](#whats-new-2)
 
 **Edit menus in place.** Adding one menu item used to mean restating the whole menu. Now:
 
@@ -44296,7 +44413,7 @@ Items are addressed by their caption path, and mxcli never guesses. An address t
 
 **Security.** The deprecated v1 BSON driver is gone, so mxcli now runs on `mongo-driver/v2` alone, and a test stops it from coming back. Go moves to 1.27.3, and the npm advisories in the bundled widget and the VS Code extension are cleared.
 
-## [Upgrading](#upgrading-1)
+## [Upgrading](#upgrading-2)
 
 Download the `v0.28.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.28.0):
 
@@ -44330,7 +44447,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new-2)
+## [What’s new](#whats-new-3)
 
 **All-or-nothing `exec`.** Before, a statement that failed at write time left every statement before it in place: a created module stayed, and a `drop` ahead of the failing `create` was not undone. Now mxcli backs up the `.mpr` and every unit file a run touches before the first write, and restores them if anything fails. The message reads “Nothing was written: statement N was rolled back”.
 
@@ -44346,7 +44463,7 @@ New to mxcli? The poster puts all of mxcli and MDL on one page.
 
 **Security.** The MongoDB BSON driver is upgraded for the October 2026 advisories, which release scanners flagged on the published binaries.
 
-## [Upgrading](#upgrading-2)
+## [Upgrading](#upgrading-3)
 
 Download the `v0.27.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.27.0):
 
@@ -44377,7 +44494,7 @@ All of mxcli and MDL on one page: the idea, getting started with the bootstrap p
 
 **[Open the interactive poster](poster/mxcli-language-poster.html)**. Zoom into any panel, or step through it as a 19-panel tour.
 
-## [What’s new](#whats-new-3)
+## [What’s new](#whats-new-4)
 
 **Documents that survive Studio Pro’s merge.** Mendix’s merge and diff engine compares an element’s property *names* between two revisions and throws when they differ. So when mxcli left out a key, or wrote one the project’s Mendix version doesn’t have, the document became unmergeable the first time Studio Pro saved it, even though `mx check`, the build and the runtime were all green. Every element mxcli writes now carries exactly the property set Studio Pro writes for that version. The set comes from a table measured with `mx convert` across Mendix 10.24, 11.6 and 11.12–11.15. For a project an older mxcli already wrote to, run:
 
@@ -44397,7 +44514,7 @@ mxcli fix property-sets -p app.mpr
 
 **The dev loop.** `mxcli run --local --detach` runs the app as a background service, and `mxcli playwright check` gives a text verdict for a list of pages in one call. `run --local` and `test --local` also work on Windows without Developer Mode, including domain model changes under `--watch`.
 
-## [Upgrading](#upgrading-3)
+## [Upgrading](#upgrading-4)
 
 Download the `v0.26.0` binary for your platform from the [release page](https://github.com/mendixlabs/mxcli/releases/tag/v0.26.0):
 

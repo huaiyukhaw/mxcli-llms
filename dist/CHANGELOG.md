@@ -1,3 +1,7 @@
+## 2026-11-03 -- mxcli v0.30.0 @ 6094f47
+- +125 / -8 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.30.0](#release-mxcli-v0300), [Prerequisites](#prerequisites-7), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2), [Upgrading](#upgrading-3), [Upgrading](#upgrading-4) (+6 more)
+
 ## 2026-11-02 -- mxcli v0.29.0 @ 3c017b3
 - +138 / -25 lines
 - Sections changed: Later: report only what is not in the baseline, Record today's findings, [Adding Concord (optional)](#adding-concord-optional), [Auditing a repository: `mxcli git doctor`](#auditing-a-repository-mxcli-git-doctor), [Baseline: Report Only New Findings](#baseline-report-only-new-findings), [Delete, check and run](#delete-check-and-run), [Input Widgets](#input-widgets-1), [Marketplace and custom widgets](#marketplace-and-custom-widgets) (+5 more)
