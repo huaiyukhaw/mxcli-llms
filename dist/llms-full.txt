@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.30.0 @ 6094f47
-Generated: 2026-11-03T08:56:14Z
+Version:   mxcli v0.30.0 @ fe99b85
+Generated: 2026-11-04T08:29:53Z
 
 ---
 
@@ -35886,17 +35886,41 @@ Statements for organizing project structure: creating modules and folders, and m
 ## [Synopsis](#synopsis-78)
 
 ```
-CREATE MODULE module_name
+CREATE [OR MODIFY] MODULE module_name [ ( Version: 'x.y.z', ModuleType: app | addon ) ]
 
 ```
 ## [Description](#description-78)
 
-Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with default settings and an empty domain model.
+Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with an empty domain model and Studio Pro’s defaults for a new module: an **app module**, version **1.0.0**.
+
+The optional property list sets the module’s settings, the General tab of Studio Pro’s *Module settings* dialog. `CREATE OR MODIFY` applies them to a module that already exists, changing only the settings it names. A plain `CREATE` of an existing module leaves it unchanged. To change one setting, use [ALTER MODULE … SET](#alter-module--set).
 
 ## [Parameters](#parameters-77)
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
+[**Version**](#version)
+The *Module version*, a SemVer string `'major.minor.patch'` with an optional pre-release or build suffix (`'1.0.0-rc.1'`). It is the version an exported `.mpk` carries. Anything else is refused, as the dialog refuses it.
+[**ModuleType**](#moduletype)
+`app` (an *App module*, the default) or `addon` (an *Add-on module*). An add-on hides every element not marked *Usable* from the rest of the app: referencing one from another module is CE1406, which `check -p --references` reports. Add-on modules need Mendix 9.12 or later. Solution modules have no MDL spelling.
+## [Settings shown by DESCRIBE MODULE](#settings-shown-by-describe-module)
+
+`DESCRIBE MODULE` prints the module’s `CREATE OR MODIFY` statement with the settings that differ from a new module’s, so its output re-runs:
+
+```
+create or modify module Inventory (
+  Version: '2.3.1',
+  ModuleType: addon,
+);
+-- location: Marketplace modules (set in Studio Pro)
+-- add-on module: elements not marked Usable cannot be referenced from other modules
+
+```
+
+The *Location* (Module list or Marketplace modules) is printed as a comment when it is *Marketplace modules*; it cannot be set from MDL yet. The *Module ID* and the checksum of an imported module are not shown: Studio Pro owns them, and setting a module’s settings keeps them.
+
+`LIST MODULES` shows each module’s version and type in its `Version` and `Type` columns.
+
 ## [Examples](#examples-90)
 
 ### [Create a module](#create-a-module)
@@ -35914,19 +35938,68 @@ CREATE MODULE Inventory;
 CREATE MODULE Reporting;
 
 ```
+### [Create a versioned add-on module](#create-a-versioned-add-on-module)
+
+```
+mdl 1;
+create or modify module Inventory (
+  Version: '2.3.1',
+  ModuleType: addon,
+);
+
+```
 ## [See Also](#see-also-116)
 
-[CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
+[ALTER MODULE … SET](#alter-module--set), [CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
+
+# [ALTER MODULE … SET](#alter-module--set)
+
+## [Synopsis](#synopsis-79)
+
+```
+ALTER MODULE module_name SET ( Version: 'x.y.z', ModuleType: app | addon )
+
+```
+## [Description](#description-79)
+
+Changes a module’s settings, the General tab of Studio Pro’s *Module settings* dialog. It takes the same keys as [CREATE MODULE](#create-module), and changes only the settings it names. The rest of the module’s settings, including its *Module ID* and an imported module’s checksum, keep their stored values. A statement that restates the stored settings writes nothing.
+
+| Key | Values | Studio Pro field |
+| --- | --- | --- |
+| `Version` | a SemVer string, `'2.3.1'` | Module version |
+| `ModuleType` | `app` | `addon` | Module type |
+
+An unknown key, a key named twice, a version that is not SemVer, or a type other than `app`/`addon` is an error from both `check` and `exec`. `ModuleType: addon` needs Mendix 9.12 or later.
+
+Making a module an add-on hides every element not marked *Usable* from the rest of the app: a reference from another module becomes CE1406. Run `mxcli check script.mdl -p app.mpr --references` to see which references that affects.
+
+## [Examples](#examples-91)
+
+```
+mdl 1;
+-- Bump the version before exporting the module
+alter module Inventory set (Version: '2.4.0');
+
+-- Make it an add-on module
+alter module Inventory set (ModuleType: addon);
+
+-- Both at once
+alter module Inventory set (Version: '3.0.0', ModuleType: app);
+
+```
+## [See Also](#see-also-117)
+
+[CREATE MODULE](#create-module), [ALTER MODULE … JAR DEPENDENCY](#alter-module--jar-dependency)
 
 # [CREATE FOLDER](#create-folder)
 
-## [Synopsis](#synopsis-79)
+## [Synopsis](#synopsis-80)
 
 ```
 CREATE FOLDER module_name/folder_path
 
 ```
-## [Description](#description-79)
+## [Description](#description-80)
 
 Creates a folder within a module for organizing documents such as pages, microflows, and snippets. Nested folders use the `/` separator. If intermediate folders in the path do not exist, they are created automatically.
 
@@ -35938,7 +36011,7 @@ Note: Folders can also be created implicitly by specifying a `FOLDER` clause whe
 The name of the module in which to create the folder.
 [**folder\_path**](#folder_path)
 The path of the folder to create within the module. Use `/` to create nested folders (e.g., `Orders/Processing`).
-## [Examples](#examples-91)
+## [Examples](#examples-92)
 
 ### [Create a simple folder](#create-a-simple-folder)
 
@@ -35992,19 +36065,19 @@ CREATE CONSTANT Encryption.EncryptionKey FOLDER 'Private - String en\/de-cryptio
 `DESCRIBE` writes the escape for you, so its output files the document back
 where it was. A backslash before any other character is an ordinary character.
 
-## [See Also](#see-also-117)
+## [See Also](#see-also-118)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
 # [DROP FOLDER](#drop-folder)
 
-## [Synopsis](#synopsis-80)
+## [Synopsis](#synopsis-81)
 
 ```
 DROP FOLDER 'folder_path' IN module_name;
 
 ```
-## [Description](#description-80)
+## [Description](#description-81)
 
 Removes an empty folder from a module. The folder must contain no documents (pages, microflows, etc.) and no sub-folders. If the folder is not empty, the command returns an error indicating how many child units remain.
 
@@ -36016,7 +36089,7 @@ Nested folder paths use the `/` separator. Only the leaf folder is deleted; pare
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
 [**module\_name**](#module_name-2)
 The name of the module containing the folder.
-## [Examples](#examples-92)
+## [Examples](#examples-93)
 
 ### [Drop a simple folder](#drop-a-simple-folder)
 
@@ -36050,13 +36123,13 @@ DROP FOLDER 'Processing' IN MyModule;
 | `folder not found: 'path' in Module` | No folder exists at the given path in the module |
 | `module not found: Module` | The specified module does not exist |
 
-## [See Also](#see-also-118)
+## [See Also](#see-also-119)
 
 [CREATE FOLDER](#create-folder), [CREATE MODULE](#create-module), [MOVE](#move), [MOVE FOLDER](#move-folder)
 
 # [MOVE](#move)
 
-## [Synopsis](#synopsis-81)
+## [Synopsis](#synopsis-82)
 
 ```
 MOVE document_type qualified_name TO module_name
@@ -36064,7 +36137,7 @@ MOVE document_type qualified_name TO FOLDER 'folder_path'
 MOVE document_type qualified_name TO FOLDER 'folder_path' IN module_name
 
 ```
-## [Description](#description-81)
+## [Description](#description-82)
 
 Moves a document to a different folder or module. Every top-level document type is supported, spelled the way `DESCRIBE` spells it. When moving to a folder, missing intermediate folders are created automatically. Cross-module moves change the qualified name of the document, which may break by-name references elsewhere in the project.
 
@@ -36110,7 +36183,7 @@ The current `Module.Name` of the document to move.
 The target module. When specified without `FOLDER`, moves the document to the module root.
 [**folder\_path**](#folder_path-2)
 The target folder path within the module. Use `/` for nested paths (e.g., `'Orders/Processing'`). Enclosed in single quotes.
-## [Examples](#examples-93)
+## [Examples](#examples-94)
 
 ### [Move a page to a folder in the same module](#move-a-page-to-a-folder-in-the-same-module)
 
@@ -36192,13 +36265,13 @@ LIST IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
-## [See Also](#see-also-119)
+## [See Also](#see-also-120)
 
 [CREATE MODULE](#create-module), [CREATE FOLDER](#create-folder)
 
 # [MOVE FOLDER](#move-folder)
 
-## [Synopsis](#synopsis-82)
+## [Synopsis](#synopsis-83)
 
 ```
 MOVE FOLDER qualified_name TO FOLDER 'folder_path';
@@ -36206,7 +36279,7 @@ MOVE FOLDER qualified_name TO FOLDER 'folder_path' IN module_name;
 MOVE FOLDER qualified_name TO module_name;
 
 ```
-## [Description](#description-82)
+## [Description](#description-83)
 
 Moves a folder (and all its contents) to a different location: another folder within the same module, a folder in a different module, or a module root. The folder’s contents (documents and sub-folders) move with it.
 
@@ -36222,7 +36295,7 @@ The source folder in `Module.FolderName` format. Use double quotes for paths wit
 The target folder path. Use `/` for nested folders.
 [**module\_name**](#module_name-4)
 The target module name (for cross-module moves).
-## [Examples](#examples-94)
+## [Examples](#examples-95)
 
 ### [Move a folder into another folder](#move-a-folder-into-another-folder)
 
@@ -36248,7 +36321,7 @@ MOVE FOLDER MyModule.SharedWidgets TO CommonModule;
 MOVE FOLDER MyModule.Templates TO FOLDER 'Shared/Templates' IN CommonModule;
 
 ```
-## [See Also](#see-also-120)
+## [See Also](#see-also-121)
 
 [CREATE FOLDER](#create-folder), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -36265,7 +36338,7 @@ are stored as `Projects$JarDependency` entries in `Projects$ModuleSettings`.
 
 # [ALTER MODULE … JAR DEPENDENCY](#alter-module--jar-dependency)
 
-## [Synopsis](#synopsis-83)
+## [Synopsis](#synopsis-84)
 
 ```
 ALTER MODULE module_name
@@ -36292,7 +36365,7 @@ ALTER MODULE module_name
   DROP JAR DEPENDENCY 'group:artifact';
 
 ```
-## [Description](#description-83)
+## [Description](#description-84)
 
 Manages Maven/JAR dependencies stored in a module’s `Projects$ModuleSettings`
 document. These are the same dependencies shown in Studio Pro under
@@ -36312,7 +36385,7 @@ The three components of a Maven coordinate. All three are required for `ADD`.
 [**included**](#included)
 When `false`, the dependency is declared but excluded from the classpath
 at build time. Defaults to `true`.
-## [Examples](#examples-95)
+## [Examples](#examples-96)
 
 ### [Add a new dependency](#add-a-new-dependency)
 
@@ -36387,13 +36460,13 @@ Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
 when the project is opened in Studio Pro or built with `mxcli docker build`.
 
-## [See Also](#see-also-121)
+## [See Also](#see-also-122)
 
 [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
 # [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
-## [Synopsis](#synopsis-84)
+## [Synopsis](#synopsis-85)
 
 ```
 LIST JAR DEPENDENCIES;
@@ -36401,7 +36474,7 @@ LIST JAR DEPENDENCIES IN module;
 DESCRIBE JAR DEPENDENCY module 'group:artifact';
 
 ```
-## [Description](#description-84)
+## [Description](#description-85)
 
 `LIST JAR DEPENDENCIES` shows all Maven/JAR dependencies declared across the
 project, optionally filtered to a single module. `DESCRIBE JAR DEPENDENCY`
@@ -36417,7 +36490,7 @@ The module name containing the dependency (for `DESCRIBE`).
 [**‘group:artifact’**](#groupartifact-1)
 The Maven coordinate identifying the dependency, in `groupId:artifactId`
 format (no version). Example: `'org.duckdb:duckdb_jdbc'`.
-## [Examples](#examples-96)
+## [Examples](#examples-97)
 
 ### [List all JAR dependencies](#list-all-jar-dependencies)
 
@@ -36462,7 +36535,7 @@ alter module MyModule
 
 The output is suitable for copying into a script and re-executing.
 
-## [See Also](#see-also-122)
+## [See Also](#see-also-123)
 
 [ALTER MODULE JAR DEPENDENCY](#alter-module--jar-dependency)
 
@@ -36487,13 +36560,13 @@ needs no `;`. A script file is read by its own header; see
 
 # [SET](#set-1)
 
-## [Synopsis](#synopsis-85)
+## [Synopsis](#synopsis-86)
 
 ```
 SET variable = value
 
 ```
-## [Description](#description-85)
+## [Description](#description-86)
 
 Sets a session variable that controls REPL behavior. Session variables persist for the duration of the session and are reset when the REPL exits. Variable names are case-insensitive.
 
@@ -36511,7 +36584,7 @@ The value to assign. Can be a string (in single quotes), a boolean (`TRUE` or `F
 | `verbose` | `TRUE`, `FALSE` | Enable verbose output for debugging |
 | `AUTOCOMMIT` | `TRUE`, `FALSE` | Automatically save changes after each mutation |
 
-## [Examples](#examples-97)
+## [Examples](#examples-98)
 
 ### [Set output format to JSON](#set-output-format-to-json)
 
@@ -36531,19 +36604,19 @@ SET verbose = TRUE;
 SET AUTOCOMMIT = TRUE;
 
 ```
-## [See Also](#see-also-123)
+## [See Also](#see-also-124)
 
 [SHOW STATUS](#show-status), [OPEN PROJECT](#open-project)
 
 # [SHOW STATUS](#show-status)
 
-## [Synopsis](#synopsis-86)
+## [Synopsis](#synopsis-87)
 
 ```
 STATUS
 
 ```
-## [Description](#description-86)
+## [Description](#description-87)
 
 Displays the current session status including the connection state, the open project path, the Mendix version of the project, the MPR format version, and the values of any session variables. This is useful for confirming which project is loaded and verifying session configuration.
 
@@ -36551,7 +36624,7 @@ Displays the current session status including the connection state, the open pro
 
 This statement takes no parameters.
 
-## [Examples](#examples-98)
+## [Examples](#examples-99)
 
 ### [Check session status](#check-session-status)
 
@@ -36577,7 +36650,7 @@ STATUS;
 LIST MODULES;
 
 ```
-## [See Also](#see-also-124)
+## [See Also](#see-also-125)
 
 [OPEN PROJECT](#open-project), [CLOSE PROJECT](#close-project), [SET](#set-1)
 
@@ -40757,7 +40830,7 @@ authoring this is the difference between one cheap turn and dozens of expensive
 ones — and it is why, even though a script “costs” ~60 tool calls, running it
 *through mxcli* keeps that cost out of the model’s context.
 
-## [See also](#see-also-125)
+## [See also](#see-also-126)
 
 - [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp) — how to set up
   the connection and run scripts against a live model.

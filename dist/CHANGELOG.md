@@ -1,3 +1,7 @@
+## 2026-11-04 -- mxcli v0.30.0 @ fe99b85
+- +109 / -36 lines
+- Sections changed: [ALTER MODULE … SET](#alter-module--set), [Description](#description-78), [Description](#description-79), [Description](#description-80), [Description](#description-81), [Description](#description-82), [Description](#description-83), [Description](#description-84) (+37 more)
+
 ## 2026-11-03 -- mxcli v0.30.0 @ 6094f47
 - +125 / -8 lines
 - Sections changed: [Blog](#blog), [Release: mxcli v0.30.0](#release-mxcli-v0300), [Prerequisites](#prerequisites-7), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2), [Upgrading](#upgrading-3), [Upgrading](#upgrading-4) (+6 more)

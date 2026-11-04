@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.30.0 @ 6094f47 | Generated: 2026-11-03T08:56:14Z
+Version: mxcli v0.30.0 @ fe99b85 | Generated: 2026-11-04T08:29:53Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -311,6 +311,7 @@ instead of restating it. The items are addressed by…
 - [ALTER SETTINGS](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/settings/alter-settings.md): Settings are organized into categories. Each ALTER SETTINGS command targets one category.
 - [Organization Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/index.md): Statements for organizing project structure: creating modules and folders, and moving documents between them.
 - [CREATE MODULE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/create-module.md)
+- [ALTER MODULE … SET](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/alter-module-set.md)
 - [CREATE FOLDER](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/create-folder.md)
 - [DROP FOLDER](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/drop-folder.md)
 - [MOVE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/organization/move.md)
