@@ -1,3 +1,7 @@
+## 2026-11-05 -- mxcli v0.30.0 @ f3c4d53
+- +172 / -5 lines
+- Sections changed: Attach to an app you already have running — no boot at all, A planner can create a visit, [CRUD Page Set](#crud-page-set), [Commands](#commands-2), [Editing an entry](#editing-an-entry), [Feature Availability Matrix](#feature-availability-matrix), [Open questions](#open-questions), [Overview / List Page](#overview--list-page) (+3 more)
+
 ## 2026-11-04 -- mxcli v0.30.0 @ fe99b85
 - +109 / -36 lines
 - Sections changed: [ALTER MODULE … SET](#alter-module--set), [Description](#description-78), [Description](#description-79), [Description](#description-80), [Description](#description-81), [Description](#description-82), [Description](#description-83), [Description](#description-84) (+37 more)
