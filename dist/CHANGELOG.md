@@ -1,3 +1,7 @@
+## 2026-11-06 -- mxcli v0.30.0 @ d82c738
+- +30 / -1 lines
+- Sections changed: [Calling an External Action](#calling-an-external-action), [Feature Availability Matrix](#feature-availability-matrix)
+
 ## 2026-11-05 -- mxcli v0.30.0 @ f3c4d53
 - +172 / -5 lines
 - Sections changed: Attach to an app you already have running — no boot at all, A planner can create a visit, [CRUD Page Set](#crud-page-set), [Commands](#commands-2), [Editing an entry](#editing-an-entry), [Feature Availability Matrix](#feature-availability-matrix), [Open questions](#open-questions), [Overview / List Page](#overview--list-page) (+3 more)
