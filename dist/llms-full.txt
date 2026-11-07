@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.30.0 @ d82c738
-Generated: 2026-11-06T08:52:09Z
+Version:   mxcli v0.30.0 @ 6e1f4e7
+Generated: 2026-11-07T08:12:12Z
 
 ---
 
@@ -20019,7 +20019,13 @@ default — and prints what it applied. Use `--configuration <name>` to choose
 between several, and `--constant Module.Name=value` (repeatable) to set one for
 this run only — it wins over everything and is never written anywhere. For a
 value that should persist on this machine without being committed, use
-`mxcli constant set` (see [Constant values](#constant-values) below). A constant
+`mxcli constant set` (see [Constant values](#constant-values) below). A literal
+value on the command line shows in shell history and in `ps`; write
+`--constant Module.Name=@env:VAR` to read it from an environment variable, or
+`--constant Module.Name=@file:path` to read it from a file that only you can read
+(`chmod 600`; owner-only check on Unix, not checked on Windows). An unset or empty
+variable, an empty file, or an open file is an error, never an empty
+value, and a value that must start with `@` is written `@@…`. A constant
 the project does not declare is refused before anything boots. `--attach` takes
 none of these, since it inherits the constants of the app it attaches to. This
 matters whenever a test asserts on something a constant feeds: the two modes
@@ -20045,7 +20051,7 @@ Highest layer wins:
 
 | Layer | Set with | In git? |
 | --- | --- | --- |
-| this run | `--constant Module.Name=value` | no |
+| this run | `--constant Module.Name=value` (or `=@env:VAR`, `=@file:path`) | no |
 | this machine | `mxcli constant set Module.Name value` | no — gitignored, 0600 |
 | this configuration | `alter settings constant … in configuration 'X'` | yes |
 | default | `create constant … default '…'` | yes |
@@ -23917,6 +23923,9 @@ it is copied back, so the engine owns the `.mpr`:
 - a conflict in non-model files (text sources) is left in place for manual
   resolution, like plain git: resolve them, `git add` them, and re-run the
   command — it finishes the merge (model conflicts included) and commits.
+  When that re-run needs a model decision and aborts, your text resolutions
+  are recorded in the plan template and `--plan` puts them back; `--plan`
+  stops before it touches the model while a text conflict is still open.
 
 Merging is still never done by plain `git merge` on a Mendix repository: use
 `mxcli git merge` or Studio Pro, never a textual merge of `mprcontents/`.
