@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.30.0 @ 6e1f4e7
-Generated: 2026-11-07T08:12:12Z
+Version:   mxcli v0.30.0 @ f0c40a8
+Generated: 2026-11-08T08:28:52Z
 
 ---
 
@@ -17007,6 +17007,7 @@ Information about pages and their properties.
 | `ParameterCount` | Number of page parameters |
 | `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
 | `Excluded` | 1 when the page is excluded from the project |
+| `Class`, `Style`, `DynamicClasses` | The page’s own Appearance: CSS class, inline style and dynamic-classes expression (full build only) |
 
 ```
 SELECT Name, Title, URL
@@ -17029,7 +17030,7 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Id` | The widget’s element ID |
 | `Name` | Widget name |
 | `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget’s id (`com.mendix.widget.web.datagrid.Datagrid`) |
-| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page or snippet holding the widget; `ContainerType` is `PAGE` or `SNIPPET` |
+| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page, snippet or layout holding the widget; `ContainerType` is `PAGE`, `SNIPPET` or `LAYOUT`. `UPDATE WIDGETS` changes page and snippet widgets only |
 | `ModuleName`, `Folder` | The container’s module and folder |
 | `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget’s own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
 | `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget’s properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
@@ -17085,6 +17086,7 @@ Atlas\_Core.
 | `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
 | `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
 | `Description` | Documentation text |
+| `Class`, `Style`, `DynamicClasses` | The layout’s own Appearance (full build only). Its widgets are in `CATALOG.WIDGETS` with `ContainerType = 'LAYOUT'` |
 
 ```
 -- pages on a native layout (needs a full build for LayoutRef)
@@ -21919,7 +21921,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
-| `--db-user` / `--db-password` | mendix / mendix | Database credentials |
+| `--db-user` / `--db-password` | mendix / mendix | Database credentials; the password takes `@env:VAR` / `@file:path` — see [Secrets off the command line](#secrets-off-the-command-line) |
 | `--db-type` | `postgresql` | `postgresql` or `hsqldb`. `hsqldb` boots on the runtime’s built-in file database: no database server, no provisioning, works offline. Its data lives in `<project>/deployment/data/database/hsqldb/`. Cannot be combined with `--db-host`, `--db-user`, `--db-password` or `--ensure-db` (refused, not ignored). For local development only |
 | `--screenshot` | off | Capture a Playwright PNG after boot and each applied change |
 | `--screenshot-path` | `<projectDir>/.mxcli/run-local.png` | Screenshot output PNG |
@@ -21934,6 +21936,44 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--trace-service` | `.mpr` name | `OTEL_SERVICE_NAME` under `--trace` |
 | `--trace-otlp` | off (console) | Export traces to this OTLP collector endpoint (e.g. `http://127.0.0.1:4318`) instead of the console; implies `--trace` (needed for flame charts) |
 | `--runtime-setting Key=Value` | — | Merge an extra runtime setting into the boot config (Value parsed as JSON when possible); repeatable |
+
+## [Secrets off the command line](#secrets-off-the-command-line)
+
+A value typed on the command line is visible in `ps` for as long as the app runs and
+stays in shell history. The secret flags — `--db-password`, `--db-admin-password`,
+`--screenshot-password`, `--hub-secret`, `--debug-pass` — and every `--constant` value
+can name where the secret is instead:
+
+```
+export MX_DB_PASSWORD=…        # from your secret store, a .env loader, CI secrets
+mxcli run --local --watch --detach -p app.mpr --db-password @env:MX_DB_PASSWORD
+mxcli run --local -p app.mpr --db-password @file:$HOME/.config/mxcli/db-password
+
+```
+
+| Form | Reads | Refused when |
+| --- | --- | --- |
+| `@env:VAR` | the environment variable `VAR` | it is unset or empty |
+| `@file:path` | the file, minus one trailing newline | it is empty, not a regular file, or readable by its group or others (Unix; Windows is not checked) |
+| `@@text` | the literal `@text` | — |
+
+Any other value starting with `@` is refused, so a mistyped `@evn:VAR` is not used as
+the password. Errors name the flag and the variable or file, never the value.
+
+Only the reference is stored in `.mxcli/run-state.json`, so a run started this way can
+be detached and restarted: `run restart` resolves it again, **in the environment of the
+shell that runs the restart** (a relative `@file:` path is stored as an absolute one). A
+secret written literally is not stored, and `run restart` refuses that run and says so.
+The resolved database password is still in the owner-only `.mxcli/run-local.json` while
+the app runs, because re-applying constants needs it.
+
+`PGPASSWORD` is not read for `--db-password`: it is what `--ensure-db` hands `psql` for
+the superuser, which is usually a different account. Use `--db-password @env:PGPASSWORD`
+if they really are the same.
+
+A password with leading or trailing whitespace may not work whatever the source: the
+Mendix 11.16 beta runtime was observed to trim `DatabasePassword` (reported in
+mendixlabs/mxcli#1761). mxcli passes the value unchanged.
 
 ## [Metrics and OpenTelemetry](#metrics-and-opentelemetry)
 
@@ -28056,7 +28096,7 @@ EXTERNAL
 
 If `OR MODIFY` is specified, the statement is idempotent: if an entity with the same qualified name already exists, its attributes are updated to match the definition. New attributes are added, and existing attributes have their types and constraints updated. This is useful for repeatable scripts.
 
-The optional `EXTENDS` clause establishes generalization (inheritance). The child entity inherits all attributes from the parent and can add its own. Common parent entities include `System.User`, `System.FileDocument`, and `System.Image`. The `EXTENDS` clause must appear **before** the opening parenthesis.
+The optional `EXTENDS` clause establishes generalization (inheritance). The child entity inherits all attributes from the parent and can add its own. Common parent entities include `System.User`, `System.FileDocument`, and `System.Image`. The `EXTENDS` clause must appear **before** the opening parenthesis. A specialization inherits its persistability from the root of the generalization chain, which is the only place Mendix stores it: `PERSISTENT` or `NON-PERSISTENT` on it may restate the inherited value, and one that contradicts it is an error from both `check` and `exec`. Leave the keyword out to take whatever the chain says.
 
 Each attribute definition specifies a name, a data type, and optional constraints. Attributes are separated by commas. The supported data types are:
 
@@ -36107,7 +36147,7 @@ The name of the module to create. Must be a valid identifier (letters, digits, u
 [**Version**](#version)
 The *Module version*, a SemVer string `'major.minor.patch'` with an optional pre-release or build suffix (`'1.0.0-rc.1'`). It is the version an exported `.mpk` carries. Anything else is refused, as the dialog refuses it.
 [**ModuleType**](#moduletype)
-`app` (an *App module*, the default) or `addon` (an *Add-on module*). An add-on hides every element not marked *Usable* from the rest of the app: referencing one from another module is CE1406, which `check -p --references` reports. Add-on modules need Mendix 9.12 or later. Solution modules have no MDL spelling.
+`app` (an *App module*, the default) or `addon` (an *Add-on module*). An add-on hides every element not marked *Usable* from the rest of the app: referencing one from another module is CE1406, which `check -p --references` reports. Pages and snippets in an add-on cannot be made Usable at all: showing such a page, or calling such a snippet, from another module is CE1406 whatever export level it stores. Add-on modules need Mendix 9.12 or later. Solution modules have no MDL spelling.
 ## [Settings shown by DESCRIBE MODULE](#settings-shown-by-describe-module)
 
 `DESCRIBE MODULE` prints the module’s `CREATE OR MODIFY` statement with the settings that differ from a new module’s, so its output re-runs:
@@ -40313,7 +40353,10 @@ CREATE TABLE LAYOUTS (
     Folder        TEXT,
     LayoutType    TEXT,   -- Responsive / Phone / Tablet / ModalPopup / Default / Popup
     Platform      TEXT,   -- 'Web' or 'Native' (the content wrapper's type)
-    Description   TEXT
+    Description   TEXT,
+    Class         TEXT,   -- the layout's own Appearance (full build only)
+    Style         TEXT,
+    DynamicClasses TEXT
 );
 
 ```
@@ -40432,9 +40475,9 @@ CREATE TABLE WIDGETS (
     Id                      TEXT PRIMARY KEY,
     Name                    TEXT,
     WidgetType              TEXT,    -- "Forms$TextBox", or a pluggable widget's id
-    ContainerId             TEXT,    -- the page or snippet
+    ContainerId             TEXT,    -- the page, snippet or layout
     ContainerQualifiedName  TEXT,
-    ContainerType           TEXT,    -- "PAGE" or "SNIPPET"
+    ContainerType           TEXT,    -- "PAGE", "SNIPPET" or "LAYOUT"
     ModuleName              TEXT,
     Folder                  TEXT,
     EntityRef               TEXT,

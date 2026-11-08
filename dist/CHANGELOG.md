@@ -1,3 +1,7 @@
+## 2026-11-08 -- mxcli v0.30.0 @ f0c40a8
+- +50 / -7 lines
+- Sections changed: [Core Tables](#core-tables), [Core Tables](#core-tables-1), [Description](#description-20), [Flags](#flags-3), [Full Refresh Tables](#full-refresh-tables), [Parameters](#parameters-77), [Secrets off the command line](#secrets-off-the-command-line)
+
 ## 2026-11-06 -- mxcli v0.30.0 @ d82c738
 - +30 / -1 lines
 - Sections changed: [Calling an External Action](#calling-an-external-action), [Feature Availability Matrix](#feature-availability-matrix)
