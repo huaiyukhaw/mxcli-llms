@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.30.0 @ f0c40a8 | Generated: 2026-11-08T08:28:52Z
+Version: mxcli v0.30.0 @ f99080e | Generated: 2026-11-09T08:58:47Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -286,6 +286,7 @@ instead of restating it. The items are addressed by…
 - [CREATE AI MODEL](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/agent/create-model.md)
 - [CREATE KNOWLEDGE BASE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/agent/create-knowledge-base.md)
 - [CREATE CONSUMED MCP SERVICE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/agent/create-consumed-mcp-service.md)
+- [CREATE PUBLISHED MCP SERVICE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/agent/create-published-mcp-service.md)
 - [CREATE AGENT](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/agent/create-agent.md)
 - [Business Event Statements](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/business-event/index.md): Statements for managing business event services.
 - [CREATE BUSINESS EVENT SERVICE](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/business-event/create-business-event-service.md): Message attributes support standard Mendix types:

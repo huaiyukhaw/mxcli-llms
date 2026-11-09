@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.30.0 @ f0c40a8
-Generated: 2026-11-08T08:28:52Z
+Version:   mxcli v0.30.0 @ f99080e
+Generated: 2026-11-09T08:58:47Z
 
 ---
 
@@ -16360,7 +16360,7 @@ They also read different edges, on purpose:
 | `graph_cycles` | structural kinds only | which documents are tangled together |
 | `graph_module_cycles` | every kind, like `graph_module_coupling` | which modules cannot be extracted independently |
 
-The asset graph excludes navigational kinds (`layout`, `show_page`,
+The asset graph excludes navigational kinds (`layout`, `show_page`, `snippet_call`,
 `datasource`, `widget`, `sync`, …) because they blur community and layer
 clustering. A module cycle is a different claim: a page bound to a layout in
 another module really is a dependency of that module, and on a blank Mendix app
@@ -16602,8 +16602,16 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
   
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service’s contract entities (written by the remote service, not by the project).
 
-**MDL source** (only after `refresh catalog full source`): microflow, nanoflow and page bodies, expressions and the other definitions as MDL text. Until it is built, a warning on stderr says only strings were searched.
+**MDL source**: microflow, nanoflow and page bodies, expressions and the other definitions as MDL text, through the source index. The first search builds that index and says so on stderr. On a large project this takes a while, once. After a model change it is brought up to date incrementally: only the documents that changed, or that name one that did, are described again.
 
+## [Searching without building the source index](#searching-without-building-the-source-index)
+
+`--no-build` never builds the source index. That suits a caller that must stay cheap or must not write the catalog cache beyond what it already holds. If the project has a source index, the search is complete. If it has none, only string literals and documentation are searched: a warning on stderr says so, and the command exits `3`. A script can therefore never take “No matches found.” for a complete answer.
+
+```
+mxcli search -p app.mpr "SUB_Do" --no-build --json   # exit 3 when the source index is missing
+
+```
 ## [Failing on a match](#failing-on-a-match)
 
 `--fail-on-match` turns `search` into a gate. The results are printed as usual (a JSON array under `--json`), and the exit status carries the answer:
@@ -16613,6 +16621,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 | `0` | No hit |
 | `1` | At least one hit |
 | `2` | The search could not run: an unknown project, or a query the index rejects (an unbalanced `"`, say) |
+| `3` | With `--no-build` and no source index, no hit was found but the MDL source was not searched |
 
 ```
 # Refuse the change if a placeholder is left anywhere in the project's text
@@ -16966,7 +16975,7 @@ query written then that should keep its old result filters on
 | `AutoGenerateCaption` | 1 when Studio Pro generates the activity’s caption |
 | `Description` | Documentation of an action activity, split or loop |
 | `EntityRef` | Entity of a create object, a database retrieve, or a delete (the deleted variable’s entity, when the flow types it) |
-| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty |
+| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty. For an import or export action it is the mapping, and for a REST call that uses mappings the response (import) mapping, else the request one; every mapping is a `mapping_call` row in `refs` |
 | `QueueRef` | Task queue a microflow or Java action call runs in; empty when it runs in place |
 | `UseRequestTimeout`, `TimeoutExpression` | “Use a timeout” and its seconds, for a REST or web service call |
 | `ConditionExpression` | An exclusive split’s expression |
@@ -17032,7 +17041,7 @@ One row per widget **instance** on a page or snippet. Full build only
 | `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget’s id (`com.mendix.widget.web.datagrid.Datagrid`) |
 | `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page, snippet or layout holding the widget; `ContainerType` is `PAGE`, `SNIPPET` or `LAYOUT`. `UPDATE WIDGETS` changes page and snippet widgets only |
 | `ModuleName`, `Folder` | The container’s module and folder |
-| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget’s own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
+| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef`, `SnippetRef` | What the widget’s own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens, the snippet a snippet call places |
 | `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget’s properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
 | `Depth` | Number of ancestors in this table: 0 at the root. A list view **template** is a row of its own, so its widgets are two below the list view. A snippet call is not entered: a snippet’s widgets have their own rows, depth 0 at the snippet root |
 | `Class`, `Style`, `DynamicClasses` | The widget’s Appearance |
@@ -18157,7 +18166,11 @@ Dropping the last entry from a module shard deletes the file, so the directory
 does not accumulate husks that read as “this module has decisions”.
 
 Every command takes `--json`, so a dispatcher running one agent per slice can
-act on the answers rather than read them. `brain staged --since <id>` is the
+act on the answers rather than read them. `capture --json` returns the entry’s
+`id`, `kind`, `slice`, `shard`, `added` and a `status` of `queued`,
+`already_queued` or `already_committed` (a duplicate is reported with its
+twin’s id, and exits 0 as before); `promote --json` returns the `id`, `kind`,
+`shard` and the shard file’s `path`. `brain staged --since <id>` is the
 slice boundary: note `last_id` before handing a slice off, pass it back
 afterwards, and `--fail-if-empty` exits 1 on a slice that recorded nothing.
 
@@ -34246,6 +34259,8 @@ The Mendix Agent Editor introduces four document types that must be set up in de
 3. **Consumed MCP Service** — an external tool server (Model Context Protocol)
 4. **Agent** — an AI agent that references a model and optionally uses knowledge bases and MCP services
 
+A fifth, the **Published MCP Service** (Agent Editor 2.6+, MCP Server 5.x), is the other direction: an MCP server the app publishes, exposing its microflows as tools.
+
 ## [Statements](#statements-5)
 
 | Statement | Description |
@@ -34253,6 +34268,7 @@ The Mendix Agent Editor introduces four document types that must be set up in de
 | [CREATE AI MODEL](#create-ai-model) | Define an LLM model configuration |
 | [CREATE KNOWLEDGE BASE](#create-knowledge-base) | Define a vector knowledge base |
 | [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service) | Register an external MCP tool server |
+| [CREATE PUBLISHED MCP SERVICE](#create-published-mcp-service) | Publish the app’s microflows as an MCP server |
 | [CREATE AGENT](#create-agent) | Define an AI agent with prompts and optional tools |
 
 ## [Related Statements](#related-statements-3)
@@ -34262,8 +34278,9 @@ The Mendix Agent Editor introduces four document types that must be set up in de
 | List AI models | `LIST AI MODELS [IN module]` |
 | List knowledge bases | `LIST KNOWLEDGE BASES [IN module]` |
 | List consumed MCP services | `LIST CONSUMED MCP SERVICES [IN module]` |
+| List published MCP services | `LIST PUBLISHED MCP SERVICES [IN module]` |
 | List agents | `LIST AGENTS [IN module]` |
-| Describe | `DESCRIBE { MODEL | KNOWLEDGE BASE | CONSUMED MCP SERVICE | AGENT } module.Name` |
+| Describe | `DESCRIBE { MODEL | KNOWLEDGE BASE | CONSUMED MCP SERVICE | PUBLISHED MCP SERVICE | AGENT } module.Name` |
 
 ## [Drop Statements](#drop-statements-1)
 
@@ -34272,6 +34289,7 @@ mdl 1;
 DROP AI MODEL module.Name;
 DROP KNOWLEDGE BASE module.Name;
 DROP CONSUMED MCP SERVICE module.Name;
+DROP PUBLISHED MCP SERVICE module.Name;
 DROP AGENT module.Name;
 
 ```
@@ -34324,7 +34342,7 @@ If `OR MODIFY` is specified and the model already exists, its properties are upd
 [`module.Name`](#modulename-27)
 The qualified name of the model document.
 [`Provider: MxCloudGenAI`](#provider-mxcloudgenai)
-The provider. `MxCloudGenAI` is the only supported value in current Mendix versions.
+The provider: `MxCloudGenAI`, `Azure` (Azure AI Foundry, through the OpenAI connector) or `Fuse` (Agent Editor 2.7+), the values Agent Editor’s import accepts. `mxcli check` warns on any other value (MDL-AGENT01), and on a value in the wrong case, because the build does not read it and the import fails only at startup. It does not refuse it, because Agent Editor adds providers.
 [`key: module.KeyConstant`](#key-modulekeyconstant)
 A qualified reference to a String constant that holds the Portal resource key. The constant must exist before the model is created.
 [`DisplayName: 'display name'`](#displayname-display-name)
@@ -34409,7 +34427,7 @@ If `OR MODIFY` is specified and the knowledge base already exists, its propertie
 [`module.Name`](#modulename-28)
 The qualified name of the knowledge base document.
 [`Provider: MxCloudGenAI`](#provider-mxcloudgenai-1)
-The provider. `MxCloudGenAI` is the only supported value.
+The provider. `MxCloudGenAI` is the only supported value; `mxcli check` warns on any other (MDL-AGENT01).
 [`key: module.KeyConstant`](#key-modulekeyconstant-1)
 A qualified reference to a String constant that holds the Portal resource key for the knowledge base.
 ## [Examples](#examples-70)
@@ -34506,9 +34524,119 @@ CREATE OR MODIFY CONSUMED MCP SERVICE MyModule."WebSearch" (
 
 [CREATE AGENT](#create-agent), [CREATE AI MODEL](#create-ai-model)
 
-# [CREATE AGENT](#create-agent)
+# [CREATE PUBLISHED MCP SERVICE](#create-published-mcp-service)
 
 ## [Synopsis](#synopsis-60)
+
+```
+CREATE [ OR MODIFY ] PUBLISHED MCP SERVICE module.Name [ FOLDER 'path' ] (
+    [ ServerName: 'name', ]
+    EndpointPath: 'path',
+    Version: '1.0.0',
+    ProtocolVersion: v2025_03_26
+    [, AuthenticationEnabled: true ]
+    [, AuthenticationMicroflow: module.Microflow ]
+    [, AuthorizationServerUrl: 'https://...' ]
+    [, Scopes: 'scope another-scope' ]
+    [, Documentation: 'description' ]
+) [ {
+    tool name ( Microflow: module.Microflow [, Description: '...'] [, Title: '...'] [, Schema: '...'] )
+    ...
+} ];
+
+ALTER PUBLISHED MCP SERVICE module.Name
+    { SET key = value [, ...] | ADD TOOL name ( ... ) | DROP TOOL name } ...;
+
+DESCRIBE PUBLISHED MCP SERVICE module.Name;
+LIST PUBLISHED MCP SERVICES [ IN module ];
+DROP PUBLISHED MCP SERVICE module.Name;
+
+```
+
+Requires Agent Editor 2.6+ and the MCP Server module 5.x (measured on Studio Pro 11.16 with Agent Editor 2.6.0 and MCP Server 5.4.0).
+
+## [Description](#description-60)
+
+Creates a Published MCP Service document: an MCP server the app itself publishes, so external agents (Claude Desktop, other apps) can call its microflows as tools. This is the *model configuration* of an MCP server. At startup AgentEditorCommons reads every published MCP service document and starts it through `MCPServer.CreateMCPServer` and `MCPServer.AddTool`, so each property is one of those actions’ parameters.
+
+The *runtime configuration* is the alternative: a startup microflow that calls the same Java actions, which is the only option before MCP Server 5. It is plain microflow logic, written with `call java action` (see the `mcp-server` skill). The two map one to one, which is what a migration between them follows. Prompts exist only in runtime configuration (`MCPServer.AddPrompt`); the document has no place for them.
+
+If `OR MODIFY` is specified and the service exists, it is rewritten in place: a tool keeps its stored `uuid` when its name matches, and keys Agent Editor stores that MDL does not model are kept.
+
+## [Parameters](#parameters-60)
+
+[`module.Name`](#modulename-30)
+The document name.
+[`ServerName: 'name'`](#servername-name)
+Optional. The server name MCP clients see. Studio Pro stores it but its editor does not show it: a new document gets the document name, and a duplicated one keeps the original’s (`Published_MCP_service_2` serves as `Published_MCP_service`). Omitted, `create` writes the document name and `create or modify` keeps the stored value; `describe` prints it only when it differs from the document name.
+[`EndpointPath: 'path'`](#endpointpath-path)
+The middle segment of the server’s URL, which is `<app URL>/<EndpointPath>/mcp`: the module appends `/mcp`, as the editor’s Endpoint field shows (`https://{{applicationURL}}/` + path + `/mcp`). It cannot be `mcp`, end in `/mcp`, or contain `/` (the runtime matches only the first path segment): `check` reports each as MDL-MCPSERVER01.
+[`Version: '1.0.0'`](#version-100)
+The server version reported to clients.
+[`ProtocolVersion: v2025_03_26`](#protocolversion-v2025_03_26-1)
+The MCP protocol version, a value of the module’s `MCPServer.ENUM_ProtocolVersion` (MCP Server 5.4 has only `v2025_03_26`).
+[`AuthenticationEnabled: true`](#authenticationenabled-true)
+The editor’s *Requires authentication*. Turns authentication on. While it is false, the runtime ignores the three properties below.
+[`AuthenticationMicroflow: module.Microflow`](#authenticationmicroflow-modulemicroflow)
+Authenticates every request. It takes `System.HttpRequest` and/or `MCPServer.McpServer`, returns a `System.User` (or a specialization), and returns empty to refuse the request with 401. Without it, an enabled service accepts every request.
+[`AuthorizationServerUrl: 'https://...'`](#authorizationserverurl-https)
+The issuer URL of the OAuth authorization server. The server publishes it as Protected Resource Metadata so clients can discover where to sign in. Needs an authentication microflow, which must validate the access token; must be an absolute http(s) URL.
+[`Scopes: 'a b'`](#scopes-a-b)
+Space-separated OAuth scopes clients must request. Needs an authorization server URL.
+[`Documentation: 'description'`](#documentation-description-1)
+A description of the service.
+[`tool name ( ... )`](#tool-name---)
+A microflow exposed as an MCP tool, named as clients see it. `Microflow` is required; `Description` is what the calling model reads; `Title` is a display name; `Schema` overrides the JSON input schema the module otherwise derives from the microflow’s parameters. A tool microflow takes primitives (named as the schema’s properties) and optionally `MCPServer.Tool`, and returns a `String` or an `MCPServer.TextContent`. The editor’s tool grid shows Name, Description and Source (the microflow); `Title` and `Schema` are not in it, but the runtime reads both.
+## [Examples](#examples-72)
+
+### [Publish two microflows](#publish-two-microflows)
+
+Served at `<app URL>/orders/mcp`.
+
+```
+CREATE PUBLISHED MCP SERVICE Shop.OrdersMCP (
+    EndpointPath: 'orders',
+    Version: '1.0.0',
+    ProtocolVersion: v2025_03_26,
+    Documentation: 'Order tools for agents'
+) {
+    tool get_status ( Microflow: Shop.MCPTool_GetStatus, Description: 'Status of one order', Title: 'Get status' )
+    tool list_orders ( Microflow: Shop.MCPTool_ListOrders, Description: 'List open orders' )
+};
+
+```
+### [OAuth with Microsoft Entra ID](#oauth-with-microsoft-entra-id)
+
+```
+CREATE OR MODIFY PUBLISHED MCP SERVICE Shop.OrdersMCP (
+    EndpointPath: 'orders',
+    Version: '1.0.0',
+    ProtocolVersion: v2025_03_26,
+    AuthenticationEnabled: true,
+    AuthenticationMicroflow: Shop.MCP_ValidateToken,
+    AuthorizationServerUrl: 'https://login.microsoftonline.com/my-tenant-id/v2.0',
+    Scopes: 'api://orders/mcp.read'
+) {
+    tool get_status ( Microflow: Shop.MCPTool_GetStatus, Description: 'Status of one order' )
+};
+
+```
+### [Change one property, add and drop a tool](#change-one-property-add-and-drop-a-tool)
+
+```
+ALTER PUBLISHED MCP SERVICE Shop.OrdersMCP
+    SET Version = '1.1.0'
+    ADD TOOL cancel_order ( Microflow: Shop.MCPTool_Cancel, Description: 'Cancel an order' )
+    DROP TOOL list_orders;
+
+```
+## [See Also](#see-also-98)
+
+[CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service), [CREATE AGENT](#create-agent)
+
+# [CREATE AGENT](#create-agent)
+
+## [Synopsis](#synopsis-61)
 
 ```
 CREATE [ OR MODIFY ] AGENT module.Name (
@@ -34542,7 +34670,7 @@ DROP AGENT module.Name;
 
 Requires Mendix 11.9+.
 
-## [Description](#description-60)
+## [Description](#description-61)
 
 Creates an agent document in the Mendix Agent Editor. An agent defines how an AI assistant behaves: which model it uses, what instructions it follows, and which tools and knowledge bases it can access.
 
@@ -34572,17 +34700,17 @@ The optional body block (inside `{ }`) attaches tools and knowledge bases to the
 
 - **MCP SERVICE** — attaches a consumed MCP service by its qualified name
 - **KNOWLEDGE BASE** — attaches a knowledge base with retrieval settings
-- **TOOL** — attaches a tool
+- **TOOL** — attaches a microflow tool; `Document: Module.Microflow` is the microflow it runs
 
 Each attachment is a child of the agent, so its properties are in `( )`. The older brace form (`TOOL Name { … }`) still parses but warns (MDL-DEPR071); `mxcli fmt --upgrade` rewrites it.
 
 ### [OR MODIFY](#or-modify-8)
 
-If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved.
+If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved, and so is each tool’s and knowledge base’s identity: a tool keeps its stored entry when its type and name match (an MCP service when the service matches). Settings that MDL cannot spell keep their stored values, both on `OR MODIFY` and on `ALTER AGENT`: a tool’s user approval and display title and description, the agent’s streaming switches and selected model, and a knowledge base tool’s minimum similarity.
 
-## [Parameters](#parameters-60)
+## [Parameters](#parameters-61)
 
-[`module.Name`](#modulename-30)
+[`module.Name`](#modulename-31)
 The qualified name of the agent document.
 [`UsageType`](#usagetype)
 Whether the agent is `Task` (single-turn) or `Conversational` (multi-turn).
@@ -34602,7 +34730,24 @@ Optional maximum number of tokens in the response.
 Optional sampling temperature (0.0–1.0). Higher values produce more creative output.
 [`ToolChoice`](#toolchoice)
 Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
-## [Examples](#examples-72)
+[`EnableBackendStreaming`, `EnableUIStreaming`](#enablebackendstreaming-enableuistreaming)
+Optional, `true` or `false`. Response streaming for the agent (Agent Editor 2.2.1+). Streaming is set on the agent, not on its model. The Studio Pro playground does not show it; it works at runtime with a chat agent in Conversational UI.
+### [Tool and MCP service settings](#tool-and-mcp-service-settings)
+
+[`UserAccessApproval`](#useraccessapproval)
+Optional. `HiddenForUser`: the call runs without being shown. `VisibleForUser`: the call is shown and runs. `UserConfirmationRequired`: the call is shown and waits for the user’s approval. Agent Editor 2.2+.
+[`DisplayTitle`, `DisplayDescription`](#displaytitle-displaydescription)
+Optional. The title and description shown to the user for the call. The model still sees the tool’s name and `Description`.
+### [Knowledge base settings](#knowledge-base-settings)
+
+[`MinSimilarity`](#minsimilarity)
+Optional. The least similarity, between 0 and 1, a chunk needs to be returned.
+[`IsVisible`](#isvisible)
+Optional, `true` or `false`. Whether the user sees the retrieval.
+
+On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
+
+## [Examples](#examples-73)
 
 ### [Simple task agent](#simple-task-agent)
 
@@ -34625,6 +34770,26 @@ CREATE AGENT MyModule."Translator" (
     SystemPrompt: 'Translate the text into {{Language}}.',
     UserPrompt: 'Hello world'
 );
+
+```
+### [Agent whose tool needs the user’s approval](#agent-whose-tool-needs-the-users-approval)
+
+```
+CREATE AGENT MyModule."Support" (
+    UsageType: Chat,
+    model: MyModule.GPT4Model,
+    EnableBackendStreaming: true,
+    SystemPrompt: 'Help the customer with their orders.'
+)
+{
+    TOOL CancelOrder (
+        Document: MyModule.Tool_CancelOrder,
+        Description: 'Cancel an order by its number',
+        UserAccessApproval: UserConfirmationRequired,
+        DisplayTitle: 'Cancel order'
+    )
+    KNOWLEDGE BASE Faq (Source: MyModule.FaqKB, MaxResults: 5, MinSimilarity: 0.3)
+};
 
 ```
 ### [Agent with multi-line dollar-quoted prompt](#agent-with-multi-line-dollar-quoted-prompt)
@@ -34693,7 +34858,7 @@ CREATE OR MODIFY AGENT MyModule."ResearchAssistant" (
 - The model and knowledge base documents must exist before the agent is created.
 - Dollar-quoted prompts (`$$...$$`) preserve all whitespace including newlines.
 
-## [See Also](#see-also-98)
+## [See Also](#see-also-99)
 
 [CREATE AI MODEL](#create-ai-model), [CREATE KNOWLEDGE BASE](#create-knowledge-base), [CREATE CONSUMED MCP SERVICE](#create-consumed-mcp-service)
 
@@ -34719,7 +34884,7 @@ Business event services enable asynchronous, event-driven communication between 
 
 # [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
-## [Synopsis](#synopsis-61)
+## [Synopsis](#synopsis-62)
 
 ```
 CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
@@ -34734,7 +34899,7 @@ CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
 }
 
 ```
-## [Description](#description-61)
+## [Description](#description-62)
 
 Creates a business event service that defines one or more messages for event-driven communication between applications.
 
@@ -34766,9 +34931,9 @@ Each message defines zero or more attributes with the following supported types:
 
 The optional `ENTITY` clause on a message links the message to a Mendix entity. For SUBSCRIBE messages, incoming events are mapped to instances of this entity. For PUBLISH messages, entity instances are serialized into outgoing events.
 
-## [Parameters](#parameters-61)
+## [Parameters](#parameters-62)
 
-[`module.Name`](#modulename-31)
+[`module.Name`](#modulename-32)
 Qualified name of the business event service (`Module.ServiceName`).
 [`ServiceName: 'service_name'`](#servicename-service_name)
 The logical service identifier used by the Business Events broker.
@@ -34784,7 +34949,7 @@ This application publishes (sends) this message type.
 This application subscribes to (receives) this message type.
 [`ENTITY module.Entity`](#entity-moduleentity-1)
 Optional entity linked to the message for data mapping.
-## [Examples](#examples-73)
+## [Examples](#examples-74)
 
 Create a service that publishes order events:
 
@@ -34832,35 +34997,35 @@ CREATE OR MODIFY BUSINESS EVENT SERVICE Shop.OrderEvents
 };
 
 ```
-## [See Also](#see-also-99)
+## [See Also](#see-also-100)
 
 [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
 # [DROP BUSINESS EVENT SERVICE](#drop-business-event-service-1)
 
-## [Synopsis](#synopsis-62)
+## [Synopsis](#synopsis-63)
 
 ```
 DROP BUSINESS EVENT SERVICE module.Name;
 
 ```
-## [Description](#description-62)
+## [Description](#description-63)
 
 Removes a business event service from the project. The service is identified by its qualified name. If the service does not exist, an error is returned.
 
 Dropping a service removes all its message definitions and operation implementations. Any microflows that reference the dropped service’s messages will need to be updated.
 
-## [Parameters](#parameters-62)
+## [Parameters](#parameters-63)
 
-[`module.Name`](#modulename-32)
+[`module.Name`](#modulename-33)
 The qualified name of the business event service to drop (`Module.ServiceName`).
-## [Examples](#examples-74)
+## [Examples](#examples-75)
 
 ```
 DROP BUSINESS EVENT SERVICE Shop.OrderEvents;
 
 ```
-## [See Also](#see-also-100)
+## [See Also](#see-also-101)
 
 [CREATE BUSINESS EVENT SERVICE](#create-business-event-service-1)
 
@@ -34876,7 +35041,7 @@ Statements for creating, inspecting, and dropping image collections within modul
 
 # [CREATE IMAGE COLLECTION](#create-image-collection-1)
 
-## [Synopsis](#synopsis-63)
+## [Synopsis](#synopsis-64)
 
 ```
 [/** description */]
@@ -34889,13 +35054,13 @@ CREATE [OR MODIFY] IMAGE COLLECTION module.name
     }];
 
 ```
-## [Description](#description-63)
+## [Description](#description-64)
 
 Creates a new image collection in the specified module. `OR MODIFY` updates an existing collection in-place, preserving its UUID so that widget references remain valid. `OR REPLACE` is accepted as a synonym for `OR MODIFY`. Image collections bundle images (icons, logos, graphics) within a module. Images can be loaded from the filesystem during creation, with the format detected automatically from the file extension.
 
-## [Parameters](#parameters-63)
+## [Parameters](#parameters-64)
 
-[**module.name**](#modulename-33)
+[**module.name**](#modulename-34)
 The qualified name of the collection (e.g., `MyModule.AppIcons`).
 [**EXPORT LEVEL**](#export-level)
 Controls visibility from other modules. `'Hidden'` (default) restricts access to the owning module. `'Public'` makes images available to other modules.
@@ -34908,7 +35073,7 @@ The image itself, base64-encoded. This is what `DESCRIBE IMAGE COLLECTION` write
 
 The images are the collection’s children, so they are in `{ }`, each with its properties in `( )`. The older form `( IMAGE name FROM FILE 'path', … )` still parses but warns (MDL-DEPR072); `mxcli fmt --upgrade` rewrites it.
 
-## [Examples](#examples-75)
+## [Examples](#examples-76)
 
 ### [Empty collection](#empty-collection)
 
@@ -34945,27 +35110,27 @@ CREATE IMAGE COLLECTION MyModule.BrandAssets
 };
 
 ```
-## [See Also](#see-also-101)
+## [See Also](#see-also-102)
 
 [DROP IMAGE COLLECTION](#drop-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
 # [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
-## [Synopsis](#synopsis-64)
+## [Synopsis](#synopsis-65)
 
 ```
 DROP IMAGE COLLECTION module.name;
 
 ```
-## [Description](#description-64)
+## [Description](#description-65)
 
 Removes an image collection and all its embedded images from the module.
 
-## [Parameters](#parameters-64)
+## [Parameters](#parameters-65)
 
-[**module.name**](#modulename-34)
+[**module.name**](#modulename-35)
 The qualified name of the collection to drop (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-76)
+## [Examples](#examples-77)
 
 ```
 DROP IMAGE COLLECTION MyModule.StatusIcons;
@@ -34979,13 +35144,13 @@ LIST REFERENCES TO MyModule.AppIcons;
 DROP IMAGE COLLECTION MyModule.AppIcons;
 
 ```
-## [See Also](#see-also-102)
+## [See Also](#see-also-103)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [SHOW / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
 # [LIST / DESCRIBE IMAGE COLLECTION](#list--describe-image-collection)
 
-## [Synopsis](#synopsis-65)
+## [Synopsis](#synopsis-66)
 
 ```
 LIST IMAGE COLLECTIONS;
@@ -34993,19 +35158,19 @@ LIST IMAGE COLLECTIONS IN module;
 DESCRIBE IMAGE COLLECTION module.name;
 
 ```
-## [Description](#description-65)
+## [Description](#description-66)
 
 `LIST IMAGE COLLECTIONS` lists all image collections in the project, optionally filtered by module. `DESCRIBE IMAGE COLLECTION` shows the full definition of a specific collection, including its images as a re-executable `CREATE` statement.
 
 In the TUI, images are rendered inline when the terminal supports it (Kitty, iTerm2, Sixel).
 
-## [Parameters](#parameters-65)
+## [Parameters](#parameters-66)
 
 [**IN module**](#in-module-1)
 Filters the listing to a single module.
-[**module.name**](#modulename-35)
+[**module.name**](#modulename-36)
 The qualified name of the collection to describe (e.g., `MyModule.AppIcons`).
-## [Examples](#examples-77)
+## [Examples](#examples-78)
 
 ### [List all image collections](#list-all-image-collections)
 
@@ -35028,7 +35193,7 @@ DESCRIBE IMAGE COLLECTION MyModule.AppIcons;
 
 The output is the complete `CREATE OR MODIFY` statement, each image written into it as `IMAGE name ( Data: '<base64>' )`, so it can be copied and re-executed on any machine. `DESCRIBE` writes no files.
 
-## [See Also](#see-also-103)
+## [See Also](#see-also-104)
 
 [CREATE IMAGE COLLECTION](#create-image-collection-1), [DROP IMAGE COLLECTION](#drop-image-collection-1)
 
@@ -35048,13 +35213,13 @@ A basic `REFRESH CATALOG` populates tables for modules, entities, attributes, as
 
 # [REFRESH CATALOG](#refresh-catalog-1)
 
-## [Synopsis](#synopsis-66)
+## [Synopsis](#synopsis-67)
 
 ```
 REFRESH CATALOG [ FULL ] [ FORCE ]
 
 ```
-## [Description](#description-66)
+## [Description](#description-67)
 
 Rebuilds the project metadata catalog from the current state of the open project. The catalog is a SQLite database (`.mxcli/catalog.db`) that enables fast SQL querying and cross-reference navigation over project elements.
 
@@ -35064,13 +35229,13 @@ With the `FULL` option, the rebuild additionally populates cross-reference table
 
 The catalog is cached between sessions. If the project has not changed, repeated `REFRESH CATALOG` calls reuse the cached data. Use `FORCE` to bypass the cache and rebuild unconditionally – useful after external changes to the MPR file.
 
-## [Parameters](#parameters-66)
+## [Parameters](#parameters-67)
 
 [**FULL**](#full)
 Include cross-references, widgets, strings, source text, and permissions in the catalog. Required for callers/callees analysis and full-text search.
 [**FORCE**](#force)
 Bypass the catalog cache and force a complete rebuild regardless of whether the project appears unchanged.
-## [Examples](#examples-78)
+## [Examples](#examples-79)
 
 ### [Basic catalog refresh](#basic-catalog-refresh)
 
@@ -35099,19 +35264,19 @@ REFRESH CATALOG FULL FORCE;
 -- mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 ```
-## [See Also](#see-also-104)
+## [See Also](#see-also-105)
 
 [SELECT FROM CATALOG](#select-from-catalog), [LIST CATALOG TABLES](#list-catalog-tables), [LIST CALLERS / CALLEES](#list-callers--callees-1)
 
 # [SELECT FROM CATALOG](#select-from-catalog)
 
-## [Synopsis](#synopsis-67)
+## [Synopsis](#synopsis-68)
 
 ```
 SELECT columns FROM CATALOG.table [ WHERE condition ] [ ORDER BY column [ ASC | DESC ] ] [ LIMIT n ]
 
 ```
-## [Description](#description-67)
+## [Description](#description-68)
 
 Executes a SQL query against the project metadata catalog. The catalog tables are populated by `REFRESH CATALOG` and can be queried using standard SQL syntax including joins, aggregations, subqueries, and filtering.
 
@@ -35143,7 +35308,7 @@ The following tables require `REFRESH CATALOG FULL`:
 | `CATALOG.STRINGS` | All string values in the project |
 | `CATALOG.SOURCE` | Source text of microflows, pages, etc. |
 
-## [Parameters](#parameters-67)
+## [Parameters](#parameters-68)
 
 [**columns**](#columns)
 Column names or expressions to select. Use `*` for all columns, or specify individual column names. Supports SQL functions like `COUNT()`, `SUM()`, `GROUP_CONCAT()`.
@@ -35155,7 +35320,7 @@ A SQL WHERE clause for filtering rows. Supports standard operators (`=`, `LIKE`,
 Column to sort by. Append `ASC` (default) or `DESC` for sort direction.
 [**n**](#n)
 Maximum number of rows to return.
-## [Examples](#examples-79)
+## [Examples](#examples-80)
 
 ### [List all entities](#list-all-entities)
 
@@ -35213,13 +35378,13 @@ WHERE p.Id NOT IN (
 SELECT Name FROM CATALOG.MICROFLOWS LIMIT 10;
 
 ```
-## [See Also](#see-also-105)
+## [See Also](#see-also-106)
 
 [REFRESH CATALOG](#refresh-catalog-1), [LIST CATALOG TABLES](#list-catalog-tables), [SEARCH](#list-references--impact-describe-context)
 
 # [LIST CALLERS / CALLEES](#list-callers--callees-1)
 
-## [Synopsis](#synopsis-68)
+## [Synopsis](#synopsis-69)
 
 ```
 LIST CALLERS OF qualified_name [ TRANSITIVE ]
@@ -35227,7 +35392,7 @@ LIST CALLERS OF qualified_name [ TRANSITIVE ]
 LIST CALLEES OF qualified_name [ TRANSITIVE ]
 
 ```
-## [Description](#description-68)
+## [Description](#description-69)
 
 Displays the call relationships for a given element. `LIST CALLERS` finds all elements that call or reference the specified element (incoming edges). `LIST CALLEES` finds all elements that the specified element calls or references (outgoing edges).
 
@@ -35235,13 +35400,13 @@ These commands require `REFRESH CATALOG FULL` to have been run beforehand. Witho
 
 By default, only direct (one-hop) relationships are shown. With the `TRANSITIVE` option, the command follows the call chain recursively to show the full transitive closure – all indirect callers or callees at any depth.
 
-## [Parameters](#parameters-68)
+## [Parameters](#parameters-69)
 
 [**qualified\_name**](#qualified_name-6)
 The fully qualified name of the element to analyze (e.g., `Module.MicroflowName`, `Module.EntityName`). Works with microflows, nanoflows, pages, snippets, entities, and other referenceable elements.
 [**TRANSITIVE**](#transitive)
 Follow the call chain recursively. For `LIST CALLERS`, this finds everything that directly or indirectly leads to the target. For `LIST CALLEES`, this finds everything the target directly or indirectly depends on.
-## [Examples](#examples-80)
+## [Examples](#examples-81)
 
 ### [Find direct callers of a microflow](#find-direct-callers-of-a-microflow)
 
@@ -35277,13 +35442,13 @@ LIST CALLEES OF Sales.ACT_ProcessOrder TRANSITIVE;
 -- mxcli callees -p app.mpr Sales.ACT_ProcessOrder
 
 ```
-## [See Also](#see-also-106)
+## [See Also](#see-also-107)
 
 [LIST REFERENCES / IMPACT / CONTEXT](#list-references--impact-describe-context), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
 # [LIST REFERENCES / IMPACT, DESCRIBE CONTEXT](#list-references--impact-describe-context)
 
-## [Synopsis](#synopsis-69)
+## [Synopsis](#synopsis-70)
 
 ```
 LIST REFERENCES TO qualified_name
@@ -35293,7 +35458,7 @@ LIST IMPACT OF qualified_name
 DESCRIBE CONTEXT OF qualified_name [ DEPTH n ]
 
 ```
-## [Description](#description-69)
+## [Description](#description-70)
 
 These commands provide different views of cross-reference information for a given element. All three require `REFRESH CATALOG FULL` to have been run beforehand.
 
@@ -35322,13 +35487,13 @@ Results list each (source, kind) once, and the `IMPACT` summary counts distinct 
 
 When nothing is found, the message says what was searched. An attribute named only through a variable in a free-text expression (`$Order/Total`), and an enumeration value used only as a decision branch, are not resolved by the catalog, so an empty result for an attribute or a value tells you to run `SEARCH` before treating it as unused.
 
-## [Parameters](#parameters-69)
+## [Parameters](#parameters-70)
 
 [**qualified\_name**](#qualified_name-7)
 The fully qualified name of the element to analyze (e.g., `Module.EntityName`, `Module.MicroflowName`, `Module.Entity.Attribute`, `Module.Enum.Value`).
 [**n** (CONTEXT only)](#n-context-only)
 The number of levels of related elements to include. Defaults to 1 if not specified. Higher values include more surrounding context but produce more output.
-## [Examples](#examples-81)
+## [Examples](#examples-82)
 
 ### [Find all references to an entity](#find-all-references-to-an-entity)
 
@@ -35378,29 +35543,29 @@ MOVE PAGE Sales.CustomerEdit TO NewModule;
 -- mxcli context -p app.mpr Sales.ACT_CreateOrder --depth 3
 
 ```
-## [See Also](#see-also-107)
+## [See Also](#see-also-108)
 
 [LIST CALLERS / CALLEES](#list-callers--callees-1), [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
 # [LIST CATALOG TABLES](#list-catalog-tables)
 
-## [Synopsis](#synopsis-70)
+## [Synopsis](#synopsis-71)
 
 ```
 LIST CATALOG TABLES
 
 ```
-## [Description](#description-70)
+## [Description](#description-71)
 
 Lists all available catalog tables along with their column names and types. This is useful for discovering what metadata is queryable before writing `SELECT FROM CATALOG` queries.
 
 The output includes both basic tables (populated by `REFRESH CATALOG`) and extended tables (populated by `REFRESH CATALOG FULL`). Tables that require a full refresh are marked accordingly.
 
-## [Parameters](#parameters-70)
+## [Parameters](#parameters-71)
 
 This statement takes no parameters.
 
-## [Examples](#examples-82)
+## [Examples](#examples-83)
 
 ### [List all catalog tables](#list-all-catalog-tables)
 
@@ -35416,7 +35581,7 @@ LIST CATALOG TABLES;
 SELECT * FROM CATALOG.ENTITIES LIMIT 5;
 
 ```
-## [See Also](#see-also-108)
+## [See Also](#see-also-109)
 
 [REFRESH CATALOG](#refresh-catalog-1), [SELECT FROM CATALOG](#select-from-catalog)
 
@@ -35436,13 +35601,13 @@ External SQL connections are independent of the Mendix project connection. You c
 
 # [SQL CONNECT](#sql-connect-1)
 
-## [Synopsis](#synopsis-71)
+## [Synopsis](#synopsis-72)
 
 ```
 SQL CONNECT driver 'dsn' AS alias
 
 ```
-## [Description](#description-71)
+## [Description](#description-72)
 
 Opens a connection to an external database. The connection is identified by the alias, which is used in all subsequent SQL commands to route queries to the correct database.
 
@@ -35456,7 +35621,7 @@ Supported database drivers:
 | `oracle` | `ora` | `oracle://user:pass@host:1521/service` |
 | `sqlserver` | `mssql` | `sqlserver://user:pass@host:1433?database=dbname` |
 
-## [Parameters](#parameters-71)
+## [Parameters](#parameters-72)
 
 [**driver**](#driver)
 The database driver to use. One of `postgres` (or `pg`, `postgresql`), `oracle` (or `ora`), or `sqlserver` (or `mssql`).
@@ -35464,7 +35629,7 @@ The database driver to use. One of `postgres` (or `pg`, `postgresql`), `oracle` 
 The data source name (connection string) enclosed in single quotes. The format depends on the driver. The DSN is stored in memory only and never appears in session output or logs.
 [**alias**](#alias)
 A short identifier for this connection. Used in all subsequent `SQL alias ...` commands. Must be unique among active connections.
-## [Examples](#examples-83)
+## [Examples](#examples-84)
 
 ### [Connect to PostgreSQL](#connect-to-postgresql)
 
@@ -35497,29 +35662,29 @@ SQL CONNECT pg 'postgres://user:pass@localhost:5432/mydb' AS src;
 SQL CONNECT mssql 'sqlserver://sa:Pass@host:1433?database=db' AS dst;
 
 ```
-## [See Also](#see-also-109)
+## [See Also](#see-also-110)
 
 [SQL DISCONNECT](#sql-disconnect), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
 # [SQL DISCONNECT](#sql-disconnect)
 
-## [Synopsis](#synopsis-72)
+## [Synopsis](#synopsis-73)
 
 ```
 SQL DISCONNECT alias
 
 ```
-## [Description](#description-72)
+## [Description](#description-73)
 
 Closes an external database connection identified by the given alias. After disconnecting, the alias is no longer valid and any subsequent `SQL alias ...` commands will fail.
 
 Use `SQL CONNECTIONS` to see which connections are currently active before disconnecting.
 
-## [Parameters](#parameters-72)
+## [Parameters](#parameters-73)
 
 [**alias**](#alias-1)
 The alias of the connection to close. Must match an active connection established with `SQL CONNECT`.
-## [Examples](#examples-84)
+## [Examples](#examples-85)
 
 ### [Disconnect a connection](#disconnect-a-connection)
 
@@ -35536,13 +35701,13 @@ SQL source SELECT COUNT(*) FROM users;
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-110)
+## [See Also](#see-also-111)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query)
 
 # [SQL (query)](#sql-query)
 
-## [Synopsis](#synopsis-73)
+## [Synopsis](#synopsis-74)
 
 ```
 SQL alias query_text
@@ -35553,7 +35718,7 @@ SQL alias SHOW FUNCTIONS
 SQL alias DESCRIBE table_name
 
 ```
-## [Description](#description-73)
+## [Description](#description-74)
 
 Executes a SQL query or schema discovery command against an external database connection. The alias identifies which connection to use (established with `SQL CONNECT`).
 
@@ -35570,7 +35735,7 @@ Executes a SQL query or schema discovery command against an external database co
 
 The schema discovery commands query `information_schema` internally and work consistently across PostgreSQL, Oracle, and SQL Server.
 
-## [Parameters](#parameters-73)
+## [Parameters](#parameters-74)
 
 [**alias**](#alias-2)
 The connection alias established with `SQL CONNECT`.
@@ -35578,7 +35743,7 @@ The connection alias established with `SQL CONNECT`.
 Any valid SQL for the target database. Sent as-is to the database engine.
 [**table\_name** (DESCRIBE only)](#table_name-describe-only)
 The name of the table or view to describe.
-## [Examples](#examples-85)
+## [Examples](#examples-86)
 
 ### [Query data](#query-data)
 
@@ -35626,19 +35791,19 @@ SQL source SELECT department, COUNT(*) AS headcount
 -- mxcli sql --driver postgres --dsn 'postgres://...' "SELECT * FROM users"
 
 ```
-## [See Also](#see-also-111)
+## [See Also](#see-also-112)
 
 [SQL CONNECT](#sql-connect-1), [SQL DISCONNECT](#sql-disconnect), [SQL GENERATE CONNECTOR](#sql-generate-connector), [IMPORT FROM](#import-from-1)
 
 # [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
-## [Synopsis](#synopsis-74)
+## [Synopsis](#synopsis-75)
 
 ```
 SQL alias GENERATE CONNECTOR INTO module [ TABLES ( table [, ...] ) ] [ VIEWS ( view [, ...] ) ] [ EXEC ]
 
 ```
-## [Description](#description-74)
+## [Description](#description-75)
 
 Generates MDL statements that create a Mendix Database Connector module from the schema of an external database. The generated MDL includes entities, attributes, and associations that mirror the external database tables and views, configured for use with the Mendix Database Connector module.
 
@@ -35648,7 +35813,7 @@ By default, all user tables are included. Use `TABLES (...)` and `VIEWS (...)` t
 
 The type mapping from SQL types to Mendix types is handled automatically (e.g., `VARCHAR` becomes `String`, `INTEGER` becomes `Integer`, `TIMESTAMP` becomes `DateTime`).
 
-## [Parameters](#parameters-74)
+## [Parameters](#parameters-75)
 
 [**alias**](#alias-3)
 The connection alias established with `SQL CONNECT`.
@@ -35660,7 +35825,7 @@ One or more table names to include. If omitted, all user tables are included.
 One or more view names to include. If omitted, no views are included unless `TABLES` is also omitted (in which case all tables are included by default).
 [**EXEC**](#exec)
 Execute the generated MDL immediately instead of printing it. Requires an open Mendix project.
-## [Examples](#examples-86)
+## [Examples](#examples-87)
 
 ### [Preview generated MDL for all tables](#preview-generated-mdl-for-all-tables)
 
@@ -35696,13 +35861,13 @@ SQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-112)
+## [See Also](#see-also-113)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [IMPORT FROM](#import-from-1)
 
 # [IMPORT FROM](#import-from-1)
 
-## [Synopsis](#synopsis-75)
+## [Synopsis](#synopsis-76)
 
 ```
 IMPORT FROM alias QUERY 'sql'
@@ -35713,7 +35878,7 @@ IMPORT FROM alias QUERY 'sql'
   [ LIMIT count ]
 
 ```
-## [Description](#description-75)
+## [Description](#description-76)
 
 Imports data from an external database into a Mendix application’s PostgreSQL database. The command executes the specified SQL query against the external connection, maps the result columns to entity attributes, and inserts rows in batches using direct database insertion.
 
@@ -35725,7 +35890,7 @@ The import pipeline handles:
 
 The target Mendix application database is auto-detected from the project’s database configuration. The import connects directly to the application’s PostgreSQL database.
 
-## [Parameters](#parameters-75)
+## [Parameters](#parameters-76)
 
 [**alias**](#alias-4)
 The external database connection alias established with `SQL CONNECT`.
@@ -35745,7 +35910,7 @@ The attribute on the associated entity used to look up the target object for lin
 Number of rows per insert batch. Defaults to a reasonable batch size if not specified.
 [**count** (LIMIT only)](#count-limit-only)
 Maximum number of rows to import from the query result.
-## [Examples](#examples-87)
+## [Examples](#examples-88)
 
 ### [Basic import](#basic-import-1)
 
@@ -35790,7 +35955,7 @@ IMPORT FROM source QUERY 'SELECT name, email FROM employees WHERE active = true'
 SQL DISCONNECT source;
 
 ```
-## [See Also](#see-also-113)
+## [See Also](#see-also-114)
 
 [SQL CONNECT](#sql-connect-1), [SQL (query)](#sql-query), [SQL GENERATE CONNECTOR](#sql-generate-connector)
 
@@ -35805,7 +35970,7 @@ Statements for viewing and modifying Mendix project settings. Settings are organ
 
 # [LIST / DESCRIBE SETTINGS](#list--describe-settings)
 
-## [Synopsis](#synopsis-76)
+## [Synopsis](#synopsis-77)
 
 ```
 LIST SETTINGS
@@ -35815,7 +35980,7 @@ DESCRIBE SETTINGS
 DESCRIBE SETTINGS CONFIGURATION 'name'
 
 ```
-## [Description](#description-76)
+## [Description](#description-77)
 
 Displays project settings. `LIST SETTINGS` provides a compact overview, one row per section. `DESCRIBE SETTINGS` outputs every section as re-executable MDL — the `ALTER SETTINGS` and `CREATE OR MODIFY CONFIGURATION` statements that recreate it. `DESCRIBE SETTINGS CONFIGURATION 'name'` outputs one configuration only, and names the ones that exist when there is none by that name. There is no form that describes another single section.
 
@@ -35831,7 +35996,7 @@ Both also show the **project ID** — the `$ID` of the `Projects$Project` root u
 | Workflows | `ALTER SETTINGS WORKFLOWS (…)` and one `ADD OR MODIFY GROUP` per workflow group. |
 | Web UI | `ALTER SETTINGS WEBUI (OptimizedClient: …)` — `Yes` (React client), `No` (classic client) or `MigrationMode`. |
 
-## [Examples](#examples-88)
+## [Examples](#examples-89)
 
 ### [Show settings overview](#show-settings-overview)
 
@@ -35863,13 +36028,13 @@ descriptions. It reads the project settings directly, so no catalog refresh is
 needed. Groups are created with
 [`ALTER SETTINGS WORKFLOWS ... GROUP`](#alter-settings-1).
 
-## [See Also](#see-also-114)
+## [See Also](#see-also-115)
 
 [ALTER SETTINGS](#alter-settings-1), [LIST CONSTANT VALUES](#list-constants)
 
 # [ALTER SETTINGS](#alter-settings-1)
 
-## [Synopsis](#synopsis-77)
+## [Synopsis](#synopsis-78)
 
 ```
 ALTER SETTINGS RUNTIME ( key: value, ... )
@@ -35897,7 +36062,7 @@ ALTER SETTINGS WORKFLOWS DROP GROUP 'name'
 ALTER SETTINGS WEBUI ( OptimizedClient: 'Yes' | 'No' | 'MigrationMode' )
 
 ```
-## [Description](#description-77)
+## [Description](#description-78)
 
 Modifies project settings by category. Each category has its own syntax and available keys. Properties are written `Key: value` in a parenthesised list, as in every other MDL statement; the older `key = value, ...` without parentheses still runs and warns `MDL-DEPR060`, and `mxcli fmt --upgrade` rewrites it.
 
@@ -35924,7 +36089,7 @@ A section or key that does not exist is rejected by `mxcli check` (MDL-SET04) wi
 the message the executor gives, so a script that cannot run does not pass the
 check.
 
-## [Parameters](#parameters-76)
+## [Parameters](#parameters-77)
 
 [**key**](#key)
 The setting name to modify. Available keys depend on the category.
@@ -35936,7 +36101,7 @@ The name of the configuration, enclosed in single quotes.
 The constant, written `@Module.Name`.
 [**config** (CONSTANT only)](#config-constant-only)
 The name of the runtime configuration where the constant override applies, enclosed in single quotes.
-## [Examples](#examples-89)
+## [Examples](#examples-90)
 
 ### [Set the after-startup microflow](#set-the-after-startup-microflow)
 
@@ -36110,7 +36275,7 @@ Studio Pro’s defaults: `Hsqldb`, runtime port 8080, admin port 8090.
 DROP CONFIGURATION 'Staging';
 
 ```
-## [See Also](#see-also-115)
+## [See Also](#see-also-116)
 
 [SHOW / DESCRIBE SETTINGS](#list--describe-settings)
 
@@ -36128,19 +36293,19 @@ Statements for organizing project structure: creating modules and folders, and m
 
 # [CREATE MODULE](#create-module)
 
-## [Synopsis](#synopsis-78)
+## [Synopsis](#synopsis-79)
 
 ```
 CREATE [OR MODIFY] MODULE module_name [ ( Version: 'x.y.z', ModuleType: app | addon ) ]
 
 ```
-## [Description](#description-78)
+## [Description](#description-79)
 
 Creates a new module in the Mendix project. Modules are the top-level organizational unit for all project documents including entities, microflows, pages, and enumerations. The module is created with an empty domain model and Studio Pro’s defaults for a new module: an **app module**, version **1.0.0**.
 
 The optional property list sets the module’s settings, the General tab of Studio Pro’s *Module settings* dialog. `CREATE OR MODIFY` applies them to a module that already exists, changing only the settings it names. A plain `CREATE` of an existing module leaves it unchanged. To change one setting, use [ALTER MODULE … SET](#alter-module--set).
 
-## [Parameters](#parameters-77)
+## [Parameters](#parameters-78)
 
 [**module\_name**](#module_name)
 The name of the module to create. Must be a valid identifier (letters, digits, underscores; cannot start with a digit). If the name conflicts with a reserved keyword, enclose it in double quotes.
@@ -36166,7 +36331,7 @@ The *Location* (Module list or Marketplace modules) is printed as a comment when
 
 `LIST MODULES` shows each module’s version and type in its `Version` and `Type` columns.
 
-## [Examples](#examples-90)
+## [Examples](#examples-91)
 
 ### [Create a module](#create-a-module)
 
@@ -36193,19 +36358,19 @@ create or modify module Inventory (
 );
 
 ```
-## [See Also](#see-also-116)
+## [See Also](#see-also-117)
 
 [ALTER MODULE … SET](#alter-module--set), [CREATE FOLDER](#create-folder), [MOVE](#move), [DROP MODULE](#drop-entity-1)
 
 # [ALTER MODULE … SET](#alter-module--set)
 
-## [Synopsis](#synopsis-79)
+## [Synopsis](#synopsis-80)
 
 ```
 ALTER MODULE module_name SET ( Version: 'x.y.z', ModuleType: app | addon )
 
 ```
-## [Description](#description-79)
+## [Description](#description-80)
 
 Changes a module’s settings, the General tab of Studio Pro’s *Module settings* dialog. It takes the same keys as [CREATE MODULE](#create-module), and changes only the settings it names. The rest of the module’s settings, including its *Module ID* and an imported module’s checksum, keep their stored values. A statement that restates the stored settings writes nothing.
 
@@ -36218,7 +36383,7 @@ An unknown key, a key named twice, a version that is not SemVer, or a type other
 
 Making a module an add-on hides every element not marked *Usable* from the rest of the app: a reference from another module becomes CE1406. Run `mxcli check script.mdl -p app.mpr --references` to see which references that affects.
 
-## [Examples](#examples-91)
+## [Examples](#examples-92)
 
 ```
 mdl 1;
@@ -36232,31 +36397,31 @@ alter module Inventory set (ModuleType: addon);
 alter module Inventory set (Version: '3.0.0', ModuleType: app);
 
 ```
-## [See Also](#see-also-117)
+## [See Also](#see-also-118)
 
 [CREATE MODULE](#create-module), [ALTER MODULE … JAR DEPENDENCY](#alter-module--jar-dependency)
 
 # [CREATE FOLDER](#create-folder)
 
-## [Synopsis](#synopsis-80)
+## [Synopsis](#synopsis-81)
 
 ```
 CREATE FOLDER module_name/folder_path
 
 ```
-## [Description](#description-80)
+## [Description](#description-81)
 
 Creates a folder within a module for organizing documents such as pages, microflows, and snippets. Nested folders use the `/` separator. If intermediate folders in the path do not exist, they are created automatically.
 
 Note: Folders can also be created implicitly by specifying a `FOLDER` clause when creating a microflow or a `Folder` property when creating a page.
 
-## [Parameters](#parameters-78)
+## [Parameters](#parameters-79)
 
 [**module\_name**](#module_name-1)
 The name of the module in which to create the folder.
 [**folder\_path**](#folder_path)
 The path of the folder to create within the module. Use `/` to create nested folders (e.g., `Orders/Processing`).
-## [Examples](#examples-92)
+## [Examples](#examples-93)
 
 ### [Create a simple folder](#create-a-simple-folder)
 
@@ -36310,31 +36475,31 @@ CREATE CONSTANT Encryption.EncryptionKey FOLDER 'Private - String en\/de-cryptio
 `DESCRIBE` writes the escape for you, so its output files the document back
 where it was. A backslash before any other character is an ordinary character.
 
-## [See Also](#see-also-118)
+## [See Also](#see-also-119)
 
 [CREATE MODULE](#create-module), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
 # [DROP FOLDER](#drop-folder)
 
-## [Synopsis](#synopsis-81)
+## [Synopsis](#synopsis-82)
 
 ```
 DROP FOLDER 'folder_path' IN module_name;
 
 ```
-## [Description](#description-81)
+## [Description](#description-82)
 
 Removes an empty folder from a module. The folder must contain no documents (pages, microflows, etc.) and no sub-folders. If the folder is not empty, the command returns an error indicating how many child units remain.
 
 Nested folder paths use the `/` separator. Only the leaf folder is deleted; parent folders are not affected.
 
-## [Parameters](#parameters-79)
+## [Parameters](#parameters-80)
 
 [**folder\_path**](#folder_path-1)
 The path of the folder to delete. Use `/` for nested folders (e.g., `'Orders/Processing'`).
 [**module\_name**](#module_name-2)
 The name of the module containing the folder.
-## [Examples](#examples-93)
+## [Examples](#examples-94)
 
 ### [Drop a simple folder](#drop-a-simple-folder)
 
@@ -36368,13 +36533,13 @@ DROP FOLDER 'Processing' IN MyModule;
 | `folder not found: 'path' in Module` | No folder exists at the given path in the module |
 | `module not found: Module` | The specified module does not exist |
 
-## [See Also](#see-also-119)
+## [See Also](#see-also-120)
 
 [CREATE FOLDER](#create-folder), [CREATE MODULE](#create-module), [MOVE](#move), [MOVE FOLDER](#move-folder)
 
 # [MOVE](#move)
 
-## [Synopsis](#synopsis-82)
+## [Synopsis](#synopsis-83)
 
 ```
 MOVE document_type qualified_name TO module_name
@@ -36382,7 +36547,7 @@ MOVE document_type qualified_name TO FOLDER 'folder_path'
 MOVE document_type qualified_name TO FOLDER 'folder_path' IN module_name
 
 ```
-## [Description](#description-82)
+## [Description](#description-83)
 
 Moves a document to a different folder or module. Every top-level document type is supported, spelled the way `DESCRIBE` spells it. When moving to a folder, missing intermediate folders are created automatically. Cross-module moves change the qualified name of the document, which may break by-name references elsewhere in the project.
 
@@ -36401,7 +36566,7 @@ A `FOLDER` clause on `CREATE OR MODIFY` moves an existing document as well, so a
 script that already creates a document does not need a separate `MOVE` to place
 it.
 
-## [Parameters](#parameters-80)
+## [Parameters](#parameters-81)
 
 [**document\_type**](#document_type)
 The type of document to move:
@@ -36428,7 +36593,7 @@ The current `Module.Name` of the document to move.
 The target module. When specified without `FOLDER`, moves the document to the module root.
 [**folder\_path**](#folder_path-2)
 The target folder path within the module. Use `/` for nested paths (e.g., `'Orders/Processing'`). Enclosed in single quotes.
-## [Examples](#examples-94)
+## [Examples](#examples-95)
 
 ### [Move a page to a folder in the same module](#move-a-page-to-a-folder-in-the-same-module)
 
@@ -36510,13 +36675,13 @@ LIST IMPACT OF OldModule.Customer;
 MOVE ENTITY OldModule.Customer TO NewModule;
 
 ```
-## [See Also](#see-also-120)
+## [See Also](#see-also-121)
 
 [CREATE MODULE](#create-module), [CREATE FOLDER](#create-folder)
 
 # [MOVE FOLDER](#move-folder)
 
-## [Synopsis](#synopsis-83)
+## [Synopsis](#synopsis-84)
 
 ```
 MOVE FOLDER qualified_name TO FOLDER 'folder_path';
@@ -36524,7 +36689,7 @@ MOVE FOLDER qualified_name TO FOLDER 'folder_path' IN module_name;
 MOVE FOLDER qualified_name TO module_name;
 
 ```
-## [Description](#description-83)
+## [Description](#description-84)
 
 Moves a folder (and all its contents) to a different location: another folder within the same module, a folder in a different module, or a module root. The folder’s contents (documents and sub-folders) move with it.
 
@@ -36532,7 +36697,7 @@ The source folder is identified using the standard qualified name syntax: `Modul
 
 Target folders are created automatically if they don’t exist.
 
-## [Parameters](#parameters-81)
+## [Parameters](#parameters-82)
 
 [**qualified\_name**](#qualified_name-9)
 The source folder in `Module.FolderName` format. Use double quotes for paths with `/` or special characters.
@@ -36540,7 +36705,7 @@ The source folder in `Module.FolderName` format. Use double quotes for paths wit
 The target folder path. Use `/` for nested folders.
 [**module\_name**](#module_name-4)
 The target module name (for cross-module moves).
-## [Examples](#examples-95)
+## [Examples](#examples-96)
 
 ### [Move a folder into another folder](#move-a-folder-into-another-folder)
 
@@ -36566,7 +36731,7 @@ MOVE FOLDER MyModule.SharedWidgets TO CommonModule;
 MOVE FOLDER MyModule.Templates TO FOLDER 'Shared/Templates' IN CommonModule;
 
 ```
-## [See Also](#see-also-121)
+## [See Also](#see-also-122)
 
 [CREATE FOLDER](#create-folder), [DROP FOLDER](#drop-folder), [MOVE](#move)
 
@@ -36583,7 +36748,7 @@ are stored as `Projects$JarDependency` entries in `Projects$ModuleSettings`.
 
 # [ALTER MODULE … JAR DEPENDENCY](#alter-module--jar-dependency)
 
-## [Synopsis](#synopsis-84)
+## [Synopsis](#synopsis-85)
 
 ```
 ALTER MODULE module_name
@@ -36610,7 +36775,7 @@ ALTER MODULE module_name
   DROP JAR DEPENDENCY 'group:artifact';
 
 ```
-## [Description](#description-84)
+## [Description](#description-85)
 
 Manages Maven/JAR dependencies stored in a module’s `Projects$ModuleSettings`
 document. These are the same dependencies shown in Studio Pro under
@@ -36618,7 +36783,7 @@ document. These are the same dependencies shown in Studio Pro under
 
 Multiple actions can be chained in a single `ALTER MODULE` statement.
 
-## [Parameters](#parameters-82)
+## [Parameters](#parameters-83)
 
 [**module\_name**](#module_name-5)
 The name of the module to modify.
@@ -36630,7 +36795,7 @@ The three components of a Maven coordinate. All three are required for `ADD`.
 [**included**](#included)
 When `false`, the dependency is declared but excluded from the classpath
 at build time. Defaults to `true`.
-## [Examples](#examples-96)
+## [Examples](#examples-97)
 
 ### [Add a new dependency](#add-a-new-dependency)
 
@@ -36705,13 +36870,13 @@ Writing the dependency updates the `.mpr` file immediately, but Gradle must
 still resolve and download the JAR into `vendorlib/`. This happens automatically
 when the project is opened in Studio Pro or built with `mxcli docker build`.
 
-## [See Also](#see-also-122)
+## [See Also](#see-also-123)
 
 [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
 # [LIST / DESCRIBE JAR DEPENDENCY](#list--describe-jar-dependency)
 
-## [Synopsis](#synopsis-85)
+## [Synopsis](#synopsis-86)
 
 ```
 LIST JAR DEPENDENCIES;
@@ -36719,14 +36884,14 @@ LIST JAR DEPENDENCIES IN module;
 DESCRIBE JAR DEPENDENCY module 'group:artifact';
 
 ```
-## [Description](#description-85)
+## [Description](#description-86)
 
 `LIST JAR DEPENDENCIES` shows all Maven/JAR dependencies declared across the
 project, optionally filtered to a single module. `DESCRIBE JAR DEPENDENCY`
 outputs the full definition of a single dependency as a re-executable
 `ALTER MODULE … ADD JAR DEPENDENCY` statement.
 
-## [Parameters](#parameters-83)
+## [Parameters](#parameters-84)
 
 [**IN module**](#in-module-2)
 Filters the listing to a single module.
@@ -36735,7 +36900,7 @@ The module name containing the dependency (for `DESCRIBE`).
 [**‘group:artifact’**](#groupartifact-1)
 The Maven coordinate identifying the dependency, in `groupId:artifactId`
 format (no version). Example: `'org.duckdb:duckdb_jdbc'`.
-## [Examples](#examples-97)
+## [Examples](#examples-98)
 
 ### [List all JAR dependencies](#list-all-jar-dependencies)
 
@@ -36780,7 +36945,7 @@ alter module MyModule
 
 The output is suitable for copying into a script and re-executing.
 
-## [See Also](#see-also-123)
+## [See Also](#see-also-124)
 
 [ALTER MODULE JAR DEPENDENCY](#alter-module--jar-dependency)
 
@@ -36805,17 +36970,17 @@ needs no `;`. A script file is read by its own header; see
 
 # [SET](#set-1)
 
-## [Synopsis](#synopsis-86)
+## [Synopsis](#synopsis-87)
 
 ```
 SET variable = value
 
 ```
-## [Description](#description-86)
+## [Description](#description-87)
 
 Sets a session variable that controls REPL behavior. Session variables persist for the duration of the session and are reset when the REPL exits. Variable names are case-insensitive.
 
-## [Parameters](#parameters-84)
+## [Parameters](#parameters-85)
 
 [**variable**](#variable)
 The name of the session variable to set.
@@ -36829,7 +36994,7 @@ The value to assign. Can be a string (in single quotes), a boolean (`TRUE` or `F
 | `verbose` | `TRUE`, `FALSE` | Enable verbose output for debugging |
 | `AUTOCOMMIT` | `TRUE`, `FALSE` | Automatically save changes after each mutation |
 
-## [Examples](#examples-98)
+## [Examples](#examples-99)
 
 ### [Set output format to JSON](#set-output-format-to-json)
 
@@ -36849,27 +37014,27 @@ SET verbose = TRUE;
 SET AUTOCOMMIT = TRUE;
 
 ```
-## [See Also](#see-also-124)
+## [See Also](#see-also-125)
 
 [SHOW STATUS](#show-status), [OPEN PROJECT](#open-project)
 
 # [SHOW STATUS](#show-status)
 
-## [Synopsis](#synopsis-87)
+## [Synopsis](#synopsis-88)
 
 ```
 STATUS
 
 ```
-## [Description](#description-87)
+## [Description](#description-88)
 
 Displays the current session status including the connection state, the open project path, the Mendix version of the project, the MPR format version, and the values of any session variables. This is useful for confirming which project is loaded and verifying session configuration.
 
-## [Parameters](#parameters-85)
+## [Parameters](#parameters-86)
 
 This statement takes no parameters.
 
-## [Examples](#examples-99)
+## [Examples](#examples-100)
 
 ### [Check session status](#check-session-status)
 
@@ -36895,7 +37060,7 @@ STATUS;
 LIST MODULES;
 
 ```
-## [See Also](#see-also-125)
+## [See Also](#see-also-126)
 
 [OPEN PROJECT](#open-project), [CLOSE PROJECT](#close-project), [SET](#set-1)
 
@@ -40485,6 +40650,7 @@ CREATE TABLE WIDGETS (
     MicroflowRef            TEXT,
     NanoflowRef             TEXT,
     PageRef                 TEXT,
+    SnippetRef              TEXT,    -- snippet a snippet call places
     Description             TEXT,
     ParentWidgetId          TEXT,    -- nearest catalogued ancestor; '' at the root
     Depth                   INTEGER, -- catalogued ancestors; 0 at the root
@@ -40550,6 +40716,7 @@ rather than trusting a list here:
 | `datasource` | page or widget reads an entity |
 | `action` | widget calls a microflow / nanoflow |
 | `show_page` | flow or widget action opens a page |
+| `snippet_call` | page, snippet or layout places a snippet |
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
@@ -40557,6 +40724,8 @@ rather than trusting a list here:
 | `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
+| `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call’s request or response mapping |
+| `structure` | import or export mapping is built on a JSON structure |
 | `validate` | attribute validation rule uses a regular expression |
 | `widget` | page or snippet uses a pluggable / custom widget |
 
@@ -41078,7 +41247,7 @@ authoring this is the difference between one cheap turn and dozens of expensive
 ones — and it is why, even though a script “costs” ~60 tool calls, running it
 *through mxcli* keeps that cost out of the model’s context.
 
-## [See also](#see-also-126)
+## [See also](#see-also-127)
 
 - [Connecting to a Running Studio Pro (MCP)](#connecting-to-a-running-studio-pro-mcp) — how to set up
   the connection and run scripts against a live model.
@@ -42525,6 +42694,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Toggle demo users | `ALTER APP SECURITY ( EnableDemoUsers: TRUE|FALSE );` |  |
 | Toggle guest access | `ALTER APP SECURITY ( EnableGuestAccess: TRUE, GuestUserRole: UserRole );` / `( EnableGuestAccess: FALSE )` | Anonymous users; role required (CE0133) |
 | Rename admin user | `ALTER APP SECURITY ( AdminUserName: 'appadmin' );` | Default `MxAdmin` |
+| Set admin user role | `ALTER APP SECURITY ( AdminUserRole: AppAdmin );` | Must exist; `DROP USER ROLE` refuses the administrator’s role, so move it first |
 | Set admin password | `ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );` | Resolves CE0129 “Administrator password has not been set”; `''` is refused |
 | Create demo user | `CREATE DEMO USER 'name' ( Password: 'pass', [Entity: Module.Entity,] UserRoles: (UserRole, ...) );` | The clause form `PASSWORD … (…)` warns MDL-DEPR137 |
 | Drop demo user | `DROP DEMO USER [IF EXISTS] 'name';` | `IF EXISTS` makes a cleanup script re-runnable |
@@ -43891,6 +44061,26 @@ line 1: `create or replace …` (enumeration) is deprecated; write `create or mo
 The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It holds the code, old form, canonical form, rewrite and removal version of each entry. A spelling is only registered where it means exactly the same as its canonical form. `create or replace view entity`, for example, drops and recreates the view entity, so it is not reported. Likewise `show` is reported as `MDL-DEPR002` only where its canonical form is `list` (plurals, relationship queries and the summary tables), and as `MDL-DEPR090` where it is `describe` with the same output. `show entity X` and `show version` are neither: the first has no mdl 1 statement (`MDL-V1-SHOWSUMMARY`), the second is a session command (`MDL-V1-SESSION`).
 
 ## [mxcli Parser Errors](#mxcli-parser-errors)
+
+### [MDL-MCPSERVER01: A published MCP service the runtime will not start](#mdl-mcpserver01-a-published-mcp-service-the-runtime-will-not-start)
+
+```
+published mcp service Shop.OrdersMCP: EndpointPath "mcp" is reserved: it cannot be
+'mcp' or end in '/mcp' [MDL-MCPSERVER01]
+
+```
+
+**Cause:** A published MCP service document is not validated by mxbuild; AgentEditorCommons
+reads it at startup and calls `MCPServer.CreateMCPServer`, which throws for a reserved or
+sub-path `EndpointPath` (`mcp`, `…/mcp`, any `/`), a missing `Version`,
+`EndpointPath` or `ProtocolVersion`, `Scopes` without an `AuthorizationServerUrl`, an
+`AuthorizationServerUrl` without an `AuthenticationMicroflow` or not an absolute http(s) URL.
+The app still starts, without that server, and logs the error. A tool without a `Microflow`, or
+two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`,
+`AuthorizationServerUrl` and `Scopes` are ignored while `AuthenticationEnabled` is false, and
+`AuthenticationEnabled: true` with no authentication microflow accepts every request.
+
+**Solution:** Fix the property the message names; `create published mcp service` documents each.
 
 ### [MDL-LISTOP02: A list operation nested inside another one](#mdl-listop02-a-list-operation-nested-inside-another-one)
 

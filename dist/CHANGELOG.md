@@ -1,3 +1,7 @@
+## 2026-11-09 -- mxcli v0.30.0 @ f99080e
+- +345 / -155 lines
+- Sections changed: [Agent Editor Statements](#agent-editor-statements), [CREATE PUBLISHED MCP SERVICE](#create-published-mcp-service), [Commands](#commands-2), [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Core Tables](#core-tables), [Description](#description-60), [Description](#description-61), [Description](#description-62) (+153 more)
+
 ## 2026-11-08 -- mxcli v0.30.0 @ f0c40a8
 - +50 / -7 lines
 - Sections changed: [Core Tables](#core-tables), [Core Tables](#core-tables-1), [Description](#description-20), [Flags](#flags-3), [Full Refresh Tables](#full-refresh-tables), [Parameters](#parameters-77), [Secrets off the command line](#secrets-off-the-command-line)
