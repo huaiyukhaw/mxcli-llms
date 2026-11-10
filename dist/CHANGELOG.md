@@ -1,3 +1,7 @@
+## 2026-11-10 -- mxcli v0.31.0 @ f0f5272
+- +93 / -13 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.31.0](#release-mxcli-v0310), [Bundled Starlark Rules](#bundled-starlark-rules), [Full Refresh Tables](#full-refresh-tables), [Rule Categories](#rule-categories), [Security Rules](#security-rules), [Upgrading](#upgrading), [Upgrading](#upgrading-1) (+10 more)
+
 ## 2026-11-09 -- mxcli v0.30.0 @ f99080e
 - +345 / -155 lines
 - Sections changed: [Agent Editor Statements](#agent-editor-statements), [CREATE PUBLISHED MCP SERVICE](#create-published-mcp-service), [Commands](#commands-2), [Community detection, cycles, layers, centrality](#community-detection-cycles-layers-centrality), [Core Tables](#core-tables), [Description](#description-60), [Description](#description-61), [Description](#description-62) (+153 more)

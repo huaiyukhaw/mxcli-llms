@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.30.0 @ f99080e | Generated: 2026-11-09T08:58:47Z
+Version: mxcli v0.31.0 @ f0f5272 | Generated: 2026-11-10T09:07:01Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -366,6 +366,7 @@ These map to the Module Settings → Java…
 
 ## Blog
 - [Blog](https://huaiyukhaw.github.io/mxcli-llms/pages/blog/index.md): News, release announcements, and demos from the mxcli team.
+- [Release: mxcli v0.31.0](https://huaiyukhaw.github.io/mxcli-llms/pages/blog/v0.31.0-release.md): November 9, 2026
 - [Release: mxcli v0.30.0](https://huaiyukhaw.github.io/mxcli-llms/pages/blog/v0.30.0-release.md): November 2, 2026
 - [Release: mxcli v0.29.0](https://huaiyukhaw.github.io/mxcli-llms/pages/blog/v0.29.0-release.md): October 30, 2026
 - [Release: mxcli v0.28.0](https://huaiyukhaw.github.io/mxcli-llms/pages/blog/v0.28.0-release.md): October 23, 2026
