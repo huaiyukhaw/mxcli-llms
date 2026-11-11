@@ -1,3 +1,7 @@
+## 2026-11-11 -- mxcli v0.31.0 @ 0036eef
+- +353 / -27 lines
+- Sections changed: Attach to an app you already have running — no boot at all, [Agent Tables](#agent-tables), [Catalog depth](#catalog-depth), [Choosing a mode](#choosing-a-mode), [Commands](#commands-2), [Convention Rules](#convention-rules), [Core Tables](#core-tables), [Examples](#examples-71) (+14 more)
+
 ## 2026-11-10 -- mxcli v0.31.0 @ f0f5272
 - +93 / -13 lines
 - Sections changed: [Blog](#blog), [Release: mxcli v0.31.0](#release-mxcli-v0310), [Bundled Starlark Rules](#bundled-starlark-rules), [Full Refresh Tables](#full-refresh-tables), [Rule Categories](#rule-categories), [Security Rules](#security-rules), [Upgrading](#upgrading), [Upgrading](#upgrading-1) (+10 more)

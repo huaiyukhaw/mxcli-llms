@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.31.0 @ f0f5272
-Generated: 2026-11-10T09:07:01Z
+Version:   mxcli v0.31.0 @ 0036eef
+Generated: 2026-11-11T08:45:32Z
 
 ---
 
@@ -3207,27 +3207,28 @@ my-mendix-project/
 ```
 ### [opencode.json](#opencodejson)
 
-The `opencode.json` file is OpenCode’s primary configuration. It points to `AGENTS.md` for instructions and to both the OpenCode-format skills in `.opencode/skills/` and the universal skill files in `.ai-context/skills/`:
+The `opencode.json` file is OpenCode’s primary configuration. Its instructions are `AGENTS.md` alone:
 
 ```
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "AGENTS.md",
-    ".opencode/skills/**/SKILL.md",
-    ".ai-context/skills/*/SKILL.md"
+    "AGENTS.md"
   ]
 }
 
 ```
+
+The skills are not listed there. OpenCode inlines every instruction file’s whole body into the system prompt, so listing the skill trees put about 2.7 MB of skill text in front of every session. OpenCode discovers the skills in `.opencode/skills/` itself and loads a skill’s body only when its description matches the task.
+
 ### [Skills](#skills-1)
 
-Skills live in `.opencode/skills/<name>/SKILL.md` and use YAML frontmatter that OpenCode understands:
+Skills live in `.opencode/skills/<name>/SKILL.md` and use YAML frontmatter that OpenCode understands. The description is the skill’s own, with its “Use when…” clause, since that is what OpenCode matches a task against:
 
 ```
 ---
 name: write-microflows
-description: MDL syntax and patterns for creating microflows
+description: 'Microflow syntax reference in MDL — … Use before writing any CREATE MICROFLOW …'
 compatibility: opencode
 ---
 
@@ -16579,6 +16580,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 - Log messages and log node names of microflows
 - Page URLs and the paths, resources and operation summaries of published REST services
 - Workflow names, descriptions, task names and activity captions
+- Agents’ system and user prompts, descriptions, and the descriptions of their tools and knowledge bases, with the title a tool call shows the user (`ObjectType` `AGENT`; `StringContext` `system_prompt`, `user_prompt`, `agent_description`, `tool_description`, `tool_display_title`, `tool_display_description`, `knowledge_base_description`), and a published MCP service’s tool descriptions and titles (`PUBLISHED_MCP_SERVICE`; `mcp_tool_description`, `mcp_tool_title`)
 - Element names: the qualified name is a searchable column too, so `SEARCH 'Customer'` also returns the rows of elements named Customer that have some indexed text
 - **Documentation of project elements.** A hit’s `ObjectType` names the element and its `StringContext` is `documentation`:
   
@@ -16597,7 +16599,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
   | Consumed and published REST service, business event service | `CONSUMED_REST_SERVICE`, `PUBLISHED_REST_SERVICE`, `BUSINESS_EVENT_SERVICE` |
   | Import mapping, export mapping, JSON structure, data transformer | `IMPORT_MAPPING`, `EXPORT_MAPPING`, `JSON_STRUCTURE`, `DATA_TRANSFORMER` |
   | Scheduled event, task queue, regular expression, image and icon collection, menu | `SCHEDULED_EVENT`, `TASK_QUEUE`, `REGULAR_EXPRESSION`, `IMAGE_COLLECTION`, `ICON_COLLECTION`, `MENU` |
-  | Agent, AI model, knowledge base, consumed MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE` |
+  | Agent, AI model, knowledge base, consumed and published MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE`, `PUBLISHED_MCP_SERVICE` |
   | A module’s domain model documentation | `MODULE`, with `StringContext` `domain_model_documentation` |
   
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service’s contract entities (written by the remote service, not by the project).
@@ -16891,6 +16893,47 @@ SELECT Name FROM CATALOG.MODULES
 WHERE Source = '' AND COALESCE(DomainModelDocumentation, '') = '';
 
 ```
+### [CATALOG.FOLDERS](#catalogfolders)
+
+One row per folder, in every module, empty folders included. A document’s
+`Folder` column names only the folders that hold a document, so an empty folder
+appears nowhere else.
+
+| Column | Description |
+| --- | --- |
+| `Id` | Folder UUID |
+| `Name` | Folder name |
+| `ModuleName` | Module the folder is in |
+| `Path` | `Objects/Order` — spelled as a document’s `Folder` column, so the two join. A folder name that itself holds `/` is not escaped (`LIST FOLDERS` prints it as `\/`) |
+| `ParentPath` | Path of the enclosing folder; `''` directly in the module |
+| `Depth` | `1` directly in the module |
+| `DocumentCount` | Documents directly in the folder, not in its subfolders |
+| `FolderCount` | Folders directly in the folder |
+
+```
+-- Empty folders in your own modules
+SELECT f.ModuleName, f.Path FROM CATALOG.FOLDERS f
+JOIN CATALOG.MODULES m ON m.Name = f.ModuleName
+WHERE m.Source = '' AND f.DocumentCount = 0 AND f.FolderCount = 0;
+
+```
+### [CATALOG.ANNOTATIONS](#catalogannotations)
+
+One row per **domain model** annotation, in every module. A microflow’s
+annotations are rows of `CATALOG.ACTIVITIES` (`ActivityType = 'Annotation'`).
+
+| Column | Description |
+| --- | --- |
+| `Id` | Annotation UUID |
+| `DomainModelId` | The domain model holding it |
+| `ModuleName` | Module of that domain model |
+| `Caption` | The full text, newlines kept |
+| `X`, `Y`, `Width` | Place and width on the domain model canvas |
+
+```
+SELECT ModuleName, Caption FROM CATALOG.ANNOTATIONS WHERE Caption LIKE '%TODO%';
+
+```
 ### [CATALOG.ASSOCIATIONS](#catalogassociations)
 
 Information about entity associations, same-module and cross-module.
@@ -16985,6 +17028,8 @@ query written then that should keep its old result filters on
 | `CommitType` | Create/change object: `Yes`, `YesWithoutEvents` or `No` |
 | `WithEvents` | 1 for a commit with events, and a create/change with `CommitType` `Yes` |
 | `RetrieveSource` | `database` or `association` |
+| `X`, `Y` | The object’s stored middle point on the canvas, as `describe` prints it in `@position`. Y grows downwards. Inside a loop it is relative to the loop’s box, not to the canvas |
+| `Width`, `Height` | The object’s box size |
 
 ```
 -- Database retrieves inside a loop (N+1 queries)
@@ -16996,6 +17041,38 @@ WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLo
 SELECT MicroflowQualifiedName, ActionRef
 FROM CATALOG.ACTIVITIES
 WHERE ActionType = 'MicroflowCallAction' AND ParentLoopId <> '' AND QueueRef = '';
+
+```
+### [CATALOG.FLOWS](#catalogflows)
+
+One row per sequence flow and annotation flow of a microflow, nanoflow or rule,
+loop bodies included. Populated by `REFRESH CATALOG FULL`. Both ends are
+`CATALOG.ACTIVITIES.Id` values.
+
+| Column | Description |
+| --- | --- |
+| `Id` | The flow’s ID |
+| `FlowType` | `SequenceFlow` or `AnnotationFlow` |
+| `MicroflowId`, `MicroflowQualifiedName`, `ModuleName` | The flow document it belongs to |
+| `Sequence` | Stored order: each collection’s sequence flows, then its annotation flows |
+| `OriginId`, `DestinationId` | The activity the line leaves and enters. An annotation flow runs from the annotation to the object it is attached to |
+| `IsErrorHandler` | 1 for the flow into an activity’s custom error handler (`on error … begin … end error` in `describe`) |
+| `CaseValue` | The branch a split’s flow takes: `true` / `false`, an enumeration value or `(empty)`, or an inheritance split’s entity. Empty for an unconditional flow |
+| `OriginConnectionIndex`, `DestinationConnectionIndex` | The side the line leaves and enters: 0 top, 1 right, 2 bottom, 3 left |
+
+```
+-- Custom error handlers whose first activity logs below level Error
+SELECT f.MicroflowQualifiedName, a.LogLevel
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.IsErrorHandler = 1 AND a.ActionType = 'LogMessageAction' AND a.LogLevel <> 'Error';
+
+-- The activity each annotation is attached to
+SELECT f.MicroflowQualifiedName, n.Caption, a.ActionType
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES n ON n.Id = f.OriginId
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.FlowType = 'AnnotationFlow';
 
 ```
 ### [CATALOG.PAGES](#catalogpages)
@@ -17047,6 +17124,8 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Class`, `Style`, `DynamicClasses` | The widget’s Appearance |
 | `ActionType` | Stored type of the primary action — `Action` (buttons), else `OnClickAction` (containers), else `ClickAction` (list views, images): `Forms$DeleteClientAction`, `Forms$MicroflowAction`, `Forms$CallNanoflowClientAction`, `Forms$FormAction` (show page), `Forms$NoAction`, …; empty for a widget without one. A pluggable widget’s actions are not read |
 | `HasConfirmation` | 1 when the primary action asks for confirmation. Only microflow, nanoflow and workflow calls have that setting; a delete action never does |
+| `Caption` | The widget’s own caption in the project’s default language (buttons and labels; an input’s label and a dynamic text’s content are not its caption); `''` when it has none |
+| `Tooltip` | The widget’s tooltip in the project’s default language; `''` when none is set |
 
 ```
 -- Widgets nested more than five deep, deepest first
@@ -17258,6 +17337,71 @@ with the suggestion *Remove if unused* — on code that runs on every commit
 The edge carries neither the moment nor the event; `refs` has no column for
 them, and a kind per combination would put eight kinds into every consumer’s
 list to say one thing. Which moment and which event is this table’s question.
+
+## [Agent Tables](#agent-tables)
+
+The Agent Editor’s documents, with the settings their JSON contents hold
+([ako/mxcli#2075](https://github.com/ako/mxcli/issues/2075)). A boolean that a
+document does not store, as an older Agent Editor does not, is `NULL` rather
+than `0`, so a query can tell “off” from “never set”.
+
+### [CATALOG.AGENTS](#catalogagents)
+
+| Column | Description |
+| --- | --- |
+| `UsageType` | `Chat` or `Task` |
+| `Model` | The AI model document, qualified name |
+| `SelectedModel`, `SelectedModelName` | The model picked from the provider’s list, by id and display name (`NULL` if none) |
+| `ToolChoice`, `MaxTokens`, `Temperature`, `TopP` | Generation settings, `NULL` or empty when not set |
+| `EnableBackendStreaming`, `EnableUIStreaming` | `1`, `0`, or `NULL` when the document does not store the switch |
+| `Entity` | The context entity, qualified name |
+| `Variables` | The prompt variable keys, comma-separated |
+| `ToolCount`, `KnowledgeBaseCount`, `MCPServiceCount` | Entries in the agent’s tool lists. `ToolCount` excludes MCP services |
+
+### [CATALOG.AGENT\_TOOLS](#catalogagent_tools)
+
+One row per entry of an agent’s tools list that `ToolCount` counts: a
+microflow, nanoflow or agent it calls. Its consumed MCP services are in
+`CATALOG.AGENT_MCP_SERVICES`, as `MCPServiceCount` counts them.
+
+| Column | Description |
+| --- | --- |
+| `AgentId`, `Agent` | The agent’s id and qualified name |
+| `Name`, `Description` | What the model sees |
+| `ToolType` | `Microflow`, or empty |
+| `Document` | The microflow, nanoflow or agent, qualified name |
+| `Enabled` | `1` or `0` |
+| `UserAccessApproval` | `HiddenForUser`, `VisibleForUser`, `UserConfirmationRequired`, or empty when not stored |
+| `DisplayTitle`, `DisplayDescription` | What the user sees of the call, `NULL` when not stored |
+
+`CATALOG.AGENT_MCP_SERVICES` has the same columns for the agent’s MCP services,
+with `Document` named `Service` and no `ToolType`.
+
+```
+-- Tools an agent can run without the user's approval
+SELECT Agent, Name, Document FROM CATALOG.AGENT_TOOLS
+WHERE Enabled = 1 AND UserAccessApproval <> 'UserConfirmationRequired';
+
+```
+### [CATALOG.AGENT\_KNOWLEDGE\_BASES](#catalogagent_knowledge_bases)
+
+One row per entry of an agent’s knowledge base tools list: `Agent`, `Name`,
+`Description`, `KnowledgeBase` (qualified name), `Collection`, `MaxResults`,
+`MinSimilarity`, `IsVisible` and `Enabled`.
+
+### [Models, knowledge bases and MCP services](#models-knowledge-bases-and-mcp-services)
+
+| Table | Columns beyond the document’s |
+| --- | --- |
+| `CATALOG.AI_MODELS` | `Provider`, `ModelType`, `DisplayName`, `KeyConstant` |
+| `CATALOG.KNOWLEDGE_BASES` | `Provider`, `KeyConstant` |
+| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds`, `Endpoint` (the String constant holding the server URL, empty when none: the service connects nowhere), `AuthenticationMicroflow` |
+| `CATALOG.PUBLISHED_MCP_SERVICES` | `ServerName`, `EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`, `AuthenticationMicroflow`, `ToolCount` |
+
+What an agent references (its tools, model, knowledge bases and context entity),
+what a consumed MCP service reads and calls (its endpoint constant and
+credentials microflow) and what a published MCP service runs are also edges in `CATALOG.REFS`, so
+`show callers` and `show impact` see them.
 
 ## [Graph-Analysis Tables](#graph-analysis-tables)
 
@@ -18148,7 +18292,8 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain init` | Creates `docs/brain/`. Refuses a `docs/brain/` it did not write |
 | `brain capture "<text>" [-a @Anchor]…` | Queues an entry. Never commits |
 | `brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in |
-| `brain promote <id> [--to <shard>]` | Writes it into its shard |
+| `brain capture --from-json <file|->` | Queues a JSON array of entries as one act: all validated first, duplicates skipped |
+| `brain promote <id>… [--to <shard>]` | Writes them into their shards, all or none |
 | `brain drop <id>` | Removes it from the queue or from its shard |
 | `brain capture "<text>" --source <doc>[#<locator>]` | Records which document, and where in it, the entry came from |
 | `brain edit <id> ["<text>"] [-a @Anchor]… [--source <doc>]` | Rewrites it in place, staged or committed; the id does not change |
@@ -18170,9 +18315,38 @@ act on the answers rather than read them. `capture --json` returns the entry’s
 `id`, `kind`, `slice`, `shard`, `added` and a `status` of `queued`,
 `already_queued` or `already_committed` (a duplicate is reported with its
 twin’s id, and exits 0 as before); `promote --json` returns the `id`, `kind`,
-`shard` and the shard file’s `path`. `brain staged --since <id>` is the
+`shard`, the shard file’s `path` and a `status` of `promoted` or
+`already_promoted`. `brain staged --since <id>` is the
 slice boundary: note `last_id` before handing a slice off, pass it back
 afterwards, and `--fail-if-empty` exits 1 on a slice that recorded nothing.
+
+### [Many entries at once](#many-entries-at-once)
+
+A tool that turns a specification into fifty requirements, and a person who
+accepts them all, should not mean fifty captures and fifty promotes — each is a
+place to stop half way. Both commands take a batch, and a batch is one act:
+
+```
+mxcli brain capture --from-json requirements.json -p app.mpr --json
+mxcli brain promote 1a2b3c 4d5e6f 7a8b9c -p app.mpr
+
+```
+
+`--from-json` reads a JSON array (`-` for stdin) of
+`{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}`,
+the input fields `staged --json` prints. Every item is checked before anything
+is queued, so one bad item fails the batch and names its index (`items[3]`).
+A duplicate — of a committed entry, a queued one, or an earlier item — is
+skipped and reported with the existing id, so the same list twice is a no-op.
+
+`promote` with several ids resolves every id and checks each shard’s cap with
+**all** of the batch’s additions to it before writing anything; additions that
+each fit can still overrun the shard together, and then nothing is written.
+`--to` applies to every id. The shards are written first, then the queue once:
+interrupted between the two, the entries are committed and still queued, and
+running the same `promote` again completes it. With `--json`, both return
+`results` (one per item, in input order) plus totals; `promote` with a single
+id keeps its single-object shape.
 
 `--since` rather than `--slice`, because `capture --slice` is what makes an entry
 a *requirement* — a decision found while building a slice carries no slice at
@@ -18270,7 +18444,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | --- | --- |
 | **CONV011** | No commit in loop – Detects COMMIT statements, and CREATE / CHANGE with a COMMIT clause, inside LOOP blocks (performance anti-pattern) |
 | **CONV012** | Exclusive split captions – Checks that decision branches have meaningful captions |
-| **CONV013** | Error handling on external calls – Ensures external service calls have error handling |
+| **CONV013** | Error handling on external calls – Ensures external service calls have error handling. Not reported: a call inside a loop, where Mendix allows only Rollback (CE0644), and a call to a Java action that exists to throw (`Throw…`, e.g. `CommunityCommons.ThrowException`), whose Rollback is the point |
 | **CONV014** | No continue error handling – Warns against using CONTINUE error handling without logging |
 | **CONV020** | Created object never persisted – A microflow creates an object of a persistent entity without commit, and never commits, returns or passes it on, so the object is discarded when the microflow ends ([details](#conv020-details)) |
 | **CONV021** | Create/change then commit – A Create or Change object activity without commit, directly followed by a Commit of the same object; one create/change with Commit set does both ([details](#conv021-details)) |
@@ -18711,7 +18885,7 @@ skill lists them all. `violation(...)` and `location(...)` build the result.
 ## [Catalog depth](#catalog-depth)
 
 Some builtins read data that only a full catalog build produces (`widgets()`,
-`xpath_expressions()`, `activities_for()`, `permissions()`,
+`xpath_expressions()`, `activities_for()`, `flows_for()`, `permissions()`,
 `permissions_for()`, `refs_to()` / `refs_from()`, a page’s `widget_count`), and
 the graph builtins (`cycles()`, `layer_of()`, …) need the communities build.
 `mxcli lint` detects them in the rule’s source and builds the catalog deep
@@ -20138,6 +20312,7 @@ Two more rules follow from the walk:
 | `--local` | ~30s | `<project>_test` | no |
 | `--local --watch` | ~30s once, then ~2s | `<project>_test` | no |
 | `--attach` | none | **the running app’s** | no |
+| `--attach` to an app started with `--allow-call` | none, and no build when the tests compile for the executor | **the running app’s** | no |
 
 ```
 # No Docker daemon needed
@@ -20167,6 +20342,23 @@ mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
+A test run that writes its test microflows into a project a `run --local --watch`
+dev loop is watching (`--local`, or `--attach` with a test that has to be built)
+holds that dev loop’s watcher while it owns the project: the dev loop does not
+rebuild, or restart its app, for the injection, `run status` shows
+`held by a test run (pid …)`, and when the run has put the project back exactly
+the watcher finds nothing to build. An edit made in the meantime is built once
+the run ends. A hold whose run died is ignored.
+
+A run that builds (`--local`, or a built test under `--attach`) writes the
+`deployment/` folder the dev loop serves from too — mxbuild cannot put it
+elsewhere. When it did, the dev loop builds its own back once the run ends, so a
+later `--attach` finds the app’s build; that one build can be a restart (measured:
+after `--local`, a restart; after a mixed `--attach`, a reload). A `--test-endpoint`
+dev loop’s endpoint is left in place by `--local`, which chains to the project’s
+own after-startup microflow rather than to the endpoint (ako/mxcli#2119). For a
+gate in the middle of such a loop, `--attach` costs nothing to the running app.
+
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app’s database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been
@@ -20179,6 +20371,54 @@ and says nothing about whether the runtime needs a restart. So the attach builds
 on a fresh serve process instead, and a fresh process’s first build asks for a
 restart whatever changed — which an attach cannot do, the runtime being the other
 process’s. Use `--local` on 11.14.0; 11.15.0 builds incrementally again.
+
+### [Running a test without building it (`--allow-call`)](#running-a-test-without-building-it---allow-call)
+
+An attach normally injects the suite’s test microflows and builds them into the
+running app. When that app was started with `--allow-call`, a test whose
+statements the endpoint can execute is not injected or built at all: mxcli
+compiles it into a list of steps, the app runs them with the Mendix runtime API,
+and every expression goes to Mendix’s own evaluator (`Core.evaluateExpression`).
+Editing a test then costs one HTTP round trip.
+
+```
+mxcli run  --local --watch --test-endpoint --allow-call -p app.mpr    # terminal 1
+mxcli test tests/ -p app.mpr --attach                                 # terminal 2
+
+```
+
+You still write `.test.mdl`. The executor runs these statements: `declare`,
+`set`, `create`, `change`, `commit`, `delete`, `call microflow`, a database
+`retrieve` with an optional `where` and `first`, a `retrieve` over an
+association, and the list aggregates `count`, `sum`, `average`, `minimum` and
+`maximum` over an attribute. It also handles `@expect` (including `count(...)`),
+`@throws`, `@setup`, `@cleanup` and `@verify`. A test with anything else (a
+decision, a loop, a list operation such as `find` or `filter`, a retrieve with
+`sort by`/`limit`, an aggregate by expression, an `on error` clause other than
+`rollback`, a nanoflow or Java action call) is injected and built as before.
+Only that test is: the rest of the run still goes straight to the app, and mxcli
+prints which test and which statement decided it. The verdicts are the same on
+both routes. This applies to a one-shot `--attach`; `test --attach --watch` still
+injects and builds.
+
+Three things are checked before a test runs, because the runtime’s evaluator
+returns *empty* for a name it does not know instead of failing:
+
+- every `$variable` an expression reads must be declared earlier in the test
+  (checked by mxcli, then again by the app);
+- every enumeration value an expression names must exist, so
+  `Module.Enum.TYPO` is an ERROR rather than a comparison against empty;
+- the model on disk must not be newer than the build the app is serving. If it
+  is, the run is refused: with `--watch`, `mxcli run wait -p app.mpr` lets the dev
+  loop apply the change; without it, `mxcli run restart -p app.mpr`.
+
+`--allow-call` widens what the endpoint can do. Without it, the endpoint only
+runs microflows the runner generated. With it, the endpoint calls the microflows
+a test names and reads and writes data in a system context. It still needs the
+run’s token and a loopback caller, accepts only POST, and is off unless you pass
+the flag. Under `--hub` the loopback check does not help: the tunnel client
+connects from loopback, so the token is the only guard, and `run` warns when both
+flags are given.
 
 ## [How tests execute](#how-tests-execute)
 
@@ -21942,7 +22182,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--screenshot-url` | app root | Page to shoot: full URL, or a path relative to the app root (e.g. `/p/customers`). Repeat for a multi-page set. |
 | `--screenshot-user` / `--screenshot-password` | — | Log in once (Mendix form auth) and reuse the session, so pages behind login render authenticated |
 | `--runtime-log` | `<projectDir>/.mxcli/runtime.log` | Runtime log file — JVM stdout/stderr **and** the application log (server stack traces + microflow `LOG` output); `-` disables |
-| `--test-endpoint` | off | Host mxcli’s token-guarded test endpoint so [`mxcli test … --attach`](#running-tests) runs a suite against this app with no boot of its own. Installed before the boot (the handler registers from after-startup, so it cannot be added to a running app); your project’s own after-startup microflow is chained, not displaced. Removed on exit. Tests then use **this app’s database** |
+| `--test-endpoint` | off | Host mxcli’s token-guarded test endpoint so [`mxcli test … --attach`](#running-tests) runs a suite against this app with no boot of its own. Installed before the boot (the handler registers from after-startup, so it cannot be added to a running app); your project’s own after-startup microflow is chained, not displaced. Removed on exit; one left behind by a run that was killed (with its container, say) is removed by the next `run`, and `run` and `check -p` warn while the project’s after-startup microflow is still `MxTest.RegisterEndpoint` with no run hosting it, so the swap is not committed. Tests then use **this app’s database** |
 | `--debug` | off | Enable the microflow debugger at boot; then use [`mxcli debug`](#debug-microflows--mxcli-debug) from another terminal. Behaviour-neutral until a breakpoint is set |
 | `--debug-pass` | `mxdebug` | Debugger password when `--debug` is set |
 | `--metrics` | off | Register a Prometheus meter registry; metrics served at `http://127.0.0.1:<admin-port>/prometheus` |
@@ -22998,21 +23238,36 @@ mxcli docker build -p app.mpr
 
 ## [The Project Is Not Modified](#the-project-is-not-modified)
 
-`mx update-widgets`, `mx check` and MxBuild all write into the project they are
-given: update-widgets rewrites the model (an MPRv1 `.mpr` in place, an MPRv2
-project into MPRv1), mx check compiles the theme into `theme-cache/` and
-`deployment/sass/`, and MxBuild regenerates the `javasource/` proxies, the
-`.launch`, `.classpath` and `.project` files and all of `deployment/`.
+`mx check` and MxBuild write into the project they are given: mx check
+compiles the theme into `theme-cache/` and `deployment/sass/`, and MxBuild
+regenerates the `javasource/` proxies, the `.launch`, `.classpath` and
+`.project` files and all of `deployment/`.
 
 So `docker build` copies the project to a temporary directory (in `$TMPDIR`)
-and runs all three there. Widget definitions are normalised on that copy, so the
-build uses the normalised model while the project keeps its own; run
-`mxcli fix widgets` to apply the normalisation to the project. (So the build’s
-pre-build check does not report a stale widget definition; `mxcli docker check`,
-which checks the project as stored, does.) The only thing
+and runs them there. The only thing
 written is the output directory (`.docker/build/` by default, or `-o`). Build
 output, caches and VCS folders (`deployment/`, `.docker/`, `.git/`,
 `node_modules/`, …) are not copied.
+
+## [The Project Is Built as Stored](#the-project-is-built-as-stored)
+
+The pre-build check runs on the project as stored, exactly as
+[`mxcli docker check`](#mxcli-docker-check) checks it, and MxBuild builds that same
+model: a deployment is built from what is committed. A project whose stored
+widget definitions are stale (CE0463) therefore fails the build, with each
+CE0463 labelled as one `mxcli fix widgets` clears or one that persists — the
+same verdict `docker check`, `mxcli run --local` and Studio Pro give.
+
+| Flag | Checks and builds | Use |
+| --- | --- | --- |
+| *(default)* | the project as stored | a build that matches what is committed |
+| `--update-widgets` | a copy normalised by `mx update-widgets` first | build anyway; the project keeps its stale widgets, `mxcli fix widgets` fixes them |
+| `--no-update-widgets` | the project as stored, without the re-check that labels CE0463s | scripts that passed it before |
+| `--skip-check` | no check at all | — |
+
+`--update-widgets` is how `docker build` (and `docker run` / `docker reload`,
+which build through it) behaved before ako/mxcli#1794; `docker run` and
+`docker reload` take the same flag.
 
 ## [PAD Patching](#pad-patching)
 
@@ -23205,7 +23460,7 @@ Error: project check failed: exit status 1
 `mxcli docker check` is faster than a full build (`mxcli docker build`) because it only validates the project structure without compiling or packaging. This makes it useful for:
 
 - **Quick validation** after making MDL changes
-- **Pre-build gate** – `mxcli docker build` runs `mx check` automatically before building (use `--skip-check` to bypass). That check runs on the build’s widget-normalised copy, as `docker check --update-widgets` does, so it does not report stale widget definitions; `docker check` does
+- **Pre-build gate** – `mxcli docker build` runs the same check automatically before building, on the project as stored (use `--skip-check` to bypass; `--update-widgets` checks and builds a widget-normalised copy instead)
 - **CI pipelines** – fail fast on invalid projects before spending time on a full build
 - **Iterative development** – check after each MDL script execution to catch errors early
 
@@ -34466,6 +34721,8 @@ CREATE OR MODIFY KNOWLEDGE BASE MyModule."ProductDocs" (
 ```
 CREATE [ OR MODIFY ] CONSUMED MCP SERVICE module.Name (
     ProtocolVersion: v2025_03_26,
+    Endpoint: @module.UrlConstant,
+    [ AuthenticationMicroflow: module.GetHeaders, ]
     version: '1.0'
     [, ConnectionTimeoutSeconds: 30 ]
     [, documentation: 'description' ]
@@ -34491,6 +34748,10 @@ If `OR MODIFY` is specified and the service already exists, its properties are u
 The qualified name of the consumed MCP service document.
 [`ProtocolVersion: v2025_03_26`](#protocolversion-v2025_03_26)
 The MCP protocol version. Use the token form (e.g. `v2025_03_26`), not a quoted string.
+[`Endpoint: @module.UrlConstant`](#endpoint-moduleurlconstant)
+The String constant holding the MCP server’s URL (e.g. `https://example.com/mcp`). Required in practice: at startup Agent Editor reads the constant’s value and skips a service whose constant has none (“No value could be found for the local configuration for the constant”), so the agents that use it get no tools. `mxcli check` warns on a `CREATE` without it (MDL-AGENT03), `check --references` and `exec` on an `OR MODIFY` that leaves the service without one, and `mxcli lint` on a stored service without one (MPR015); `check --references` and `exec` refuse a constant that does not exist or is not a String. Set the value per environment. On `OR MODIFY`, left out, the stored endpoint stays.
+[`AuthenticationMicroflow: module.GetHeaders`](#authenticationmicroflow-modulegetheaders)
+Optional. The microflow that supplies credentials. MCP Client calls it with no arguments and sends the `List of System.HttpHeader` it returns with each request (build the list with `MCPClient.HttpHeader_CreateAndAddToList`). `check --references` refuses one with parameters or another return type. On `OR MODIFY`, left out, the stored microflow stays; `ALTER … SET AuthenticationMicroflow = ''` removes it.
 [`version: '1.0'`](#version-10)
 The service version as a quoted string.
 [`ConnectionTimeoutSeconds: 30`](#connectiontimeoutseconds-30)
@@ -34502,8 +34763,12 @@ Optional. A human-readable description of the MCP service.
 ### [Register an MCP service](#register-an-mcp-service)
 
 ```
+mdl 1;
+CREATE CONSTANT MyModule.WebSearchUrl (Type: String, DefaultValue: 'https://example.com/mcp');
+
 CREATE CONSUMED MCP SERVICE MyModule."WebSearch" (
     ProtocolVersion: v2025_03_26,
+    Endpoint: @MyModule.WebSearchUrl,
     version: '1.0',
     ConnectionTimeoutSeconds: 30,
     documentation: 'Web search MCP server for research tasks'
@@ -34643,6 +34908,7 @@ ALTER PUBLISHED MCP SERVICE Shop.OrdersMCP
 CREATE [ OR MODIFY ] AGENT module.Name (
     UsageType: { Task | Conversational },
     model: module.ModelName,
+    SelectedModel: 'model id',
     SystemPrompt: 'prompt' | $$ multi-line prompt $$,
     UserPrompt: 'prompt' | $$ multi-line prompt $$
     [, description: 'description' ]
@@ -34717,6 +34983,10 @@ The qualified name of the agent document.
 Whether the agent is `Task` (single-turn) or `Conversational` (multi-turn).
 [`model: module.ModelName`](#model-modulemodelname)
 Qualified reference to the model document the agent uses.
+[`SelectedModel`](#selectedmodel)
+The id of the model the agent uses, one the Model document’s resource offers (e.g. `'eu.anthropic.claude-sonnet-5'`). Required in practice from Agent Editor 2.2: its import refuses an agent without one (“Model with name is referenced but could not be found for the Agent”), and that refusal stops the import of every agent document at startup. `mxcli check` warns on a `create agent` without it (MDL-AGENT02), `check --references` and `exec` on a `create or modify` that leaves the agent without one, and `mxcli lint` on a stored agent without one (MPR014). Only the id is read at runtime; it is matched against `GenAICommons.DeployedModel.Model`. To list the ids, with the app running: `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"` (reported to work in ako/mxcli#2031). `''` clears it.
+[`SelectedModelName`](#selectedmodelname)
+Optional. The display name Studio Pro stores next to the id (e.g. `'Anthropic Claude Sonnet 5'`); nothing at runtime reads it. Defaults to the id, or keeps the stored name while the id is unchanged.
 [`SystemPrompt`](#systemprompt)
 Instructions for the AI model’s behavior and persona.
 [`UserPrompt`](#userprompt)
@@ -34756,6 +35026,7 @@ On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
 CREATE AGENT MyModule."Summarizer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: 'Summarize the given text in 3 sentences.',
     UserPrompt: 'Enter text to summarize.'
 );
@@ -34767,6 +35038,7 @@ CREATE AGENT MyModule."Summarizer" (
 CREATE AGENT MyModule."Translator" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     variables: ("Language": EntityAttribute),
     SystemPrompt: 'Translate the text into {{Language}}.',
     UserPrompt: 'Hello world'
@@ -34779,6 +35051,7 @@ CREATE AGENT MyModule."Translator" (
 CREATE AGENT MyModule."Support" (
     UsageType: Chat,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     EnableBackendStreaming: true,
     SystemPrompt: 'Help the customer with their orders.'
 )
@@ -34799,6 +35072,7 @@ CREATE AGENT MyModule."Support" (
 CREATE AGENT MyModule."CodeReviewer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: $$You are a code review assistant.
 
 Review the provided code for:
@@ -34820,6 +35094,7 @@ CREATE AGENT MyModule."ResearchAssistant" (
     UsageType: Conversational,
     description: 'Research assistant with web search and documentation',
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     MaxTokens: 16384,
     ToolChoice: Auto,
     SystemPrompt: 'You are a research assistant. Use available tools.',
@@ -40660,6 +40935,8 @@ CREATE TABLE WIDGETS (
     DynamicClasses          TEXT,
     ActionType              TEXT,    -- $Type of Action / OnClickAction / ClickAction
     HasConfirmation         INTEGER, -- 1 when that action has a ConfirmationInfo
+    Caption                 TEXT,    -- own Caption, project's default language
+    Tooltip                 TEXT,    -- own Tooltip, project's default language
     ProjectId               TEXT,
     SnapshotId              TEXT
 );
@@ -40706,7 +40983,7 @@ rather than trusting a list here:
 
 | RefKind | Edge |
 | --- | --- |
-| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow |
+| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow; an agent calls its tool microflow, nanoflow or agent; a flow passes a microflow or agent document as a Java action parameter, which the action runs |
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
 | `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
@@ -40721,12 +40998,16 @@ rather than trusting a list here:
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
-| `publish` | published service runs a microflow: a REST operation, an OData resource’s read / insert / update / delete microflow, an OData action, a REST or OData service’s custom authentication microflow |
+| `publish` | published service runs a microflow: a REST operation, an OData resource’s read / insert / update / delete microflow, an OData action, a REST or OData service’s custom authentication microflow; a published MCP service’s tool microflow and authentication microflow |
 | `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
 | `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call’s request or response mapping |
 | `structure` | import or export mapping is built on a JSON structure |
+| `tool` | agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a `call`) |
+| `model` | agent runs on an AI model |
+| `key` | AI model or knowledge base reads its key from a constant |
+| `endpoint` | consumed MCP service reads its server URL from a constant (its credentials microflow is a `call`) |
 | `validate` | attribute validation rule uses a regular expression |
 | `member` | document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at |
 | `xpath` | XPath constraint names an attribute, association, enumeration value, or an entity reached through an association |
@@ -40798,11 +41079,17 @@ CREATE VIRTUAL TABLE STRINGS USING fts5(
                     -- <owner $Type>.<property>, e.g. Forms$ActionButton.Caption.
                     -- Non-translatable strings keep a plain label: page_url,
                     -- log_node, log_message, documentation, rest_path,
-                    -- task_name, domain_model_documentation, ...
+                    -- task_name, domain_model_documentation, an agent's
+                    -- system_prompt / user_prompt / tool_description, ...
     Language,       -- Language code, empty for non-translatable strings
     ElementId,      -- The owning element's $ID — what distinguishes an
                     -- enumeration's twelve values from each other
-    ModuleName
+    ModuleName,
+    WidgetId UNINDEXED -- The widget around the text: a button's caption is
+                    -- owned by its Forms$ClientTemplate and its confirmation
+                    -- by a Forms$ConfirmationInfo, so ElementId is never the
+                    -- button. '' outside a widget, and for non-translatable rows.
+                    -- A tab page's caption names the tab page, not in widgets
 );
 
 ```
@@ -44086,6 +44373,45 @@ two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`
 `AuthenticationEnabled: true` with no authentication microflow accepts every request.
 
 **Solution:** Fix the property the message names; `create published mcp service` documents each.
+
+### [MDL-AGENT02: An agent created without a selected model](#mdl-agent02-an-agent-created-without-a-selected-model)
+
+```
+agent Shop.SupportAgent has no SelectedModel: Agent Editor 2.2+ refuses to import it at
+startup ("Model with name  is referenced but could not be found"), and that stops the
+import of every agent [MDL-AGENT02]
+
+```
+
+**Cause:** Agent Editor 2.2+ (AgentEditorCommons `AgentFromModel_Validate`) requires the
+agent’s `selectedModel` id and retrieves the deployed model by it. mxbuild does not read agent
+documents, so the build is green; `ASU_AgentEditor` refuses the agent at startup and stops
+importing the rest.
+
+**Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
+of a model the Model document’s resource offers. `create or modify agent` keeps a stored value
+when the key is left out, so `check --references` and `exec` warn on it only when there is
+none to keep: a new agent, one the script dropped, or a stored agent that has none. They do not
+warn when the project’s AgentEditorCommons predates 2.2, which does not read the value. `mxcli lint` reports stored agents without one as MPR014.
+
+### [MDL-AGENT03: A consumed MCP service without an endpoint](#mdl-agent03-a-consumed-mcp-service-without-an-endpoint)
+
+```
+consumed mcp service Shop.CarrierTracking has no Endpoint: Agent Editor skips it at startup
+("No value could be found for the local configuration for the constant"), so it connects
+nowhere [MDL-AGENT03]
+
+```
+
+**Cause:** Agent Editor imports a consumed MCP service only when its `endpoint` constant has a
+value: `ConsumedMCPService_CreateUpdateFromModel` reads it with `GetConstantValue` and skips the
+service otherwise. mxbuild does not read agent documents, so the build is green; the agents that
+use the service get none of its tools.
+
+**Solution:** Add `Endpoint: @Module.UrlConstant`, a String constant holding the server URL, and
+set its value per environment. `create or modify` keeps a stored endpoint when the key is left
+out, so `check --references` and `exec` warn on it only when there is none to keep. `mxcli lint`
+reports stored services without one as MPR015.
 
 ### [MDL-LISTOP02: A list operation nested inside another one](#mdl-listop02-a-list-operation-nested-inside-another-one)
 
