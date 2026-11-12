@@ -1,3 +1,7 @@
+## 2026-11-12 -- mxcli v0.31.0 @ 4f9b651
+- +337 / -13 lines
+- Sections changed: Attach to an app you already have running — no boot at all, What have I changed in this module since installing it?, [Agent Dev-Loop Benchmark](#agent-dev-loop-benchmark), {"unit_file_reads":73,"writes_offered":49,"writes_written":49}, [Action Widgets](#action-widgets), [Agent Tables](#agent-tables), [Core Tables](#core-tables), [Description](#description-34) (+12 more)
+
 ## 2026-11-11 -- mxcli v0.31.0 @ 0036eef
 - +353 / -27 lines
 - Sections changed: Attach to an app you already have running — no boot at all, [Agent Tables](#agent-tables), [Catalog depth](#catalog-depth), [Choosing a mode](#choosing-a-mode), [Commands](#commands-2), [Convention Rules](#convention-rules), [Core Tables](#core-tables), [Examples](#examples-71) (+14 more)

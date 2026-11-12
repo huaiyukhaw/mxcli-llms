@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.31.0 @ 0036eef | Generated: 2026-11-11T08:45:32Z
+Version: mxcli v0.31.0 @ 4f9b651 | Generated: 2026-11-12T09:08:32Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -346,6 +346,8 @@ These map to the Module Settings → Java…
 - [FTS5 Full-Text Search](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/fts5.md): The catalog uses SQLite’s FTS5 extension to provide fast full-text search across all project content.
 - [Reference Tracking](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/reference-tracking.md): The cross-reference tracking system powers the callers, callees, references, and impact analysis queries. It is built during…
 - [MCP Backend: Script-to-Tool-Call Cost](https://www.mxcli.org/internals/mcp-backend-cost.html)
+- [Agent Dev-Loop Benchmark](https://huaiyukhaw.github.io/mxcli-llms/pages/internals/agent-benchmark.md): An agent building an app runs mxcli hundreds of times, and waits for each run.
+The agent dev-loop benchmark measures that wait…
 
 ## Guides
 - [Capabilities Overview](https://huaiyukhaw.github.io/mxcli-llms/pages/reference/capabilities.md): Everything mxcli can do, organized by use case.
