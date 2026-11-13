@@ -1,3 +1,7 @@
+## 2026-11-13 -- mxcli v0.31.0 @ 02fd408
+- +96 / -15 lines
+- Sections changed: 1. Syntax check (fast, no project needed), 1. Syntax check (fast, no project used), 2. Check syntax (fast, no project needed), 2. Check syntax (fast, no project used), Syntax check (fast, no project needed), Syntax check (fast, no project used), Syntax check (no project needed), Syntax check only (--no-project: do not auto-detect an .mpr in this directory) (+9 more)
+
 ## 2026-11-12 -- mxcli v0.31.0 @ 4f9b651
 - +337 / -13 lines
 - Sections changed: Attach to an app you already have running — no boot at all, What have I changed in this module since installing it?, [Agent Dev-Loop Benchmark](#agent-dev-loop-benchmark), {"unit_file_reads":73,"writes_offered":49,"writes_written":49}, [Action Widgets](#action-widgets), [Agent Tables](#agent-tables), [Core Tables](#core-tables), [Description](#description-34) (+12 more)

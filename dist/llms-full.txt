@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.31.0 @ 4f9b651
-Generated: 2026-11-12T09:08:32Z
+Version:   mxcli v0.31.0 @ 02fd408
+Generated: 2026-11-13T08:59:52Z
 
 ---
 
@@ -2677,9 +2677,11 @@ You’ve created entities, microflows, and pages. Before opening your project in
 The fastest check. It parses your MDL script and reports syntax errors without touching any `.mpr` file:
 
 ```
-mxcli check script.mdl
+mxcli check script.mdl --no-project
 
 ```
+
+Without `--no-project`, a plain `mxcli check script.mdl` run from a directory holding exactly one `.mpr` auto-detects it (it prints `Using project: ...`) and goes on to Level 2 against it. `--no-project` gives the syntax-only check wherever you run it.
 
 This catches:
 
@@ -2822,8 +2824,8 @@ BEGIN
 END;
 EOF
 
-# 2. Check syntax (fast, no project needed)
-mxcli check changes.mdl
+# 2. Check syntax (fast, no project used)
+mxcli check changes.mdl --no-project
 
 # 3. Check references (needs project, still fast)
 mxcli check changes.mdl -p app.mpr --references
@@ -3687,8 +3689,8 @@ A list of errors the AI should avoid. For example, `write-microflows.md` warns a
 Steps the AI should follow after writing MDL to confirm correctness:
 
 ```
-# Syntax check (no project needed)
-./mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+./mxcli check script.mdl --no-project
 
 # Syntax + reference validation
 ./mxcli check script.mdl -p app.mpr --references
@@ -5635,8 +5637,8 @@ CREATE PAGE CRM.Customer_Overview (
 Validate after each script to catch errors early:
 
 ```
-# Syntax check (fast, no project needed)
-mxcli check domain-model.mdl
+# Syntax check (fast, no project used)
+mxcli check domain-model.mdl --no-project
 
 # Reference validation (checks entity/microflow names exist)
 mxcli check pages.mdl -p app.mpr --references
@@ -5728,8 +5730,8 @@ mxcli provides a multi-level validation pipeline. The agent uses these tools to 
 ## [Validation Steps](#validation-steps)
 
 ```
-# 1. Syntax check (fast, no project needed)
-mxcli check script.mdl
+# 1. Syntax check (fast, no project used)
+mxcli check script.mdl --no-project
 
 # 2. Reference validation (checks entity/microflow names exist)
 mxcli check script.mdl -p app.mpr --references
@@ -6398,8 +6400,8 @@ EXECUTE SCRIPT './scripts/setup_domain_model.mdl';
 You can validate a script without connecting to a project:
 
 ```
-# Syntax only
-mxcli check script.mdl
+# Syntax only (--no-project: do not auto-detect an .mpr in this directory)
+mxcli check script.mdl --no-project
 
 # Syntax + reference validation (requires project)
 mxcli check script.mdl -p app.mpr --references
@@ -16791,6 +16793,12 @@ mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 The catalog is cached in `.mxcli/catalog.db` next to the MPR file. On subsequent refreshes, mxcli checks whether the project has changed and only rebuilds if necessary (unless `FORCE` is specified).
 
+### [Progress output](#progress-output)
+
+A build prints a line per table (`✓ Entities: 111`) only when its output is a terminal. Piped, logged or run by an agent, it prints nothing per table while it is quick, and the latest progress line every 15 seconds while it is slow (`… building catalog, source 250/300 documents (32s)`), so a build of several minutes still shows it is running. Lines that carry information, such as the incremental summary and documents that could not be described, print either way.
+
+`-q` / `--quiet` works on every command: it drops the warning banner and the connection and status messages, and sends what catalog progress remains to stderr.
+
 ### [Incremental rebuilds](#incremental-rebuilds)
 
 A rebuild after a save does not start from scratch. The cache records which document every row came from, and the next rebuild of the same level (fast, `FULL` or `FULL SOURCE`) starts from the cached catalog and produces again only the rows of:
@@ -17079,6 +17087,37 @@ FROM CATALOG.FLOWS f
 JOIN CATALOG.ACTIVITIES n ON n.Id = f.OriginId
 JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
 WHERE f.FlowType = 'AnnotationFlow';
+
+```
+### [CATALOG.WORKFLOW\_ACTIVITIES](#catalogworkflow_activities)
+
+One row per activity of a workflow, in walk order: the main flow, each
+activity followed by the paths of its boundary events, then the event
+sub-processes. Populated by every catalog build. A slot that names nothing is
+NULL.
+
+| Column | Description |
+| --- | --- |
+| `Id` | The activity’s ID |
+| `WorkflowId`, `WorkflowQualifiedName`, `ModuleName` | The workflow it belongs to (`CATALOG.WORKFLOWS.Id`) |
+| `Sequence` | Walk order within the workflow |
+| `Name`, `Caption` | As in Studio Pro |
+| `ActivityType` | `UserTask`, `MultiUserTask`, `SystemTask`, `CallMicroflow`, `AIAgentTask`, `CallWorkflow`, `Decision`, `ParallelSplit`, `JumpTo`, `WaitForTimer`, `WaitForNotification`, `StartWorkflow`, `EndWorkflow`, and the event sub-process and path-end kinds |
+| `Microflow` | The microflow a system task, call-microflow activity or AI agent task runs |
+| `UserSourceMicroflow` | A user task’s targeting microflow (users or groups) |
+| `OnCreatedMicroflow` | A user task’s on-created microflow |
+| `CompletionMicroflow` | A multi-user task’s completion microflow |
+| `Page`, `UserTaskEntity` | A user task’s page and task entity |
+| `CalledWorkflow` | The workflow a call-workflow activity calls |
+
+`CATALOG.REFS` records that a workflow calls a microflow; this table says from
+which kind of activity and which slot.
+
+```
+-- Microflows that system tasks run, without the WF_SYS_ prefix
+SELECT WorkflowQualifiedName, Name, Microflow
+FROM CATALOG.WORKFLOW_ACTIVITIES
+WHERE ActivityType = 'SystemTask' AND Microflow NOT LIKE '%.WF_SYS_%';
 
 ```
 ### [CATALOG.PAGES](#catalogpages)
@@ -24647,8 +24686,8 @@ These diagnostics appear as warnings or errors in the Problems panel, identical 
 The same checks available in the extension can be run from the command line:
 
 ```
-# Syntax check only (no project needed)
-mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+mxcli check script.mdl --no-project
 
 # Syntax + reference validation
 mxcli check script.mdl -p app.mpr --references
@@ -29859,6 +29898,12 @@ report says which: `Modified microflow: M.F (spliced: 1 edited in place)` for
 a node that kept its element ID — an activity of the same kind, a decision’s
 condition, a return’s value — and `replaced with new element IDs` for one
 that did not.
+
+An activity edited in place keeps the stored value of every property MDL has
+no spelling for — its documentation, and a REST call’s proxy setting (`Override`
+with its host, port and credential expressions, or `NoProxy`). The statement
+cannot state them, so it cannot change them either; a `drop` + `create`
+rebuild still writes the defaults.
 
 ## [Examples](#examples-42)
 
@@ -41732,9 +41777,45 @@ once). The session’s own scripts are the same at both sizes, so the *Scaling*
 table at the end of the output shows what each command costs more purely
 because the project around it is bigger.
 
+## [The scale session](#the-scale-session)
+
+The two sizes above top out below a thousand units. What a statement costs in
+a project of thousands is a different question, and the one
+[mendixlabs/mxcli#1842](https://github.com/mendixlabs/mxcli/issues/1842)
+reported: `exec` of an update cost time linear in the project size, about
+0.27 s more per statement for every 1,000 units, and `check` cost seconds per
+run before it had looked at a statement. At a few hundred units both are
+inside the noise.
+
+**scale** is PedApp with 4,000 filler microflows executed into it (the
+`seed-filler` line, run once; `-scale-microflows` changes the number). Each has
+six activities and refers to nothing, so the project grows by exactly that
+many units. The session then runs:
+
+| Step | Command | What it shows |
+| --- | --- | --- |
+| `check-cold` | `check --references` of one update | a check’s cost per run, on a project whose files have not been read yet |
+| `check-one` | the same again | a check’s cost per run |
+| `check-batch` | `check --references` of 100 updates |  |
+| `exec-batch` | `exec --no-check` of those 100 updates | the update path of the report: an existing flow, one text changed |
+| `re-exec-batch` | the same script again | must change nothing |
+| `new-batch` | `exec --no-check` of 100 new microflows |  |
+
+`-scale-batch` changes the 100. `exec` runs with `--no-check` so that the
+check is timed in its own steps and not twice.
+
+The **Per statement** table at the end divides each step by the statements in
+its script, and then by the project’s size in thousands of units. The last
+column is the one to watch: a cost that follows the project shows there, and
+one that does not stays near zero however large the project is. On v0.31.0 an
+update measured 307 ms per statement at 2,374 units, about 130 ms per
+statement per 1,000 units; on the build that fixed it, 15 ms and 6 ms.
+
+`BENCH_FLAGS='-sizes small,large'` leaves the session out.
+
 ## [The running-app session](#the-running-app-session)
 
-`BENCH_RUNTIME=<Mendix version>` adds a third session: validating and building
+`BENCH_RUNTIME=<Mendix version>` adds a fourth session: validating and building
 the project with mx, and what an agent waits for once the app is up. Measured sessions spend more wall time here than in every
 mxcli-only command together.
 
@@ -41750,7 +41831,7 @@ mxcli-only command together.
 | `stop` | `run stop` |  |
 | `test-cold` | `test --local --db-type hsqldb` | a test run that boots its own runtime |
 
-It differs from the other two sessions in four ways:
+It differs from the other sessions in four ways:
 
 - **The project is created by `mxcli new`**, with the session’s entities,
   microflows and pages authored into it. PedApp cannot be built — the fixture
