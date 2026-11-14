@@ -1,3 +1,7 @@
+## 2026-11-14 -- mxcli v0.31.0 @ a051fa6
+- +240 / -13 lines
+- Sections changed: Check if overall score is above 70, Park those edits as re-executable MDL, then update over them, [Project Reports](#project-reports), measure, keep the data, render, with a person's names and verdicts, without measuring again, [Architecture](#architecture), [Architecture](#architecture-1), [Architecture](#architecture-2) (+20 more)
+
 ## 2026-11-13 -- mxcli v0.31.0 @ 02fd408
 - +96 / -15 lines
 - Sections changed: 1. Syntax check (fast, no project needed), 1. Syntax check (fast, no project used), 2. Check syntax (fast, no project needed), 2. Check syntax (fast, no project used), Syntax check (fast, no project needed), Syntax check (fast, no project used), Syntax check (no project needed), Syntax check only (--no-project: do not auto-detect an .mpr in this directory) (+9 more)
