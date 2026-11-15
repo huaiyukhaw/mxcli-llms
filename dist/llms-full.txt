@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.31.0 @ a051fa6
-Generated: 2026-11-14T08:28:45Z
+Version:   mxcli v0.31.0 @ 1550cdd
+Generated: 2026-11-15T08:44:54Z
 
 ---
 
@@ -24517,6 +24517,14 @@ it is copied back, so the engine owns the `.mpr`:
   are recorded in the plan template and `--plan` puts them back; `--plan`
   stops before it touches the model while a text conflict is still open.
 
+The exit code tells a script which case it is in: **0** merged (or already
+up to date), **1** failed (`mx` missing, the project open in Studio Pro, a
+worktree checkout or the hash gate refusing), **3** stopped for a decision a
+person must take — a model conflict the engine leaves open, or text
+conflicts left for manual resolution. Nothing is committed on 1 or 3. Once
+the merge commits, the plan template beside the `.mpr` is removed; a plan
+file you passed from another path is left alone.
+
 Merging is still never done by plain `git merge` on a Mendix repository: use
 `mxcli git merge` or Studio Pro, never a textual merge of `mprcontents/`.
 Like every mxcli write, the command is refused while Studio Pro has the
@@ -37337,7 +37345,7 @@ are stored as `Projects$JarDependency` entries in `Projects$ModuleSettings`.
 
 ```
 ALTER MODULE module_name
-  ADD JAR DEPENDENCY (
+  ADD JAR DEPENDENCY [IF NOT EXISTS] (
     group    = 'groupId',
     artifact = 'artifactId',
     version  = 'version',
@@ -37368,6 +37376,23 @@ document. These are the same dependencies shown in Studio Pro under
 
 Multiple actions can be chained in a single `ALTER MODULE` statement.
 
+A bare `ADD JAR DEPENDENCY` fails when the module already declares the same
+`group:artifact`, so a script containing it cannot be executed twice.
+`ADD JAR DEPENDENCY IF NOT EXISTS` is the re-runnable form, with the same
+semantics as `ADD ATTRIBUTE IF NOT EXISTS` and `CREATE ENTITY IF NOT EXISTS`:
+
+- When the coordinate is absent, it is added exactly as the bare form would.
+- When it is present, it is **left untouched** and a `… already exists — skipped`
+  notice is printed — even if the stored `version` or `included` differs from the
+  statement. The notice then names the difference and the `SET JAR DEPENDENCY`
+  that would change it; `IF NOT EXISTS` never updates.
+- When every action of the statement was skipped, nothing is written and the
+  statement reports `Unchanged jar dependencies for module '…'`.
+
+To make a script both re-runnable and authoritative about the version, follow
+the guarded `ADD` with a `SET … VERSION`: restating the stored version writes
+nothing either.
+
 ## [Parameters](#parameters-83)
 
 [**module\_name**](#module_name-5)
@@ -37387,6 +37412,18 @@ at build time. Defaults to `true`.
 ```
 ALTER MODULE MyModule
   ADD JAR DEPENDENCY (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+
+```
+### [Add a dependency from a re-runnable script](#add-a-dependency-from-a-re-runnable-script)
+
+```
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
     group    = 'org.duckdb',
     artifact = 'duckdb_jdbc',
     version  = '1.1.3',
@@ -42024,7 +42061,13 @@ With a baseline, each step has these columns:
   disturbed by a busy machine than wall time, and blind to waiting on the disk.
   A step that is slower in both columns is slower; one that is slower in wall
   time only is more often noise or I/O.
-- **reads** — unit files the command read, as counted by mxcli itself.
+- **reads** — the units the command read, as counted by mxcli itself and
+  shown as `files + store`: unit files opened, and units served from the
+  persisted unit store (`.mxcli/cache/`). Together they are every read not
+  served from memory. A unit read a second time comes from the store, so it
+  is the second figure that shows a command reading the project twice. A
+  binary too old to count store reads shows the first figure alone, and is
+  compared on it.
 - **files changed** — unit files added, rewritten with different bytes, or
   removed, measured by comparing the project before and after the command.
 
@@ -42060,7 +42103,7 @@ speed.
 | Flag | Meaning |
 | --- | --- |
 | `slower` / `faster` | wall ratio beyond the threshold |
-| `counts-changed` | the two binaries read or changed a different number of files |
+| `counts-changed` | the two binaries read a different number of units, or changed a different number of files |
 | `counts-unstable` | one binary’s counts differed between repetitions — a deterministic session should never show this |
 | `wrote-on-re-exec` | re-running a settled script changed a file. This is a defect ([Idempotent Writes](#idempotent-writes)), and the only finding that makes the run exit non-zero besides a failing command |
 
@@ -42077,12 +42120,16 @@ any mxcli command:
 ```
 MXCLI_STATS_FILE=/tmp/stats.jsonl mxcli exec bulk-alter.mdl -p app.mpr
 cat /tmp/stats.jsonl
-# {"unit_file_reads":73,"writes_offered":49,"writes_written":49}
+# {"unit_file_reads":73,"unit_store_hits":212,"writes_offered":49,"writes_written":49}
 
 ```
 
 One line is appended per project connection closed, so a command that
-reconnects, or starts child mxcli processes, appends several. `writes_written`
+reconnects, or starts child mxcli processes, appends several. `unit_store_hits`
+is the units read from the persisted unit store (`.mxcli/cache/`) instead of
+their files: with `unit_file_reads` it is every read that was not served from
+memory, which is how a command that reads the same unit twice shows up when no
+file was opened twice. `writes_written`
 counts stored units rewritten after reconciliation; a newly created document
 is not in it, which is why the benchmark also counts changed files from
 outside.
@@ -42139,7 +42186,7 @@ it.
 | --- | --- |
 | `slower-two-runs` | A step’s wall ratio against that night’s baseline was above 1.20 in the latest run **and** in the one before. One slow night is noise too often to report. |
 | `drift` | The median of a step’s last three runs is more than 1.30 times the median of the seven before them. Needs ten runs, and a step of at least 100 ms. |
-| `counts-increased` | The candidate read more unit files, or landed more writes, than the baseline in the same run. Counts carry no noise, so the first night is reported. |
+| `counts-increased` | The candidate read more units (files and store reads together, where both binaries report the second), or landed more writes, than the baseline in the same run. Counts carry no noise, so the first night is reported. |
 | `wrote-on-re-exec` | A settled script changed a unit file. |
 
 `drift` compares different nights, and so different machines. Each run is

@@ -1,3 +1,7 @@
+## 2026-11-15 -- mxcli v0.31.0 @ 1550cdd
+- +53 / -6 lines
+- Sections changed: {"unit_file_reads":73,"unit_store_hits":212,"writes_offered":49,"writes_written":49}, {"unit_file_reads":73,"writes_offered":49,"writes_written":49}, [Description](#description-85), [Examples](#examples-97), [Merging branches: `mxcli git merge`](#merging-branches-mxcli-git-merge), [Reading the output](#reading-the-output), [Synopsis](#synopsis-85), [The trend](#the-trend)
+
 ## 2026-11-14 -- mxcli v0.31.0 @ a051fa6
 - +240 / -13 lines
 - Sections changed: Check if overall score is above 70, Park those edits as re-executable MDL, then update over them, [Project Reports](#project-reports), measure, keep the data, render, with a person's names and verdicts, without measuring again, [Architecture](#architecture), [Architecture](#architecture-1), [Architecture](#architecture-2) (+20 more)
