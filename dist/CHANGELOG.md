@@ -1,3 +1,7 @@
+## 2026-11-16 -- mxcli v0.32.0 @ 121c9b5
+- +81 / -12 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.32.0](#release-mxcli-v0320), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2), [Upgrading](#upgrading-3), [Upgrading](#upgrading-4), [Upgrading](#upgrading-5) (+9 more)
+
 ## 2026-11-15 -- mxcli v0.31.0 @ 1550cdd
 - +53 / -6 lines
 - Sections changed: {"unit_file_reads":73,"unit_store_hits":212,"writes_offered":49,"writes_written":49}, {"unit_file_reads":73,"writes_offered":49,"writes_written":49}, [Description](#description-85), [Examples](#examples-97), [Merging branches: `mxcli git merge`](#merging-branches-mxcli-git-merge), [Reading the output](#reading-the-output), [Synopsis](#synopsis-85), [The trend](#the-trend)
