@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.32.0 @ 121c9b5
-Generated: 2026-11-16T08:56:20Z
+Version:   mxcli v0.32.0 @ b7dc2f8
+Generated: 2026-11-17T10:01:45Z
 
 ---
 
@@ -18019,8 +18019,16 @@ to make.
 ```
 mxcli brain check -p app.mpr             # every shard
 mxcli brain check --changed -p app.mpr   # only shards this branch touched
+mxcli brain check --strict -p app.mpr    # also fail on requirements no test can prove
 
 ```
+
+A requirement whose anchors are all module roles, enumerations, constants or
+other kinds no microflow implements is built, but no test can ever be linked to
+it. `brain check` lists it as `UNPROVABLE` (a warning; `--strict` makes it a
+failure), and `brain capture --slice` prints the same hint when the model is
+there to resolve the anchors. Add the microflow, page or entity that implements
+the requirement as an anchor. `report traceability` uses the same list of kinds.
 
 Two independent things are checked.
 
@@ -18106,6 +18114,29 @@ implement it.
 
 Misfiling is not checked for slices: a slice spans modules by design.
 
+### [Milestones](#milestones)
+
+A specification’s milestones group its slices. The milestone is part of the
+slice, not a separate file:
+
+```
+mxcli brain milestone "M1 — accounts" --slice 01-accounts --slice 02-profiles -p app.mpr
+mxcli brain milestone "M2 — approvals" --requirement a1b2c3 -p app.mpr
+mxcli brain milestone -p app.mpr            # list them
+
+```
+
+That writes `milestone: "M1 — accounts"` in the slice file’s frontmatter, and a
+`Milestone: `M2 — approvals``  line on a requirement placed apart from its
+slice. `brain plan` adds a MILESTONE column, `brain plan --json` a `milestone`
+per slice, and `report traceability` groups by them. Milestones are ordered by
+where they first appear, walking the slices in name order. `--clear` takes
+slices or requirements out again.
+
+A project that kept milestones in `docs/brain/plan/traceability.json` moves them
+with `mxcli brain milestone --import docs/brain/plan/traceability.json`, which
+removes the file once everything in it is placed.
+
 ### [Before there is a project](#before-there-is-a-project)
 
 The brain does not need a model to exist: capture requirements from a
@@ -18156,6 +18187,44 @@ refused. A file the project would overwrite is reported before anything moves.
 
 So the brain lives where the project will live, not in a workspace above it:
 the directory is the project root from the first requirement onwards.
+
+## [Verdicts: built, but not as asked](#verdicts-built-but-not-as-asked)
+
+A requirement is built when its anchors resolve. When what was built differs from
+what was asked, record it on the entry that explains it — a decision, or an open
+question that holds it — never on the requirement:
+
+```
+mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
+mxcli brain edit 7f00aa --partly-meets a1b2c3:"no export yet" -p app.mpr
+
+```
+
+Each flag writes a line in the entry’s body (`Changes requirement `a1b2c3`: …`).
+`brain list --json` returns them parsed as `verdicts: [{requirement, kind, reason}]`,
+and `brain plan --json` gives every requirement its effective `status` — `built`,
+`partial`, `changed`, `not built` or `not traceable` — with the reason.
+
+`brain check` fails on a verdict naming a requirement the plan does not have, on a
+verdict written on a requirement, and on a requirement that is both changed and
+partly met. Several verdicts of one kind are fine. A verdict on an open question
+counts until the question is answered; `brain resolve` says what happens to it: a
+question filed on a slice becomes a requirement and drops the line, a module
+question becomes a decision and keeps it.
+
+## [Accepting a lint finding](#accepting-a-lint-finding)
+
+A lint finding the project keeps on purpose is a decision. Record it with
+`--accepts`, on the element it is about, and lint stops counting it:
+
+```
+mxcli brain capture "Pages bind Core.Medewerker directly" --accepts "ARCH001:the shell owns it" -a @Core.Medewerker -p app.mpr
+
+```
+
+See [mxcli lint](#accepted-findings-decisions-in-the-project-brain).
+`brain list --json` returns them as `accepts: [{rule, element, reason}]`.
 
 ## [Open questions](#open-questions)
 
@@ -18378,6 +18447,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
 | `brain resolve <id> "<answer>"` | Answers it, turning it into a decision in place |
 | `brain plan [--slice <name>]` | Each slice’s requirements counted against the model |
+| `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> | --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
 | `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |
@@ -19109,6 +19179,32 @@ Lint baseline lint-baseline.json: 1 new, 1518 already known, 0 fixed
 The file is sorted JSON, so re-recording an unchanged project rewrites the same
 bytes and a committed baseline diffs only where findings changed.
 
+## [Accepted Findings: Decisions in the Project Brain](#accepted-findings-decisions-in-the-project-brain)
+
+Accepting a finding is a project decision, so it is recorded in the
+[project brain](#project-brain) with its reason, on the element it is about:
+
+```
+mxcli brain capture "Beperking has no entity access rules on purpose" \
+  --accepts "SEC001:read only through DS_Beperkingen_Inzien, which logs every view" \
+  -a @Dossier.Beperking -p app.mpr
+mxcli brain capture "Demo users stay on in the demo app" --accepts "SEC003:never deployed" -p app.mpr
+
+```
+
+That writes `Accepts lint `SEC001` on `@Dossier.Beperking`: …` in the decision.
+An unanchored decision accepts a project-wide finding (`on `project`` ); a module
+anchor accepts the rule anywhere in that module.
+
+`mxcli lint` then leaves accepted findings out of the open findings, the summary
+and the exit code, and says how many there are on stderr; `--show-accepted` lists
+each with the decision that accepts it. An acceptance whose rule ran but no longer
+fires on its element is reported as **stale**, so the decision does not outlive the
+finding. The scored `mxcli report` counts accepted findings apart and does not score
+them, and `mxcli report security` shows a rule’s verdict as *accepted (brain …)*.
+`brain check` refuses an acceptance on an open question or requirement, on an element
+that does not resolve, or naming a rule lint does not have.
+
 ## [CI Integration](#ci-integration)
 
 ### [GitHub Actions](#github-actions)
@@ -19289,6 +19385,7 @@ the kinds below answer specific questions instead of scoring.
 | `security` | Who can read what, which client-callable flows trust the caller, which defaults are unsafe? |
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
+| `map` | What does the app contain, and how does it fit together? (an interactive guide) |
 
 ## [Shared shape](#shared-shape)
 
@@ -19406,18 +19503,59 @@ mxcli report traceability -p app.mpr --junit results.xml --journeys journeys.jso
 
 ```
 
-`partial` and `changed` come from decisions whose body says
-`Partly meets requirement `<id>`: …` or `Changes requirement `<id>`: …`;
-`brain check` fails on such a line naming an id the plan does not have.
-Milestones are read from `docs/brain/plan/traceability.json`
-(`{"milestones":[{"name":"M1","slices":["01-accounts"]}]}`); `brain plan --json`
-now lists each requirement with each anchor’s resolution.
+`partial` and `changed` come from a decision or open question whose body says
+`Partly meets requirement `<id>`: …` or `Changes requirement `<id>`: …`
+(`brain capture --partly-meets <id>:<reason>` / `--changes` write it). The status
+is brain’s: `brain plan --json` reports the same `status` per requirement, and
+`brain check` fails on a verdict naming an unknown id, one on a requirement, and a
+requirement that is both changed and partly met.
+Milestones are part of the plan: `mxcli brain milestone "M1" --slice 01-accounts`
+writes `milestone: "M1"` in the slice’s frontmatter, and `--requirement <id>`
+places one requirement apart from its slice. The older
+`docs/brain/plan/traceability.json` is still read, with a warning, until
+`mxcli brain milestone --import` moves it into the plan. `brain plan --json` lists
+each requirement with each anchor’s resolution, and each slice’s milestone.
+
+## [map](#map)
+
+One interactive page for someone who did not build the app: user roles and where
+each starts, the systems around the app and what runs without a user; the module
+map (domain use apart from screen links, the hub and weak links behind toggles);
+inside each module its data model with other modules’ entities as ghosts and the
+flows that write each entity, entry points grouped by what starts them, and the call
+closure of one entry point; page flows per role, with the pages a role may open but
+no click path reaches; associations crossing module boundaries; naming prefixes,
+shared flows and an entry-point × module matrix; published operations with their
+call closure, consumed services, HTTP calls, queues, schedules, Java actions and
+constants; and a searchable index of every document with “uses” and “used by”.
+
+```
+mxcli report map -p app.mpr -o map.html
+mxcli report map -p app.mpr --format json -o map.json   # the same data for another viewer
+
+```
+
+With a project brain that has a plan, the map adds a **Features** tab: one feature
+per slice, with its requirements, milestone and status, and what its anchors reach
+— flows (the anchored ones, their footprints and call closure), the pages and
+entities those lead to, entry points started from outside the feature, and the
+roles that may open its pages. **Reached by no feature** lists the pages, entry
+points and persistent entities no requirement leads to. Features are derived from
+the plan, so there is no feature map to maintain alongside it.
+
+The page is self-contained and draws one diagram at a time. Module purposes come
+from domain-model documentation, or from `module:<Name>` notes in `--annotations`.
+
+Entry points include two kinds of reference the catalog records for this: `by_name`
+(a constant whose value is a flow’s qualified name) and `queue` (a task queue runs
+the flow a call placed in it). Both also keep such flows off the architecture
+report’s unused list.
 
 ## [Skills](#skills-2)
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
-`report-security`, `report-performance`, `report-traceability`.
+`report-security`, `report-performance`, `report-traceability`, `report-map`.
 
 # [Claude Code Companion](#claude-code-companion)
 
@@ -28179,7 +28317,7 @@ This is useful for getting a quick birds-eye view of what a project contains wit
 ## [Parameters](#parameters-16)
 
 [*DEPTH*](#depth)
-Controls the level of detail in the output. `1` shows one line per module with element counts. `2` (default) shows documents with their signatures. `3` shows full detail including typed attributes and named parameters.
+Controls the level of detail in the output. `1` shows one line per module with element counts. `2` (default) shows documents with their signatures. `3` shows full detail including typed attributes and named parameters. At depth 2 and 3 a module’s documents are nested under the folders they sit in (`Orders/`, then `Actions/` inside it), after the documents at the module root; entities stay at the root, as the domain model has no folders.
 [*module*](#module-8)
 When `IN <module>` is specified, restricts output to a single module. Implicitly uses depth 2 unless overridden.
 [*ALL*](#all)
@@ -35301,7 +35439,7 @@ Whether the agent is `Task` (single-turn) or `Conversational` (multi-turn).
 [`model: module.ModelName`](#model-modulemodelname)
 Qualified reference to the model document the agent uses.
 [`SelectedModel`](#selectedmodel)
-The id of the model the agent uses, one the Model document’s resource offers (e.g. `'eu.anthropic.claude-sonnet-5'`). Required in practice from Agent Editor 2.2: its import refuses an agent without one (“Model with name is referenced but could not be found for the Agent”), and that refusal stops the import of every agent document at startup. `mxcli check` warns on a `create agent` without it (MDL-AGENT02), `check --references` and `exec` on a `create or modify` that leaves the agent without one, and `mxcli lint` on a stored agent without one (MPR014). Only the id is read at runtime; it is matched against `GenAICommons.DeployedModel.Model`. To list the ids, with the app running: `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"` (reported to work in ako/mxcli#2031). `''` clears it.
+The id of the model the agent uses, one the Model document’s resource offers (e.g. `'eu.anthropic.claude-sonnet-5'`). Required in practice from Agent Editor 2.2: its import refuses an agent without one (“Model with name is referenced but could not be found for the Agent”), and that refusal stops the import of every agent document at startup. Studio Pro reports an agent with a `Model` and no selected model as AE018 (“Model version is required for an agent”), so for such an agent MDL-AGENT02 is an error and `exec` refuses it: `mxcli check` on a `create agent` without it, `check --references` and `exec` on a `create or modify` that leaves the agent without one. With no `Model` it is a warning. `mxcli lint` reports a stored agent without one (MPR014). Only the id is read at runtime; it is matched against `GenAICommons.DeployedModel.Model`. To list the ids, with the app running: `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"` (reported to work in ako/mxcli#2031). `''` clears it.
 [`SelectedModelName`](#selectedmodelname)
 Optional. The display name Studio Pro stores next to the id (e.g. `'Anthropic Claude Sonnet 5'`); nothing at runtime reads it. Defaults to the id, or keeps the stored name while the id is unchanged.
 [`SystemPrompt`](#systemprompt)
@@ -36961,6 +37099,7 @@ create or modify module Inventory (
 
 ```
 ALTER MODULE module_name SET ( Version: 'x.y.z', ModuleType: app | addon )
+ALTER MODULE module_name SET DOCUMENTATION 'text'
 
 ```
 ## [Description](#description-80)
@@ -36973,6 +37112,8 @@ Changes a module’s settings, the General tab of Studio Pro’s *Module setting
 | `ModuleType` | `app` | `addon` | Module type |
 
 An unknown key, a key named twice, a version that is not SemVer, or a type other than `app`/`addon` is an error from both `check` and `exec`. `ModuleType: addon` needs Mendix 9.12 or later.
+
+`SET DOCUMENTATION` writes the module’s documentation: one sentence on what the module is for. Mendix keeps it on the module’s domain model (a module has no documentation property of its own), which is the same property a `/** … */` comment before `CREATE OR MODIFY MODULE` sets and `DESCRIBE MODULE` prints. `''` clears it, and stating the stored text again writes nothing. The architecture report and the software map show it as the module’s purpose, and lint rule QUAL002 reports an app module without it.
 
 Making a module an add-on hides every element not marked *Usable* from the rest of the app: a reference from another module becomes CE1406. Run `mxcli check script.mdl -p app.mpr --references` to see which references that affects.
 
@@ -36988,6 +37129,9 @@ alter module Inventory set (ModuleType: addon);
 
 -- Both at once
 alter module Inventory set (Version: '3.0.0', ModuleType: app);
+
+-- What the module is for
+alter module Inventory set documentation 'Stock levels, reservations and moves between warehouses.';
 
 ```
 ## [See Also](#see-also-118)
@@ -45057,9 +45201,13 @@ two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`
 ```
 agent Shop.SupportAgent has no SelectedModel: Agent Editor 2.2+ refuses to import it at
 startup ("Model with name  is referenced but could not be found"), and that stops the
-import of every agent [MDL-AGENT02]
+import of every agent; Studio Pro reports AE018 "Model version is required for an agent"
+[MDL-AGENT02]
 
 ```
+
+**Severity:** an error, refusing `exec`, when the agent names a `Model` — Studio Pro’s AE018
+(ako/mxcli#2289). A warning when it has no `Model` at all.
 
 **Cause:** Agent Editor 2.2+ (AgentEditorCommons `AgentFromModel_Validate`) requires the
 agent’s `selectedModel` id and retrieves the deployed model by it. mxbuild does not read agent
@@ -45068,9 +45216,9 @@ importing the rest.
 
 **Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
 of a model the Model document’s resource offers. `create or modify agent` keeps a stored value
-when the key is left out, so `check --references` and `exec` warn on it only when there is
+when the key is left out, so `check --references` and `exec` flag it only when there is
 none to keep: a new agent, one the script dropped, or a stored agent that has none. They do not
-warn when the project’s AgentEditorCommons predates 2.2, which does not read the value. `mxcli lint` reports stored agents without one as MPR014.
+flag it when the project’s AgentEditorCommons predates 2.2, which does not read the value. `mxcli lint` reports stored agents without one as MPR014.
 
 ### [MDL-AGENT03: A consumed MCP service without an endpoint](#mdl-agent03-a-consumed-mcp-service-without-an-endpoint)
 

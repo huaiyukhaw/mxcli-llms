@@ -1,3 +1,7 @@
+## 2026-11-17 -- mxcli v0.32.0 @ b7dc2f8
+- +160 / -12 lines
+- Sections changed: [Project Reports](#project-reports), [Accepted Findings: Decisions in the Project Brain](#accepted-findings-decisions-in-the-project-brain), [Accepting a lint finding](#accepting-a-lint-finding), [Checking](#checking), [Commands](#commands-2), [Description](#description-80), [Examples](#examples-92), [Parameters](#parameters-16) (+8 more)
+
 ## 2026-11-16 -- mxcli v0.32.0 @ 121c9b5
 - +81 / -12 lines
 - Sections changed: [Blog](#blog), [Release: mxcli v0.32.0](#release-mxcli-v0320), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2), [Upgrading](#upgrading-3), [Upgrading](#upgrading-4), [Upgrading](#upgrading-5) (+9 more)

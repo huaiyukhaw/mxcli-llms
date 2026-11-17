@@ -11,3 +11,4 @@ the kinds below answer specific questions instead of scoring.
 | `security` | Who can read what, which client-callable flows trust the caller, which defaults are unsafe? |
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
+| `map` | What does the app contain, and how does it fit together? (an interactive guide) |
