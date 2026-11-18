@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.32.0 @ b7dc2f8
-Generated: 2026-11-17T10:01:45Z
+Version:   mxcli v0.32.0 @ 9d76448
+Generated: 2026-11-18T09:39:14Z
 
 ---
 
@@ -3656,6 +3656,7 @@ CREATE MICROFLOW Module.Name(
     $param: Module.Entity
 ) RETURNS Boolean AS $result
 BEGIN
+    DECLARE $result Boolean = false;
     -- activities here
 END;
 
@@ -10617,7 +10618,10 @@ create page MyModule.Request_Review (Title: 'Review', Layout: Atlas_Core.Atlas_D
 
 ```
 
-It is accepted on widgets, tab pages and navigation-list items. `mxcli check --references` refuses a role the project (or the script, above the statement)
+It is accepted on widgets, tab pages and navigation-list items. The roles must be
+roles of the page’s own module: a role of another module builds with CE0149
+(“reselect roles”) and `mxcli check` refuses it (MDL-GRANT04), whether or not the
+role may view the page. `mxcli check --references` refuses a role the project (or the script, above the statement)
 does not define. `alter page … set Visible` changes only the condition and keeps
 the stored roles.
 
@@ -21885,6 +21889,17 @@ For one-off queries without the REPL:
 
 ```
 mxcli sql --driver postgres --dsn 'postgres://user:pass@localhost:5432/mydb' "SELECT * FROM users"
+
+```
+
+The subcommand is **read-only by default**. A statement that is not a read
+(`INSERT`, `UPDATE`, `DELETE`, `MERGE`, DDL, procedure calls) is refused, and a
+read runs in a read-only transaction that is rolled back, so a write inside a
+read — a data-modifying `WITH` — fails instead of changing data. Pass `--write`
+to change the database; the output then reports the rows affected:
+
+```
+mxcli sql --alias mydb --write "DELETE FROM orders WHERE id = 42"
 
 ```
 ## [Related Pages](#related-pages-6)
@@ -43328,7 +43343,7 @@ Without this, module install order silently decided which widget versions the pr
 
 ## [When the installed version is no longer published](#when-the-installed-version-is-no-longer-published)
 
-`diff` and `update` both download the installed version to establish the local-edit baseline, so both fail when it has been unpublished — as NanoflowCommons 6.0.0 has, while a blank 11.13 app still ships it. `--force` does not help: it overrides a finding, and there is no finding to override. `mxcli marketplace update … --no-baseline` accepts that the question cannot be answered and updates anyway, discarding any local edits to that module without naming them.
+`diff` and `update` both download the installed version to establish the local-edit baseline, so both fail when it has been unpublished — as NanoflowCommons 6.0.0 has, while a blank 11.13 app still ships it. `--force` does not help: it overrides a finding, and there is no finding to override. `mxcli marketplace update … --no-baseline` accepts that the question cannot be answered and updates anyway, discarding any local edits to that module without naming them. Associations that *other* modules own into the module are still found, because that needs only the project: they are refused without `--force`, saved by `--save-edits`, and listed under “Removed from other modules” after the update.
 
 ## [Why `diff` and `update` are slow, and what is cached](#why-diff-and-update-are-slow-and-what-is-cached)
 
