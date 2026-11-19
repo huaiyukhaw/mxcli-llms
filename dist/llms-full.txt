@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.32.0 @ 9d76448
-Generated: 2026-11-18T09:39:14Z
+Version:   mxcli v0.32.0 @ 32a67fa
+Generated: 2026-11-19T09:45:50Z
 
 ---
 
@@ -26061,7 +26061,11 @@ guard is the bootstrap script, `.claude/bootstrap-mxcli.sh`, which a newer
 project it compares that binary’s version with the stamp, and it does not link
 an older one — it downloads `MXCLI_TAG` instead. `MXCLI_TAG` defaults to the
 release of the mxcli that generated the script (`vX.Y.Z`), or `nightly` when that
-was a nightly or development build. A
+was a nightly or development build. Each nightly is also published under its
+dated tag (`nightly-YYYYMMDD-<sha>`, the version `mxcli --version` prints), and
+the most recent dated nightlies are kept, so `MXCLI_TAG` can pin or roll back
+to one of those; an older one is gone, and `MXCLI_TAG=nightly` fetches the
+current build. A
 `./mxcli` older than the stamp is replaced the same way, through a temporary
 file, so a `./mxcli` that is a symlink to the `PATH` binary never has the
 download written through it. If the download fails, the older `./mxcli` is
@@ -33966,6 +33970,12 @@ Two more consequences:
 ### [Navigation properties become associations](#navigation-properties-become-associations)
 
 Each navigation property whose target is also imported becomes an association.
+It is named after the navigation property. When that name is already an entity
+or an association in the module — a `Category` navigation beside the entity
+`Category` — it is named `<Parent>_<NavigationProperty>` (`Product_Category`),
+and only if that is taken too does a number follow (`Product_Category_2`). A
+re-import recognises the associations it made by their navigation property, not
+their name, so an existing name is never changed.
 A navigation property with a `Partner` is one end of a bidirectional
 relationship, and Mendix does not accept its ends as separate associations
 (`CE6618` “Navigation ‘…’ is not available in the OData service”):
@@ -34787,6 +34797,7 @@ Maps entity attribute `Attribute` to the JSON key `jsonField`.
 [`Assoc/module.ChildEntity AS alias`](#assocmodulechildentity-as-alias)
 
 Maps associated objects to a nested JSON object or array using the named alias.
+The association must connect the entity the element sits under to the element’s own entity (in either direction; an end may be a generalization of either entity). Any other association is refused by `check` (MDL100) because Mendix reports CE0295 “Association ‘…’ is not allowed”.
 
 ## [Examples](#examples-67)
 
