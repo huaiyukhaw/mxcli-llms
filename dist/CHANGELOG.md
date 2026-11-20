@@ -1,3 +1,7 @@
+## 2026-11-20 -- mxcli v0.32.0 @ 245d5dc
+- +16 / -8 lines
+- Sections changed: Check if overall score is above 70, Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),, so compare in jq: the shell's -lt only takes integers., [Quality Reports](#quality-reports), [Skills](#skills-2), [The Five Phases](#the-five-phases)
+
 ## 2026-11-17 -- mxcli v0.32.0 @ b7dc2f8
 - +160 / -12 lines
 - Sections changed: [Project Reports](#project-reports), [Accepted Findings: Decisions in the Project Brain](#accepted-findings-decisions-in-the-project-brain), [Accepting a lint finding](#accepting-a-lint-finding), [Checking](#checking), [Commands](#commands-2), [Description](#description-80), [Examples](#examples-92), [Parameters](#parameters-16) (+8 more)
