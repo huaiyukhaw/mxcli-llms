@@ -12,3 +12,7 @@ the kinds below answer specific questions instead of scoring.
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
+| `release` | What does deploying this model do to the data already in production? |
+| `dependencies` | What does the app stand on, and is it current and safe? |
+| `configuration` | What must each environment supply, and what does the model fix so no environment can change it? |
+| `readiness` | Taken together, is it ready for production — what blocks, what is a risk, what was not assessed? |

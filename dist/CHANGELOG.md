@@ -1,3 +1,7 @@
+## 2026-11-21 -- mxcli v0.32.0 @ 591bcd7
+- +339 / -19 lines
+- Sections changed: After a change you already applied, Check, apply and verify a change in one call, Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),, Fail when the project does not build, or when the overall score is below 70. The score has one decimal (e.g. 82.5),, Record the current state as the baseline (do this once, on a project you accept as it is), [Project Reports](#project-reports), [mxcli verify](#mxcli-verify), leave generated code, probes and fixtures out of every figure (name globs) (+28 more)
+
 ## 2026-11-20 -- mxcli v0.32.0 @ 245d5dc
 - +16 / -8 lines
 - Sections changed: Check if overall score is above 70, Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),, so compare in jq: the shell's -lt only takes integers., [Quality Reports](#quality-reports), [Skills](#skills-2), [The Five Phases](#the-five-phases)

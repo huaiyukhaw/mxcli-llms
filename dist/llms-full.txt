@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.32.0 @ 245d5dc
-Generated: 2026-11-20T09:33:59Z
+Version:   mxcli v0.32.0 @ 591bcd7
+Generated: 2026-11-21T09:05:50Z
 
 ---
 
@@ -755,6 +755,8 @@ mxcli setup mxbuild -p your-app.mpr
 **“CGO not available”** – mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you’re using the official pre-built binary or a `make build` from source.
 
 **“refusing to write …: Studio Pro has this project open”** – Close the project in Studio Pro before running mxcli write commands, then reopen it. Studio Pro does not reload the model from disk, so its next save would silently discard mxcli’s changes. If Studio Pro is not running, the `.mpr.lock` was left behind by a crash: delete it, or pass `--force` to `exec`.
+
+**Studio Pro converts a project made with `mxcli new` the first time it opens it** – Expected, once. The template `mx create-project` ships can be one Studio Pro conversion behind the Studio Pro of the same version (11.16.1 adds a setup conversion and a `SetupSettings` unit that `mx` does not write), so the first open prompts and converts. Let it, and commit the result on its own before other changes, so it does not land in the diff of your first real one.
 
 # [Setting Up](#setting-up)
 
@@ -18454,7 +18456,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> | --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
-| `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |
+| `brain list [--slice <n>] [--kind decision|requirement|question] [--open]` | The committed entries; with `--json`, as data. An open question is listed with kind `question`, not among the decisions |
 | `brain show [<shard>]` | Entries, lines and headroom per shard |
 
 Dropping the last entry from a module shard deletes the file, so the directory
@@ -19260,6 +19262,127 @@ mxcli lacks) is skipped with a warning on stderr.
 | 1 | Findings reported |
 | 2 | Error running linter |
 
+# [mxcli verify](#mxcli-verify)
+
+`mxcli verify` is the one command that answers “did my change break anything?”. It runs the
+checks in cost order and reports only the findings that are **new** against a baseline, so on
+a mature project the result is about the change just made, not the backlog.
+
+| Stage | What it runs | Against |
+| --- | --- | --- |
+| `check` | `mxcli check` on the script files you pass | nothing: every finding is the script’s |
+| `exec` | `mxcli exec` on those scripts; only with `--apply`, and only if `check` passed | nothing: it applies the change |
+| `lint` | `mxcli lint` on the project | `verify-baseline/lint.json` |
+| `mxcheck` | `mx check` on a copy of the project | `verify-baseline/mxcheck.json` |
+
+`mx check` is the authority. `mxcli check` cannot yet predict everything it rejects, so a project
+that passes `check` and `lint` can still fail `mxcheck`; that is why the stage is part of the gate.
+
+## [Usage](#usage)
+
+```
+# Record the current state as the baseline (do this once, on a project you accept as it is)
+mxcli verify -p app.mpr --update-baseline
+
+# After a change you already applied
+mxcli verify -p app.mpr
+mxcli verify -p app.mpr --stages lint --format json
+
+# Check, apply and verify a change in one call
+mxcli verify -p app.mpr --apply change.mdl
+mxcli verify -p app.mpr --apply change.mdl --through exec   # check and exec only
+
+```
+## [Which gate list a project gets](#which-gate-list-a-project-gets)
+
+The generated `CLAUDE.md` lists `verify` as a gate (in place of `mxcli lint` and `mxcli docker check`,
+which it runs) only once the project has recorded its baselines, that is once `verify-baseline/lint.json`
+exists. Without baselines `verify` reports every finding the project already had as new, and on a project
+with errors it fails on the whole backlog, so a project keeps the separate gates until it has them.
+The list follows the project and not the mxcli version: the session-start sync regenerates it every
+session, so recording the baselines moves a project onto `verify` at the next session start
+(`mxcli init --sync-skills .` does it at once), and removing them moves it back. Upgrading mxcli alone
+changes nothing.
+
+## [How far it runs](#how-far-it-runs)
+
+You say how far. `--through <stage>` runs every stage up to and including that one, in pipeline
+order `check`, `exec`, `lint`, `mxcheck`; `--stages` names an explicit set. Without either, `verify`
+runs `lint` and `mxcheck` (and `check` when scripts are given), and with `--apply` it runs through
+`mxcheck`. Iterate with `--through exec`, finish a change with the default.
+
+Scripts are applied only with `--apply`. Without it they are checked and not applied, so `lint` and
+`mxcheck` describe the project **without** them, and the result says so. With `--apply`:
+
+- a failed `check` writes nothing and skips everything after it;
+- a script `exec` refuses skips `lint` and `mxcheck`, which would otherwise judge a project without the change;
+- several scripts are checked as one ordered set (each sees what the earlier ones create) and applied in
+  order. `exec` is not transactional across files, so a failure part-way leaves the earlier ones applied
+  and the finding says how far it got.
+
+Commit `verify-baseline/`. It lives next to the `.mpr`, not under `.mxcli/` (which `mxcli init`
+git-ignores): a baseline that is not committed is gone with the next fresh clone, and every run
+then reports every finding as new. Without a baseline a stage reports every finding as new and
+says so.
+
+The pre-existing count says what the already-known findings are, worst first (`8 pre-existing (2 errors, 1 warning, 5 info)`), so a baseline that accepted errors shows them on every run; `--format json`
+has the same in `preExistingBySeverity`.
+
+Every selected stage runs, so one result carries every stage’s findings. `--fail-fast` stops at
+the first stage that fails. `--fail-on warning` makes a new warning fail a stage (the default is
+errors). `--format json` prints one document with each stage’s status, duration and every new finding.
+
+The text output lists only the new findings that would fail the gate at `--fail-on`, and counts the
+rest by severity. A baseline taken on a blank app leaves most of a built app’s lint findings “new”
+(documentation, access-rule notes); listing them would bury the one that matters. When there are
+any, the output ends with the command that accepts them, scoped to the stages that have them
+(`--stages lint --update-baseline`), because `--update-baseline` records every selected stage.
+Review them first: re-recording is how a finding becomes accepted.
+
+## [When lint cannot vouch for its result](#when-lint-cannot-vouch-for-its-result)
+
+The lint baseline records which rules ran and a fingerprint of the lint configuration. If a later run
+did not run a rule the baseline holds findings for (a CI checkout without `.claude/lint-rules/`, a
+disabled rule, a rule that failed with “could not run”), or the configuration differs, `lint` reports
+those findings as **not checked**, never as fixed, and `verify` stops with an error (exit 2) naming
+the rules instead of passing. A finding about a rule that could not run is not a finding about the
+project and is not counted as new. Run `lint` where the project’s rules and config are installed, or
+re-record with `--update-baseline` if the change is intended. A baseline recorded before this was added
+still works: the rules it holds findings for must have run.
+
+The advice follows the cause. A rule that did not run needs the project’s rules and config where `lint`
+runs. A rule that ran into an error (a built-in rule can) usually runs on a second attempt, and the
+stage shows the rule’s own message. `--update-baseline` refuses (exit 2) while a rule cannot run, because
+the baseline would hold none of that rule’s findings and a re-record is what the failing run suggests:
+run it again first.
+
+## [Exit codes](#exit-codes-1)
+
+| Code | Meaning |
+| --- | --- |
+| 0 | nothing new |
+| 1 | usage error |
+| 2 | a stage could not run (no `mx`, …) and nothing failed |
+| 16 + bits | a stage failed: 1 `check`, 2 `lint`, 4 `mxcheck`, 8 `exec` (18 = lint, 22 = lint and mxcheck, 24 = exec refused) |
+
+A stage that could not run is never reported as passed.
+
+## [Why mx check needs special handling](#why-mx-check-needs-special-handling)
+
+`mx check` reports errors in stages: an earlier-stage error hides the later ones. A plain diff
+would blame a change for an error it only uncovered, or call an error resolved because a new
+earlier one hides it. So `mxcheck` sorts findings into:
+
+- **new** — not in the baseline. This includes a later error uncovered in a microflow whose
+  earlier baseline error is gone, because the change edited that flow and must leave it clean.
+- **unmasked** — not in the baseline, but a baseline unresolved-reference error was hiding the
+  whole project. Reported, and does not fail the gate unless `--strict`.
+- **resolved** — in the baseline, gone, and nothing hides it.
+- **hidden** — in the baseline, gone only because a new earlier-stage error hides it. Not resolved.
+
+See the [proposal](https://github.com/mendixlabs/mxcli/blob/main/docs/11-proposals/PROPOSAL_verify_gate.md)
+for the measurements behind this.
+
 # [mxcli report](#mxcli-report)
 
 The `mxcli report` command generates a scored best practices report for a Mendix project. It runs all lint rules and aggregates findings into a category-based scorecard.
@@ -19271,6 +19394,51 @@ The `mxcli report` command generates a scored best practices report for a Mendix
 mxcli report -p app.mpr
 
 ```
+## [Does It Build?](#does-it-build)
+
+The report runs Mendix’s own consistency check (`mx check`) on a temporary copy of
+the project and puts its verdict above the score:
+
+| Builds | Meaning |
+| --- | --- |
+| `yes` | `mx check` found no errors |
+| `no — N consistency error(s)` | the project cannot be deployed, whatever it scores |
+| `not checked` | no mx for the project’s Mendix version, or `--no-mx-check` |
+| `unknown` | mx’s output could not be read in full |
+
+The check’s errors, warnings and deprecations are listed under **Consistency
+Check**, grouped by code with the documents they are in (a stale theme or widget
+set gives hundreds of one code), and are not part of the score. They cover the
+whole project, also with `--modules`. `mx` writes into the project it checks, so
+the report runs it on a temporary copy; run `mx check` yourself only on a copy
+too.
+
+```
+mxcli setup mxbuild -p app.mpr                          # mx for the project's version, once
+mxcli report -p app.mpr --mx-check-results check.json   # the JSON 'mx check <app.mpr> -j check.json -w -d' wrote
+mxcli report -p app.mpr --mxbuild-path /opt/mxbuild     # a specific mxbuild
+mxcli report -p app.mpr --no-mx-check                   # lint only
+
+```
+## [Reading the HTML Page](#reading-the-html-page)
+
+`--format html` explains the number rather than only showing it:
+
+- **Categories:** each one’s weight, the points it costs the overall score, and its
+  penalty: how many points are left before the floor, or how far past it the findings
+  go. Past the floor, fixing findings in that category does not move the score.
+- **Rules:** every rule that found something, with how many of its findings brain
+  decisions accept, the points fixing the rest would gain (scored again without them),
+  and a verdict. Give a verdict with `--annotations`:
+  
+  ```
+  items:
+    "rule:MPR006": {status: by design, note: "CSS-drawn dots, not empty containers"}
+  
+  ```
+- **Recommendations:** the five rules whose fixes gain the most, rules with a verdict
+  left out.
+
 ## [Scoring Selected Modules](#scoring-selected-modules)
 
 ```
@@ -19364,9 +19532,13 @@ mxcli report -p app.mpr --format json --output report.json
 Use the JSON format to fail CI pipelines when scores drop below a threshold:
 
 ```
-# Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),
+# Fail when the project does not build, or when the overall score is below 70. The score has one decimal (e.g. 82.5),
 # so compare in jq: the shell's -lt only takes integers.
 mxcli report -p app.mpr --format json -o quality.json
+jq -e '.builds == true' quality.json > /dev/null || {
+  echo "The project does not build, or mx check did not run: $(jq -r '.consistency.notRun // .consistency.incomplete // "consistency errors"' quality.json)"
+  exit 1
+}
 jq -e '.overallScore >= 70' quality.json > /dev/null || {
   echo "Quality score $(jq .overallScore quality.json) is below threshold 70"
   exit 1
@@ -19374,9 +19546,13 @@ jq -e '.overallScore >= 70' quality.json > /dev/null || {
 
 ```
 
-The `report-quality` skill covers how the score is computed, what it leaves out
-(Mendix’s own consistency check; the bundled Starlark rules when the project has no
-`.claude/lint-rules/`), and how to accept an intended finding in the project brain.
+`.builds` is absent when the check was not run, so `== true` also fails a CI run
+that has no mx for the project’s version: run `mxcli setup mxbuild -p app.mpr`
+first in the pipeline.
+
+The `report-quality` skill covers how the score is computed, what it leaves out (the
+bundled Starlark rules when the project has no `.claude/lint-rules/`), and how to
+accept an intended finding in the project brain.
 
 For reports that answer one question instead of scoring — architecture, tests,
 security, performance, traceability and the software map — see
@@ -19396,6 +19572,43 @@ the kinds below answer specific questions instead of scoring.
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
+| `release` | What does deploying this model do to the data already in production? |
+| `dependencies` | What does the app stand on, and is it current and safe? |
+| `configuration` | What must each environment supply, and what does the model fix so no environment can change it? |
+| `readiness` | Taken together, is it ready for production — what blocks, what is a risk, what was not assessed? |
+
+## [All reports at once](#all-reports-at-once)
+
+```
+mxcli report all -p app.mpr -o docs/reports
+mxcli report all -p app.mpr -o docs/reports --against v1.4.0 \
+  --journeys journeys.jsonl --spans spans.jsonl --junit results.xml \
+  --perf-journeys perf-journeys.jsonl --perf-spans perf-spans.jsonl
+
+```
+
+Each input goes to the reports it is for:
+
+| Flags | Feed | What |
+| --- | --- | --- |
+| `--journeys`, `--spans` | tests, traceability | the functional journeys and the spans they exported |
+| `--junit`, `--tests`, `--run` | tests, traceability | microflow test results; `--run` runs the tests once and writes `junit.xml` into the folder (`--local`: on mxcli’s own runtime, no Docker) |
+| `--perf-journeys`, `--perf-spans` | performance | a measured performance run, one record per step |
+| `--against` | release | the deployed revision or `.mpr` |
+
+The functional log and a performance run are different files: a functional log has
+one record per journey, which performance would read as one step per journey.
+
+Writes every kind into one folder — `<kind>.html` and `<kind>.json`, the scored report
+as `quality.html` — and `index.html`, an overview with a card per report: its verdict
+and headline numbers, linked. Every page links the others. A `<kind>-annotations.yaml`
+in the folder — or in `--annotations-dir`, for a project that keeps them elsewhere —
+is applied to that kind, and the overview names the annotation files it read. Performance runs with `--perf-journeys`/`--perf-spans`
+and release with `--against`; a kind that cannot run is listed on the overview with
+the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
+`--offline` asks no online source, `--skip` leaves kinds out. The folder also gets
+`readiness.html`, first on the overview: the go/no-go roll-up of all the others
+(`--milestone` names the milestone being released).
 
 ## [Shared shape](#shared-shape)
 
@@ -19436,6 +19649,12 @@ recommendations:
 Marketplace modules, `System` and the test runner’s `MxTest` are outside the app
 unless `--include-marketplace`; `--modules` and `--exclude` choose by hand.
 
+Every HTML page — the scored `mxcli report` too — shares one look: a line naming the
+project, report and date above the title, the verdict as a lede, headline tiles whose
+edge shows their status, bars in tables, findings as cards, and numbers in a
+fixed-width face. It follows the system’s light or dark setting; add
+`data-theme="light"` or `"dark"` to the page’s `<html>` element to force one.
+
 ## [architecture](#architecture)
 
 Layered module map (domain dependencies only — menus, layouts and page links are
@@ -19448,6 +19667,8 @@ in a constant, placed in a layout, named in text).
 
 ```
 mxcli report architecture -p app.mpr -o architecture.html
+# leave generated code, probes and fixtures out of every figure (name globs)
+mxcli report architecture -p app.mpr --exclude-docs 'Shop.FaultProbe*,RestClient.*' -o architecture.html
 
 ```
 ## [tests](#tests)
@@ -19561,11 +19782,101 @@ Entry points include two kinds of reference the catalog records for this: `by_na
 the flow a call placed in it). Both also keep such flows off the architecture
 report’s unused list.
 
+## [release](#release)
+
+Compares the model with the one that is deployed and lists, for every persistent
+entity, attribute and association, what the deploy does to stored data: **destroys**
+(a table or column dropped), **verify** (handled in a way that has not been measured),
+**migrates** (renamed under the same GUID, rows kept) and **adds**.
+
+```
+mxcli report release -p app.mpr --against v1.4.0 -o release.html
+mxcli report release -p app.mpr --against /backups/deployed/App.mpr --format json -o release.json
+
+```
+
+The runtime keys the database on each element’s `GUID`, not its name, so the models
+are paired by GUID. A model can be valid, pass `mx check` and build, and still drop a
+table on the next deploy: an entity removed, made non-persistent, or given a new GUID
+under its old name; an attribute removed, made calculated, or given a new GUID (its
+column is recreated and every row gets the model default). A rename under the same
+GUID keeps the data. Type changes, shorter strings, changed association types or
+ends and changed generalizations are listed as **verify**: what the runtime does
+with them has not been measured.
+
+`--against` is a git revision of the project (a tag, a branch, a commit; the project
+may sit in a subdirectory of the repository) or the path of a `.mpr`. A drop that is
+intended is annotated `release:<kind>:<name>` with status `accepted`, and the
+verdict then counts it apart.
+
+## [dependencies](#dependencies)
+
+What the app stands on, and whether it is current and safe: the Mendix version and
+its release line (LTS, MTS or a monthly release); the Marketplace modules with their
+newest compatible and newest published versions; the pluggable widgets in `widgets/`;
+and the jars in `userlib/` and `vendorlib/` with the known vulnerabilities of that
+version, worst first, and the version to upgrade to.
+
+```
+mxcli report dependencies -p app.mpr -o dependencies.html
+mxcli report dependencies -p app.mpr --offline        # no online source asked
+
+```
+
+A Marketplace module is identified by the version UUID it records (`AppStoreGuid`),
+not by its name or version number, which collide across content; a version the
+Marketplace no longer publishes is said as such. Comparing with published versions
+needs a Marketplace token (`mxcli auth login`). A jar’s Maven coordinates come from its
+own `pom.properties`; vulnerabilities come from [OSV](https://osv.dev). Whatever could
+not be checked — no token, `--offline`, a jar without coordinates — is said per item,
+never shown as up to date or clean. Annotate `vuln:<id>` with status `accepted`, and
+why, for an advisory that does not apply.
+
+## [configuration](#configuration)
+
+What each environment must supply, read from the model, as a checklist an
+administrator signs off: constants with no default or a placeholder, constants whose
+default points at localhost, a private address or a test host, scheduled events to
+switch on or off, and published services whose callers need accounts. Below it, what
+the model fixes so that no environment can change it — a REST client or REST call
+location written as a literal localhost, private or test-host URL, a credential
+written as a literal — and what runs by itself: scheduled events and the lifecycle
+microflows with what they write and call.
+
+```
+mxcli report configuration -p app.mpr -o configuration.html
+
+```
+
+The actual production values live in the deployment portal or the pipeline; the
+report does not read them. Sign items off with `constant:<Name>`,
+`scheduled:<Name>` or `published:<Name>`, status `done`, and a note naming the
+environment.
+
+## [readiness](#readiness)
+
+One go/no-go page rolled up from the other reports, with its verdict rule stated:
+**blocking** (consistency errors, a release that destroys data, a high or critical
+vulnerability, a location fixed to localhost or a test host, a literal credential, an
+open high security finding, a failing test or journey, an unbuilt requirement of the
+milestone being released), **risks**, **accepted** (with what accepts each), the
+administrator’s checklist, which reports were assessed, and what no model report
+covers. A report that was not given, or could not check, is “not assessed”, and keeps
+the verdict at “not assessed in full” — never “ready”.
+
+```
+mxcli report readiness --dir docs/reports --milestone M2 -o docs/reports/readiness.html
+
+```
+
+Sign a blocking item off with `readiness:<key>`, status `signed off`, and a note.
+
 ## [Skills](#skills-2)
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
-`report-security`, `report-performance`, `report-traceability`, `report-map`.
+`report-security`, `report-performance`, `report-traceability`, `report-map`,
+`report-release`, `report-dependencies`, `report-configuration`, `report-readiness`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.
 
@@ -19799,7 +20110,7 @@ Press `?` at any time to open the help overlay. The help content is contextual �
 
 Press `:` to open the command palette at the bottom of the TUI. The command bar provides VS Code-style command execution with tab completion and fuzzy matching.
 
-## [Usage](#usage)
+## [Usage](#usage-1)
 
 1. Press `:` to activate the command bar.
 2. Start typing a command name. Tab completion suggests matching commands.
@@ -23160,8 +23471,10 @@ a longer prompt.
    is no status column to maintain.
 5. **Commits, then boots and verifies** — HTTP 200 at `http://localhost:8080/`, plus
    an optional `run --hub` preview URL.
-6. **Takes the quality baseline** — `mxcli lint` and the scored `mxcli report` on the
-   blank app, recorded in `FINDINGS.md`. This is the only moment those numbers mean
+6. **Takes the quality baseline** — `mxcli verify --update-baseline` (the lint and
+   `mx check` baselines, committed as `verify-baseline/`) and the scored
+   `mxcli report` on the blank app, recorded in `FINDINGS.md`. Recording the baselines is also
+   what puts `verify` on the project’s gate list (`mxcli init --sync-skills .` regenerates it). This is the only moment those numbers mean
    “what the template ships with”; afterwards every figure is yours plus the
    template’s, with nothing to subtract. See [mxcli report](#mxcli-report) for how to
    read the six category scores.
@@ -23285,19 +23598,26 @@ over the result. That distinction is held by a test too — without it, “defin
 done” reads as the whole list after every edit, which is ~55s and five tool calls each
 time, and was the dominant cost in a measured agent session.
 
+The list below is the one a project gets once it has recorded its baselines. Before that
+(and in a project that never does), `CLAUDE.md` lists `mxcli lint` and `mxcli docker check` in place
+of the one `verify` line: `verify` is those two run against the baselines, and without
+baselines it reports everything the project already had as new. The list follows the
+project, not the mxcli version: it changes when `verify-baseline/` appears or is removed,
+at the next session start.
+
 ```
 ./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)
 ./mxcli exec change.mdl -p <AppName>.mpr                 # apply
-./mxcli lint -p <AppName>.mpr                            # rules (~3s)
+./mxcli verify -p <AppName>.mpr                          # lint + mx check, new findings only (~10s)
 ./mxcli report -p <AppName>.mpr                          # scored quality report
-./mxcli docker check -p <AppName>.mpr                    # mxbuild, the slow one (~25s)
 ./mxcli test tests/ -p <AppName>.mpr --local             # microflow tests (~30s cold, ~2s warm)
 ./mxcli run --local --watch --detach -p <AppName>.mpr    # the app, in the background; then `run wait`
 
 ```
 
-Each buys something the one above it cannot: [`lint`](#mxcli-lint) and
-[`report`](#mxcli-report) score the model that `check` only proved was well-formed,
+Each buys something the one above it cannot: [`verify`](#mxcli-verify) runs
+[`lint`](#mxcli-lint) and `mx check` against the baselines taken at bootstrap and reports
+only what the change made worse, [`report`](#mxcli-report) scores the model that `check` only proved was well-formed,
 [`test`](#testing) proves behaviour that a clean build does not, and the running app
 is the only thing that proves how a page renders. `report`’s six category scores are
 comparable against the baseline taken at bootstrap — a score that fell is a finding.
@@ -23665,7 +23985,7 @@ mxcli docker build -p app.mpr
 
 The `mxcli docker build` command builds a Mendix application using mxbuild in Docker, including support for PAD (Platform-Agnostic Deployment) patching.
 
-## [Usage](#usage-1)
+## [Usage](#usage-2)
 
 ```
 mxcli docker build -p app.mpr
@@ -23773,7 +24093,7 @@ The downloaded mxbuild is cached at `~/.mxcli/mxbuild/{version}/` for reuse.
 
 The `mxcli docker check` command validates a Mendix project without building it. It runs the Mendix `mx check` tool against the project and reports errors, warnings, and deprecations.
 
-## [Usage](#usage-2)
+## [Usage](#usage-3)
 
 ```
 mxcli docker check -p app.mpr
@@ -23929,7 +24249,7 @@ When using mxcli in interactive REPL mode, the TUI can auto-check the project on
 
 The `mxcli docker run` command runs a Mendix application in a Docker container, providing a local runtime environment for testing and development.
 
-## [Usage](#usage-3)
+## [Usage](#usage-4)
 
 ```
 mxcli docker run -p app.mpr
@@ -23984,7 +24304,7 @@ See [OQL Queries](#oql-queries) for details.
 
 The `mxcli oql` command executes OQL (Object Query Language) queries against a running Mendix runtime via the M2EE admin API. OQL is Mendix’s query language for retrieving data from the runtime, similar to SQL but operating on Mendix entities rather than database tables.
 
-## [Usage](#usage-4)
+## [Usage](#usage-5)
 
 ```
 mxcli oql -p app.mpr "SELECT * FROM Sales.Customer"
@@ -26231,7 +26551,7 @@ go get github.com/mendixlabs/mxcli
 - **Go 1.21+**
 - **No CGO required** – the project uses `modernc.org/sqlite` (pure Go SQLite) and does not require a C compiler
 
-## [Dependencies](#dependencies)
+## [Dependencies](#dependencies-1)
 
 The library pulls in the following key dependencies:
 
@@ -38499,7 +38819,7 @@ github.com/mendixlabs/mxcli/
 | `sql/` | Yes | External database connectivity |
 | `internal/codegen/` | No | Metamodel code generation (not exported) |
 
-## [Dependencies](#dependencies-1)
+## [Dependencies](#dependencies-2)
 
 | Dependency | Purpose |
 | --- | --- |

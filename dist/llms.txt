@@ -2,7 +2,7 @@
 
 > CLI tool and MDL (Mendix Definition Language) for reading, querying, and modifying Mendix application projects headlessly. Designed primarily for AI coding agents (Claude Code, Cursor, GitHub Copilot) and CI/CD pipelines.
 
-Version: mxcli v0.32.0 @ 245d5dc | Generated: 2026-11-20T09:33:59Z
+Version: mxcli v0.32.0 @ 591bcd7 | Generated: 2026-11-21T09:05:50Z
 
 Full content (entire book, single page): https://huaiyukhaw.github.io/mxcli-llms/llms-full.txt
 
@@ -142,6 +142,8 @@ microflows, pages, …) are nodes and their references (…
 - [Writing Custom Rules](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/custom-rules.md): You can extend the linter with your own rules written in Starlark, a Python-like
 language. A rule is a .star file in the…
 - [mxcli lint](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/mxcli-lint.md): The mxcli lint command runs all lint rules (built-in Go rules and Starlark rules) against a Mendix project and reports findings.
+- [mxcli verify](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/mxcli-verify.md): mxcli verify is the one command that answers “did my change break anything?”. It runs the
+checks in cost order and reports only…
 - [mxcli report](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/mxcli-report.md): The mxcli report command generates a scored best practices report for a Mendix project. It runs all lint rules and aggregates…
 - [Project Reports](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/project-reports.md): mxcli report <kind> produces a report a team asks of any Mendix app. Bare mxcli report is still the scored best-practices report…
 - [Claude Code Companion](https://huaiyukhaw.github.io/mxcli-llms/pages/tools/companion.md): The mxcli companion is a Claude Code mod: a pane inside
