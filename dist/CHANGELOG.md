@@ -1,3 +1,7 @@
+## 2026-11-22 -- mxcli v0.32.0 @ 6176c66
+- +144 / -20 lines
+- Sections changed: [CREATE EXTERNAL ENTITIES](#create-external-entities), [CREATE EXTERNAL ENTITY](#create-external-entity), [Description](#description-62), [Examples](#examples-74), [External Entity Statements](#external-entity-statements), [Parameters](#parameters-62), [Recording a baseline does not accept errors silently](#recording-a-baseline-does-not-accept-errors-silently), [Reference](#reference) (+2 more)
+
 ## 2026-11-21 -- mxcli v0.32.0 @ 591bcd7
 - +339 / -19 lines
 - Sections changed: After a change you already applied, Check, apply and verify a change in one call, Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),, Fail when the project does not build, or when the overall score is below 70. The score has one decimal (e.g. 82.5),, Record the current state as the baseline (do this once, on a project you accept as it is), [Project Reports](#project-reports), [mxcli verify](#mxcli-verify), leave generated code, probes and fixtures out of every figure (name globs) (+28 more)

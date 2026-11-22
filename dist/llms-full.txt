@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.32.0 @ 591bcd7
-Generated: 2026-11-21T09:05:50Z
+Version:   mxcli v0.32.0 @ 6176c66
+Generated: 2026-11-22T09:14:45Z
 
 ---
 
@@ -6684,7 +6684,7 @@ refuse the spelling; until then it only warns.
 
 ### [Deprecated spellings (`MDL-DEPR*`)](#deprecated-spellings-mdl-depr)
 
-88 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+90 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 | --- | --- | --- | --- | --- |
@@ -6715,6 +6715,8 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR072` | `image collection M.C ( image X from file '…', … )` | `image collection M.C { image X ( File: '…' ) … }` | yes: image list: the images move into { } without commas, and `from file '…'` becomes `( File: '…' )` | mdl 2 |
 | `MDL-DEPR073` | `message definition collection M.C ( definition D for M.E ( A, M.E_B/M.B ( C ) ) )` | `message definition collection M.C { definition D for M.E { A, M.E_B/M.B { C } } }` | yes: message trees: each parenthesised definition list and member tree moves into { } | mdl 2 |
 | `MDL-DEPR074` | `alter microflow M.F { insert after $X { … } }` | `alter microflow M.F { insert after $X begin … end; }` | yes: fragment’s braces: `{` becomes `begin` and `}` becomes `end` | mdl 2 |
+| `MDL-DEPR075` | `message X (…) publish|subscribe entity M.E microflow M.H;` | `message X (…) { publish|subscribe (Entity: M.E, Microflow: M.H); };` | yes: message’s operation clauses: `publish entity M.E` becomes `{ publish (Entity: M.E); }` | mdl 2 |
+| `MDL-DEPR076` | `consume X entity M.E microflow M.H;` | `consume X (Entity: M.E, Microflow: M.H);` | yes: subscription’s clauses: `consume X entity M.E microflow M.H` becomes `consume X (Entity: M.E, Microflow: M.H)` | mdl 2 |
 | `MDL-DEPR080` | `decision '<expression>' / timer '<expression>' / due date '<expression>'` | `decision <expression> / timer <expression> / due date <expression>` | yes: expression out of its string: `decision '$Ctx/Total > 1000'` becomes `decision $Ctx/Total > 1000` | mdl 2 |
 | `MDL-DEPR081` | `Visible: [<expression>] / Editable: [<expression>]` | `Visible: <expression> / Editable: <expression>, each attribute as $currentObject/Attr` | yes: brackets into the expression they store: `Visible: [Active]` becomes `Visible: $currentObject/Active` | mdl 2 |
 | `MDL-DEPR082` | `revoke M.Role on M.E [(rights)]` | `revoke rights|all on entity M.E from M.Role` | yes: rights (or `all` when none are listed) before `on entity`, roles after `from`: `revoke R on M.E (write *)` becomes `revoke write * on entity M.E from R`, `revoke R on M.E` becomes `revoke all on entity M.E from R` | mdl 2 |
@@ -19356,6 +19358,19 @@ stage shows the rule’s own message. `--update-baseline` refuses (exit 2) while
 the baseline would hold none of that rule’s findings and a re-record is what the failing run suggests:
 run it again first.
 
+## [Recording a baseline does not accept errors silently](#recording-a-baseline-does-not-accept-errors-silently)
+
+A re-record is the one command that turns a failing gate into a passing one without fixing anything.
+`--update-baseline` therefore refuses (exit 2) when the run has errors the baseline does not already
+hold, and names them; the baseline file is left untouched. A first record on a project that already
+has errors is the same: it needs `--accept-errors`, which says so in the output and in the stage note.
+Warnings and notes are recorded as before, and so is a re-record that adds no error, because the
+errors it holds were already accepted. Fix the errors, or record them on purpose:
+
+```
+mxcli verify -p app.mpr --update-baseline --accept-errors
+
+```
 ## [Exit codes](#exit-codes-1)
 
 | Code | Meaning |
@@ -34232,8 +34247,36 @@ Mendix supports consuming and publishing OData services. Consumed services (ODat
 
 | Statement | Description |
 | --- | --- |
-| [CREATE EXTERNAL ENTITY](reference/odata/create-external-entity.html) | Import an entity from a consumed OData service |
+| [CREATE EXTERNAL ENTITY](#create-external-entity) | Import one entity from a consumed OData service |
 | [CREATE EXTERNAL ENTITIES](#create-external-entities) | Bulk-create external entities from cached $metadata |
+
+## [CREATE EXTERNAL ENTITY](#create-external-entity)
+
+```
+create external entity Sales.Order from consumed odata service Sales.SalesApi
+  (EntitySet: 'Orders')
+  (OrderId: Long, Title: String(100), Status: Enumeration(Sales.OrderStatus));
+
+```
+
+The attributes come from the service’s cached `$metadata`. Each one listed is
+the property of that name, mapped exactly as [CREATE EXTERNAL
+ENTITIES](#create-external-entities) maps it. Its remote name and type, its
+capabilities, the entity’s key, `Countable`, `$top` and `$skip` all follow the
+contract. So does the enumeration of an enum-typed property (see below). List
+a subset to import only those properties. Leave out the list to import them
+all.
+
+What would not build is refused, with nothing written:
+
+- a name that is not one of the contract’s attributes (the message lists them);
+- a type the service does not publish, including an ordinary enumeration for an
+  enum-typed property;
+- a missing key attribute (`CE6010` “Key cannot be empty”);
+- a `Countable`, `Creatable` or `Deletable` that differs from the entity set’s
+  (`CE6630`). Leave them out to follow the service.
+
+`AllowCreateChangeLocally` is a local choice and is written as stated.
 
 ## [CREATE EXTERNAL ENTITIES](#create-external-entities)
 
@@ -34294,6 +34337,30 @@ Two more consequences:
   an entity backed by an entity set. On a derived or contained type they are
   neither. `CE6630` fires in both directions here, so this follows the contract
   rather than a fixed answer.
+
+### [Enum types become enumerations](#enum-types-become-enumerations)
+
+A property typed as an OData `EnumType` (a vendor type such as
+`Vendor.Sales.OrderStatus`, not an `Edm.*` one) is imported as an enumeration
+attribute. Its enumeration is generated from the contract, as Studio Pro does:
+it is named after the enum type, placed in the module the entities go to, and
+has one value per member, with the member’s name as both the value name and
+the caption. It records the service and the remote type, and each value
+records its member. Mendix requires this. An enumeration that is not generated
+from the contract is `CE4597` on the attribute (“should have an enumeration type
+that was generated from …”).
+
+- A re-import reuses the generated enumeration, and so does a second property
+  of the same type. `create or modify enumeration` on it keeps the link to the
+  contract.
+- If the module already has an ordinary enumeration of that name, a member is
+  not a valid value name, or the project is older than Mendix 10.12, the
+  property is not imported. The import says
+  which property and why.
+
+An external entity’s attributes come only from the contract. `alter entity … add attribute` on one is refused: the attribute would not be mapped to a
+contract property, which is `CE6612` (“Attribute ‘X’ of external entity ‘E’ is
+not supported”), whatever its type.
 
 ### [Navigation properties become associations](#navigation-properties-become-associations)
 
@@ -35978,8 +36045,10 @@ CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
     EventNamePrefix: 'prefix'
 )
 {
-    MESSAGE MessageName ( attr: Type [, ...] ) PUBLISH | SUBSCRIBE
-        [ ENTITY module.Entity ] ;
+    MESSAGE MessageName ( attr: Type [, ...] ) {
+        PUBLISH ( Entity: module.PBE_Entity ) ;
+        SUBSCRIBE ( Entity: module.CBE_Entity [, Microflow: module.Handler] ) ;
+    } ;
     [ ... ]
 }
 
@@ -35988,7 +36057,11 @@ CREATE [ OR MODIFY ] BUSINESS EVENT SERVICE module.Name
 
 Creates a business event service that defines one or more messages for event-driven communication between applications.
 
-Each message has a name, a set of typed attributes, and an operation mode (PUBLISH or SUBSCRIBE). A publishing message means this application sends events of that type. A subscribing message means this application receives and handles events of that type.
+Each message has a name, a set of typed attributes, and its operations as children: PUBLISH, SUBSCRIBE, or both. A publish operation means this application sends events of that type. A subscribe operation means this application receives and handles them. A message the application both publishes and consumes itself (an in-app bus, a request/reply loop) has both operations.
+
+Declare each message once. The same name declared twice, once per operation, stores two messages of one name; `mx check` accepts it but the deployment fails (“An item with the same key has already been added”), so `check` refuses it.
+
+The older keyword-clause spelling, `MESSAGE X (…) PUBLISH ENTITY M.E MICROFLOW M.H;`, still parses as a deprecated alias (MDL-DEPR075), and `mxcli fmt --upgrade` rewrites it.
 
 The `OR MODIFY` option updates the existing service in-place, preserving its UUID so that references from other documents remain valid. `OR REPLACE` is also accepted as a synonym.
 
@@ -36005,7 +36078,7 @@ Each message defines zero or more attributes with the following supported types:
 
 | Type | Description |
 | --- | --- |
-| `String` | Text value |
+| `String`, `String(n)`, `String(unlimited)` | Text value. The length must match the linked entity attribute’s; a bare `String` stores no length, which the build reads as 200 |
 | `Integer` | 32-bit integer |
 | `Long` | 64-bit integer |
 | `Boolean` | True/false |
@@ -36014,7 +36087,7 @@ Each message defines zero or more attributes with the following supported types:
 
 ### [Entity Mapping](#entity-mapping)
 
-The optional `ENTITY` clause on a message links the message to a Mendix entity. For SUBSCRIBE messages, incoming events are mapped to instances of this entity. For PUBLISH messages, entity instances are serialized into outgoing events.
+Each operation’s `Entity` property links it to a Mendix entity. For a subscribe operation, incoming events are mapped to instances of this entity and handled by its `Microflow`. For a publish operation, entity instances are serialized into outgoing events.
 
 ## [Parameters](#parameters-62)
 
@@ -36028,12 +36101,12 @@ A prefix for event names. Use an empty string (`''`) for no prefix.
 The name of a message within the service.
 [`attr: Type`](#attr-type)
 An attribute definition within a message. Multiple attributes are comma-separated.
-[`PUBLISH`](#publish)
+[`PUBLISH ( Entity: … )`](#publish--entity--)
 This application publishes (sends) this message type.
-[`SUBSCRIBE`](#subscribe)
-This application subscribes to (receives) this message type.
-[`ENTITY module.Entity`](#entity-moduleentity-1)
-Optional entity linked to the message for data mapping.
+[`SUBSCRIBE ( Entity: …, Microflow: … )`](#subscribe--entity--microflow--)
+This application subscribes to (receives) this message type, handled by the microflow.
+[`Entity: module.Entity`](#entity-moduleentity-1)
+The entity linked to the operation for data mapping.
 ## [Examples](#examples-74)
 
 Create a service that publishes order events:
@@ -36045,10 +36118,12 @@ CREATE BUSINESS EVENT SERVICE Shop.OrderEvents
     EventNamePrefix: 'shop'
 )
 {
-    MESSAGE OrderCreated (OrderId: Long, CustomerName: String, Total: Decimal) PUBLISH
-        ENTITY Shop.Order;
-    MESSAGE OrderShipped (OrderId: Long, TrackingNumber: String) PUBLISH
-        ENTITY Shop.Shipment;
+    MESSAGE OrderCreated (OrderId: Long, CustomerName: String, Total: Decimal) {
+        PUBLISH (Entity: Shop.Order);
+    };
+    MESSAGE OrderShipped (OrderId: Long, TrackingNumber: String) {
+        PUBLISH (Entity: Shop.Shipment);
+    };
 };
 
 ```
@@ -36062,8 +36137,26 @@ CREATE BUSINESS EVENT SERVICE Inventory.StockUpdates
     EventNamePrefix: ''
 )
 {
-    MESSAGE StockChanged (ProductId: Long, NewQuantity: Integer) SUBSCRIBE
-        ENTITY Inventory.StockLevel;
+    MESSAGE StockChanged (ProductId: Long, NewQuantity: Integer) {
+        SUBSCRIBE (Entity: Inventory.StockLevel, Microflow: Inventory.HandleStockChanged);
+    };
+};
+
+```
+
+Publish and consume one message in the same application (an in-app bus):
+
+```
+CREATE BUSINESS EVENT SERVICE Agents.AgentBus
+(
+    ServiceName: 'AgentBus',
+    EventNamePrefix: ''
+)
+{
+    MESSAGE AgentMessage (TaskId: String(36), Text: String(unlimited)) {
+        PUBLISH (Entity: Agents.PBE_AgentMessage);
+        SUBSCRIBE (Entity: Agents.CBE_AgentMessage, Microflow: Agents.SUB_OnMessage);
+    };
 };
 
 ```
@@ -36077,8 +36170,8 @@ CREATE OR MODIFY BUSINESS EVENT SERVICE Shop.OrderEvents
     EventNamePrefix: 'shop'
 )
 {
-    MESSAGE OrderCreated (OrderId: Long, CustomerName: String, Total: Decimal) PUBLISH;
-    MESSAGE OrderCancelled (OrderId: Long, Reason: String) PUBLISH;
+    MESSAGE OrderCreated (OrderId: Long, CustomerName: String, Total: Decimal) { PUBLISH (); };
+    MESSAGE OrderCancelled (OrderId: Long, Reason: String) { PUBLISH (); };
 };
 
 ```
@@ -45527,6 +45620,37 @@ line 1: `create or replace …` (enumeration) is deprecated; write `create or mo
 `mxcli help <code>` prints the entry for any `MDL-DEPRnnn` or `MDL-V1-*` code, `mxcli syntax <topic> --deprecated` lists a topic’s old spellings, and [Language Versions and Migration](#language-versions-and-migration) tabulates them all.
 
 The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It holds the code, old form, canonical form, rewrite and removal version of each entry. A spelling is only registered where it means exactly the same as its canonical form. `create or replace view entity`, for example, drops and recreates the view entity, so it is not reported. Likewise `show` is reported as `MDL-DEPR002` only where its canonical form is `list` (plurals, relationship queries and the summary tables), and as `MDL-DEPR090` where it is `describe` with the same output. `show entity X` and `show version` are neither: the first has no mdl 1 statement (`MDL-V1-SHOWSUMMARY`), the second is a session command (`MDL-V1-SESSION`).
+
+### [MDL-LAYOUT01..04: A widget the layout cannot hold there](#mdl-layout0104-a-widget-the-layout-cannot-hold-there)
+
+```
+✗ layout 'M.Shell': data view 'dvUser' is not allowed in a layout, so mxbuild fails it with
+CE6086 ("Data views are not allowed on web layouts.") [MDL-LAYOUT01]
+
+```
+
+**Cause:** A placement mxbuild rejects in a layout. Each one used to pass `check` and `exec`, and the build failed. Measured with mx check 11.12.6:
+
+| Rule | Shape | mxbuild |
+| --- | --- | --- |
+| MDL-LAYOUT01 | a `dataview` anywhere in a layout, web or native | CE6086 |
+| MDL-LAYOUT02 | a scroll container region with a `ToggleMode` other than `'None'`, and no `sidebartoggle` in the layout (one in a called snippet does not count) | CE0611 |
+| MDL-LAYOUT03 | a `sidebartoggle` in a layout whose only top-level widget is not a scroll container with a toggling region | CE0628 |
+| MDL-LAYOUT04 | a `sidebartoggle` on a page or snippet | CE6086 |
+
+**Solution:** Put the data view on the page, inside `placeholder Main { … }`. For a toggling sidebar, make the `scrollcontainer` the layout’s one top-level widget and put the toggle in one of its regions, for example `region top { sidebartoggle tg (Caption: 'Menu') }`. A layout built on another one (`Layout:`) is checked only for data views.
+
+### [MDL-REST06: `create or modify` removes stored operations](#mdl-rest06-create-or-modify-removes-stored-operations)
+
+```
+⚠ create or modify published rest service Shop.BookingApi removes 1 stored operation(s) it does not list:
+GET bookings/{id} [MDL-REST06]
+
+```
+
+**Cause:** `create or modify published rest service` describes the whole service. An operation of the stored service that the statement does not list is deleted. That is right when the script means to remove it. It is a loss when the statement was written to add one operation and lists only that. exec used to report only “Modified published rest service”.
+
+**Solution:** List every operation the service keeps; `describe published rest service` prints them. To add or remove one operation, leave the rest of the service alone with `alter published rest service … add operation in resource '<name>' { <operation>; }` and `drop operation <method> ['<path>'] in resource '<name>'`. `check` refuses `add resource` with the name of a stored resource, and `add operation` with an operation the resource already has, as exec does.
 
 ## [mxcli Parser Errors](#mxcli-parser-errors)
 
