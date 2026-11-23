@@ -1,3 +1,7 @@
+## 2026-11-23 -- mxcli v0.33.1 @ 811702b
+- +114 / -17 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.33.0](#release-mxcli-v0330), [Release: mxcli v0.33.1](#release-mxcli-v0331), [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions), [Commands](#commands-2), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2) (+15 more)
+
 ## 2026-11-22 -- mxcli v0.32.0 @ 6176c66
 - +144 / -20 lines
 - Sections changed: [CREATE EXTERNAL ENTITIES](#create-external-entities), [CREATE EXTERNAL ENTITY](#create-external-entity), [Description](#description-62), [Examples](#examples-74), [External Entity Statements](#external-entity-statements), [Parameters](#parameters-62), [Recording a baseline does not accept errors silently](#recording-a-baseline-does-not-accept-errors-silently), [Reference](#reference) (+2 more)
