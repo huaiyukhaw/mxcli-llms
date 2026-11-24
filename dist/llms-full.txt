@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.33.1 @ 811702b
-Generated: 2026-11-23T10:11:31Z
+Version:   mxcli v0.33.1 @ 997c721
+Generated: 2026-11-24T11:55:51Z
 
 ---
 
@@ -8737,6 +8737,12 @@ would not produce it on its own. A flow written without annotations describes
 without them. A statement placed by hand keeps its `@position`, and the
 statements the layout places after it follow from it without one.
 
+Sizes are written the same way. A loop whose box is not the one the layout
+would compute prints `@size(w, h)`, as does a `while true` loop-head merge or a
+`merge <label>` that is not 40×40, and a decision’s closing merge of another
+size prints it as `@merge(x, y, w, h)`. Studio Pro draws merges at 90×60, so a
+flow from Studio Pro keeps its boxes when it is dropped and created again.
+
 Whether an annotation is needed is not guessed from the coordinates. `DESCRIBE`
 builds the flow again from its own output, exactly as `CREATE OR MODIFY` would
 (nothing is written), and every node that lands elsewhere keeps its annotation.
@@ -15692,7 +15698,12 @@ Entities are layered on the associations between them:
 
 - an entity that references nothing else in the module is a **lookup**, and goes
   in the leftmost column;
-- everything else sits one column past the furthest thing it references;
+- everything else sits one column past the furthest thing it references, on the
+  **row of the entity it is most linked to**, so the line between them runs
+  straight across (the next free spot below when that row is taken);
+- the **gap between two columns** is wide enough for the longest association
+  name drawn across it, plus the 1 / \* markers at its ends, so Studio Pro does
+  not cut the label off;
 - entities with **no association at all** — non-persistent helpers, mostly — go
   in a band underneath, rather than being mixed in with the lookups.
 
@@ -17008,6 +17019,8 @@ nanoflow subset).
 | `ActivityCount` | Activities at the top level of the flow, excluding start/end events and merges. A loop counts as one |
 | `TotalActivityCount` | `ActivityCount` plus every activity inside a loop, at any depth |
 | `Complexity` | McCabe cyclomatic complexity |
+| `MarkAsUsed` | 1 when Studio Pro’s “Mark as used” is set: an entry point with no inbound reference |
+| `URL` | The microflow’s URL (deep link), if any; empty for nanoflows and rules |
 
 ```
 SELECT Name, ReturnType, ActivityCount, TotalActivityCount
@@ -17146,6 +17159,7 @@ Information about pages and their properties.
 | `ParameterCount` | Number of page parameters |
 | `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
 | `Excluded` | 1 when the page is excluded from the project |
+| `MarkAsUsed` | 1 when Studio Pro’s “Mark as used” is set |
 | `Class`, `Style`, `DynamicClasses` | The page’s own Appearance: CSS class, inline style and dynamic-classes expression (full build only) |
 
 ```
