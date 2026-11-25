@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.33.1 @ 997c721
-Generated: 2026-11-24T11:55:51Z
+Version:   mxcli v0.33.1 @ 7ec3d1c
+Generated: 2026-11-25T10:48:00Z
 
 ---
 
@@ -15696,29 +15696,58 @@ mxcli layout -p app.mpr                            # every module the project ow
 
 Entities are layered on the associations between them:
 
-- an entity that references nothing else in the module is a **lookup**, and goes
-  in the leftmost column;
+- an entity that references nothing else in the module is a **lookup**: it goes
+  in the column just left of its **nearest referrer**, and moves to the row of
+  the entities referencing it where its column has room;
 - everything else sits one column past the furthest thing it references, on the
   **row of the entity it is most linked to**, so the line between them runs
   straight across (the next free spot below when that row is taken);
 - the **gap between two columns** is wide enough for the longest association
   name drawn across it, plus the 1 / \* markers at its ends, so Studio Pro does
   not cut the label off;
-- entities with **no association at all** — non-persistent helpers, mostly — go
-  in a band underneath, rather than being mixed in with the lookups.
+- entities with **no association at all** — non-persistent helpers, mostly — are
+  kept out of the graph’s columns: they fill the free space to its right or
+  below it, wherever the diagram stays closest to a landscape screen;
+- a lookup that would have a column to itself may instead share its nearest
+  referrer’s column, directly above or below it, when that crosses less or
+  makes the diagram narrower without making it taller;
+- an entity with a **cross-module association** — at either end, the module’s
+  own or another module’s pointing in — is placed where Studio Pro’s line for
+  it, which always runs from the box’s left side straight to the canvas edge,
+  passes no other box; the leftmost column starts far enough right for those
+  labels. Modules where most entities have such lines get taller: each column
+  steps below the one to its left;
+- every association line is **re-attached** on the sides of its two boxes that
+  face each other, straight across where the boxes share a span (and no other
+  box is in the way), the rest spread along the side so no two lines meet at
+  one point. `--only-overlapping` leaves the attachment points alone.
 
-Association lines then mostly run one way instead of crossing the diagram.
+Association lines then mostly run one way instead of crossing the diagram. On
+top of that, `layout` tries swapping neighbouring entities in each column and
+keeps a swap whenever it leaves fewer lines crossing each other or running
+through a box. Every module it changes reports the count, before and after:
 
-On a real 16-entity model the layering falls out of the associations with no
-hints:
+```
+  Catalog: crossings 30 -> 6 (lines crossing lines 10 -> 4, lines through a box 20 -> 2; estimated)
+
+```
+
+Lint rule **MPR021** reports a line that still runs through an entity it does
+not connect, so a crossing `layout` cannot remove gets a name.
+
+On the 15-entity test model (`capTrack` in `mdl/dmlayout`) the layering falls
+out of the associations with no hints:
 
 | column | entities |
 | --- | --- |
-| 1 | `Department`, `EmploymentType`, `MovementReason`, `PlanType`, `PlanningYear`, `Region` |
-| 2 | `Team`, `GoalBucket` |
-| 3 | `GoalChange`, `GoalRegionValue`, `PlanScope`, `CapTrackUser` |
-| 4 | `Employee`, `ScopeMonth` |
+| 1 | `Department`, `PlanningYear` |
+| 2 | `Region`, `PlanType`, `Team`, `GoalBucket` |
+| 3 | `EmploymentType`, `PlanScope` |
+| 4 | `MovementReason`, `ScopeMonth`, `Employee` |
 | 5 | `EmployeeMonth`, `Movement` |
+
+`EmploymentType` and `MovementReason` are lookups only `Employee` and `Movement`
+use, so they sit beside them rather than in column 1.
 
 ## [It replaces positions you set by hand](#it-replaces-positions-you-set-by-hand)
 
@@ -18738,7 +18767,7 @@ In addition to the built-in Go rules, mxcli bundles 29 Starlark-based lint rules
 | Rule | Description |
 | --- | --- |
 | **SEC004** | Guest access – Warns about overly permissive guest/anonymous access |
-| **SEC005** | Strict mode – Checks for strict security mode settings |
+| **SEC005** | Strict mode – Flags strict mode off at Production level with the React client: the client API is not restricted |
 | **SEC006** | PII exposure – Detects potentially sensitive data without restricted access |
 | **SEC007** | Anonymous access – Flags entities accessible to anonymous users |
 | **SEC008** | Member restrictions – Checks for overly broad member-level access |
@@ -20756,9 +20785,9 @@ wrong value (FAIL).
 
 ## [`@throws`](#throws)
 
-Marks a body that is expected to raise an error. The verdict starts as a failure
-and only the error handler clears it, so a body that completes normally fails the
-test.
+Marks a body that is expected to raise an error. The verdict starts as a failure,
+so a body that completes normally fails the test; an error that leaves the test
+microflow is compared with the message.
 
 ```
 /**
@@ -20798,28 +20827,28 @@ $result = call microflow Sales.ACT_Submit(Order = $empty);
 Anything after `@throws` that is not a single-quoted string is an error, not a
 message — `@throws not found` is refused rather than read as an unquoted one.
 
-The handler is attached to every **call** in the body: `call microflow`,
-`call nanoflow`, `call java action`, `call external action`, `call web service`,
-`call workflow`, `call rest service`, `send rest request` and
-`execute database query`. An error raised by any other statement — a `commit`,
-a `change`, a `create` — is not caught; move it into a microflow and call that.
-The same handler turns an unexpected error in a test without `@throws` into a
-FAIL reading `exception during execution: <message>`.
+An error raised by **any** statement in the body — a call, a `commit`, a
+`change` — leaves the test microflow, and the test endpoint reports its message.
+Without `@throws` that is a FAIL reading `exception during execution: <message>`;
+with it, the message is compared as above. The runner adds no error handler of
+its own to the body (mendixlabs/mxcli#1874: a generated handler that read the
+message made mxbuild’s incremental build report CE0108, so `test --attach` could
+not run a test that called a microflow).
 
 ### [A call with its own error handling](#a-call-with-its-own-error-handling)
 
-A call that already has an `on error` clause keeps it and gets no second
-handler, so a test runs the statement exactly as production code does. What the
+A call that has an `on error` clause keeps it, so a test runs the statement
+exactly as production code does. What the
 test then reports depends on the clause (measured on Mendix 11.13 with a Java
 action that throws):
 
 | Clause on the call | Without `@throws` | With `@throws` |
 | --- | --- | --- |
 | none | FAIL `exception during execution: <message>` | PASS when the message matches |
-| `on error rollback` | same as none — it is Mendix’s default spelled out, so the runner’s handler takes its place | same as none |
+| `on error rollback` | same as none — it is Mendix’s default spelled out | same as none |
 | `on error continue` | the error is swallowed; the assertions decide (`$r` is empty) | FAIL `expected an exception but none was thrown` |
 | custom handler that ends normally | FAIL `not every assertion was evaluated` when an assertion reads the call’s result; an assertion on what the handler did is evaluated | FAIL `expected an exception but none was thrown` |
-| custom handler that re-raises (`raise error`) | ERROR with the message — the error leaves the test microflow | ERROR with the message |
+| custom handler that re-raises (`raise error`) | FAIL `exception during execution: <message>` — the error leaves the test microflow | PASS when the message matches |
 
 A custom handler that ends normally rejoins the flow after every statement that
 reads the failed call’s output, because that variable does not exist on the
@@ -21362,15 +21391,15 @@ system context, which entity access does not restrict, so what a test reads and
 writes is the same either way.
 
 An applying microflow may not read the attributes of `System.Error`
-(CE0150), so the runner’s own error handlers pass `$latestError` to a generated
-helper, `MxTest.Test_ErrorMessage`, which does not apply entity access and
-returns the message. A test whose **own** error handler reads `$latestError/…`
-keeps a test microflow that does not apply entity access, so it builds as it
-did; if that test also calls a microflow that applies entity access, no setting
-serves both, and the handler has to pass `$latestError` to a microflow of yours
-that does not apply it, as CE0150’s own text says. Under `--legacy-runner` the
-whole suite shares one microflow, so one such test keeps all of them
-non-applying.
+(CE0150). The runner’s test microflows do not need to: an error leaves the test
+microflow and the endpoint reports its message. A test whose **own** error
+handler reads `$latestError/…` keeps a test microflow that does not apply entity
+access, so it builds as it did; if that test also calls a microflow that applies
+entity access, no setting serves both, and the handler has to pass `$latestError`
+to a microflow of yours that does not apply it, as CE0150’s own text says. Under
+`--legacy-runner` the whole suite shares one microflow — and its handlers still
+read the message through a generated helper, `MxTest.Test_ErrorMessage` — so one
+such test keeps all of them non-applying.
 
 A build error located in `MxTest.RegisterEndpoint`,
 `MxTest.RegisterTestEndpoint` or `MxTest.Test_ErrorMessage` is reported as
@@ -43273,9 +43302,14 @@ version you actually have at the moment you create the widget.
 3. **Apply the widget’s own dynamic rules.** Which properties a widget shows depends on
    its *configuration* — a Combo box in enumeration mode hides the association properties;
    a DataGrid 2 with selection off hides the selection labels. That logic lives in each
-   widget’s compiled `editorConfig.js`. mxcli statically extracts those **dynamic property
-   rules** and applies them, so a freshly-created widget carries exactly the defaults
-   Studio Pro would give it.
+   widget’s compiled `editorConfig.js`. mxcli **runs** that file’s `getProperties` the
+   way Studio Pro does — in an embedded JavaScript interpreter, for the widget’s actual
+   settings — and applies the answer, so a
+   freshly-created widget carries exactly the defaults Studio Pro would give it. The
+   script has no access to files, the network or processes, and a call that does not
+   return within a second is stopped. A property hidden only for one `target` (`"web"`
+   or `"desktop"`, as TreeNode’s `advancedMode` is) does not count as hidden: mxbuild
+   enforces neither branch, so only what both hide must hold its default.
    
    A property the widget hides must hold its default, or the build fails with CE0463.
    So a hidden property you leave out is written at its default; one you set to its
@@ -43285,10 +43319,12 @@ version you actually have at the moment you create the widget.
    Timeline grouped by `'day'` hides `groupByMonthOptions`, and one with
    `customVisualization: true` hides both format enumerations.
    
-   This only covers rules mxcli recognises. `mxcli widget describe <name> -p app.mpr`
-   ends with “*N* of *M* editor hide-rules recognized”. A rule it cannot read hides
-   nothing as far as `check` knows, so a value set behind one reaches `mx check`
-   unwarned.
+   This covers the widget’s own properties, whatever JavaScript the widget uses to hide
+   them. The properties of an object-list **item** (a chart series, a Data grid column)
+   still go by the rules mxcli can read from the source: `mxcli widget describe <name> -p app.mpr` lists them and ends with “*N* of *M* editor hide-rules recognized as
+   rules”. A value set behind an item rule mxcli cannot read reaches `mx check`
+   unwarned. Without the widget’s `.mpk` in the project (a widget described from
+   mxcli’s embedded templates), only the read rules apply.
 
 The result: widgets created by mxcli open cleanly across Mendix 10.x and 11.x with the
 widget packages bundled with those releases — verified on Mendix 11.12 with Data

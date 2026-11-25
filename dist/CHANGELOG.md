@@ -1,3 +1,7 @@
+## 2026-11-25 -- mxcli v0.33.1 @ 7ec3d1c
+- +78 / -42 lines
+- Sections changed: [Bundled Starlark Rules](#bundled-starlark-rules), [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [How tests execute](#how-tests-execute), [What it does](#what-it-does), [`@throws`](#throws)
+
 ## 2026-11-23 -- mxcli v0.33.1 @ 811702b
 - +114 / -17 lines
 - Sections changed: [Blog](#blog), [Release: mxcli v0.33.0](#release-mxcli-v0330), [Release: mxcli v0.33.1](#release-mxcli-v0331), [CE0463 and stale widget definitions](#ce0463-and-stale-widget-definitions), [Commands](#commands-2), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2) (+15 more)
