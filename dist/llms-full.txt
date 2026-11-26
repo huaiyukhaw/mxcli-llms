@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.33.1 @ 7ec3d1c
-Generated: 2026-11-25T10:48:00Z
+Version:   mxcli v0.33.1 @ a581957
+Generated: 2026-11-26T10:21:14Z
 
 ---
 
@@ -9210,6 +9210,38 @@ reports a missing one as CE0166.
 Studio Pro’s *Test Email* tab is an editor tool and is not part of MDL; rewriting
 the microflow stores it empty.
 
+## [Metrics](#metrics)
+
+### [INCREMENT COUNTER / SET GAUGE](#increment-counter--set-gauge)
+
+The three **Metrics Activities** of Studio Pro’s toolbox (Mendix 9.5+, microflows
+only). The runtime reports them through Micrometer to the registries configured
+in the `Metrics.Registries` custom runtime setting — `opentelemetry`,
+`prometheus`, `jmx`, `influx` or `statsd`.
+
+```
+INCREMENT COUNTER 'shop.orders.placed' (Tags: ('channel': $Order/Channel));  -- Increment Counter
+INCREMENT COUNTER 'shop.orders.items' BY $Order/ItemCount;                   -- Counter
+SET GAUGE @Shop.OpenOrdersMetric TO $OpenOrders (Tags: ('region': 'eu'));    -- Gauge
+
+```
+
+- `INCREMENT COUNTER` without `BY` adds one (Studio Pro’s *Increment Counter*);
+  with `BY` it adds the value (*Counter*). `SET GAUGE … TO` sets a gauge.
+- The **name**, the **value** and every **tag key and value** are expressions,
+  as Studio Pro stores them: a quoted literal or a constant. The name and the
+  tags are String; `BY` is Integer or Long; `TO` is Decimal (Integer is
+  accepted). Anything else is CE0117 at build; `check --references` reports it
+  first (E009).
+- A literal name starts with a letter, holds only letters, digits, dots and
+  underscores, and does not start with `mx` in any case — Mendix reserves that
+  prefix for its own metrics (MDL-METRIC01; mxbuild CE7040, CE7048, CE7049).
+- A counter only goes up: `BY` with a negative literal is refused
+  (MDL-METRIC02). mxbuild accepts it; the runtime does not.
+- `Tags` is the one setting of the property list (ADR-0013).
+- `ON ERROR CONTINUE` is CE6035 on all three (MDL076); a custom handler, with or
+  without rollback, works.
+
 ## [Database Query Execution](#database-query-execution)
 
 ### [EXECUTE DATABASE QUERY](#execute-database-query)
@@ -9257,6 +9289,7 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Log | `LOG INFO|WARNING|ERROR [NODE 'name'] 'msg';` | – |
 | DB query | `$Var = EXECUTE DATABASE QUERY Module.Conn.Query;` | Result set |
 | Send email | `SEND EMAIL (From: …, To: …, Subject: '…', Host: …, Port: …);` (11.13+) | – |
+| Metrics | `INCREMENT COUNTER 'name' [BY n] [(Tags: (…))];` / `SET GAUGE 'name' TO n;` (9.5+) | – |
 | Assignment | `SET $Var = expression;` | – |
 | Change list | `ADD $Item TO $List;` / `REMOVE $Item FROM $List;` / `CLEAR $List;` / `SET $List = $Other;` | – |
 
@@ -10015,6 +10048,7 @@ The following activities are server-only and cannot be used in nanoflows:
 - `IMPORT FROM MAPPING` / `EXPORT TO MAPPING` — mapping operations are server-side
 - `EXECUTE DATABASE QUERY` — direct SQL requires server
 - `TRANSFORM JSON` — JSON transformations are server-side
+- `INCREMENT COUNTER` / `SET GAUGE` — metrics are reported by the runtime
 - `SHOW HOME PAGE` — home page navigation is server-side
 - `CALL EXTERNAL ACTION` — external actions are server-side
 - All **workflow actions** (call/open workflow, set task outcome, user task, etc.)
@@ -22967,7 +23001,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
-| `--serve-port` | 6543 | `mxbuild --serve` port |
+| `--serve-port` | 6543, or a free port when 6543 is busy | `mxbuild --serve` port. Unset, a run keeps 6543 when it can and moves to a free port when another run holds it, so a second app needs no port flags for it; the handshake publishes whichever it chose. Set explicitly, that port is used and a collision is refused |
 | `--listen-addr` | `127.0.0.1` | IP address the app binds to (not a host name). `0.0.0.0` binds all IPv4 interfaces, `::` all interfaces, so other machines on the network can open the app; the URLs it is reachable at are printed after boot. The runtime does not derive an application root URL from this address, so if the app builds absolute URLs (SSO redirects, links in emails) pass `--runtime-setting ApplicationRootUrl=http://<host>:<port>/` or set a real host in the configuration (a warning says so). The M2EE admin API is unaffected and always binds `127.0.0.1` |
 | `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
@@ -23257,9 +23291,9 @@ cache.
 
 ## [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
 
-`run --local` refuses to boot if its ports (`8080` app, `8090` admin, `6543` serve)
-are already answering — because a previous `run --local` (or a stray `mxbuild --serve`
-/ runtime) left alive would otherwise be **silently adopted**: the startup readiness
+`run --local` refuses to boot if its **app** or **admin** port (`8080`, `8090`) is
+already answering — because a previous `run --local` (or a stray runtime) left alive
+would otherwise be **silently adopted**: the startup readiness
 probes only check that the port answers, so a fresh run would attach to the old
 process and keep serving old output. That reads exactly like a stale cache but is a
 stale **process**.
@@ -45630,6 +45664,19 @@ CE4899 "Empty caption" [MDL-I18N01]
 
 **Solution:** Use the suggested spelling, or the right token for the context: a length or role token only in an XPath, the flow’s variable instead of `[%CurrentObject%]`. A role token’s role name is checked separately, against the project’s user roles (CE1613).
 
+### [MDL-LOOP01: A loop body in canvas coordinates](#mdl-loop01-a-loop-body-in-canvas-coordinates)
+
+```
+⚠ the body of `loop $Item in $Items` looks positioned in canvas coordinates: its box would be 1310x380
+  with 1140px empty before the body, and the box is centred on the loop, so it covers the activities around it [MDL-LOOP01]
+  → … Subtract (990, 220) from every body @position: @position(1200, 300) becomes @position(210, 80).
+
+```
+
+**Cause:** Inside a `loop` or `while` body, `@position` is measured from the loop box’s top-left corner, not from the canvas. Mendix stores body nodes that way, and `describe` prints them that way. Without `@size`, mxcli sizes the box to reach the body: from the box’s own edge to the body’s right and bottom edges, plus 50px. A body written in canvas coordinates therefore makes a box that grows with the loop’s position on the canvas. Measured on Mendix 11.12: a loop at x = 1200 with its body at x = 1200 stored a `1310;380` box. The box is centred on the loop, so it covers its neighbours, and lint later reports MPR008 or MPR011 there. The warning fires when more than half of the box, and more than 300px, would lie empty to the left of or above the body.
+
+**Solution:** Shift the body by the amount the suggestion gives, so its first node sits near (210, 80). Alternatively, leave the body’s `@position` out and let mxcli place it, or state the box with `@size(w, h)`. A loop that already has a box that is too large is repaired by `mxcli layout flows`.
+
 ### [MDL-DUPDEF: Element defined twice in one script](#mdl-dupdef-element-defined-twice-in-one-script)
 
 ```
@@ -45719,6 +45766,28 @@ GET bookings/{id} [MDL-REST06]
 
 **Solution:** List every operation the service keeps; `describe published rest service` prints them. To add or remove one operation, leave the rest of the service alone with `alter published rest service … add operation in resource '<name>' { <operation>; }` and `drop operation <method> ['<path>'] in resource '<name>'`. `check` refuses `add resource` with the name of a stored resource, and `add operation` with an operation the resource already has, as exec does.
 
+### [MDL-NATIVEBAR01: A native bottom bar item exec cannot write](#mdl-nativebar01-a-native-bottom-bar-item-exec-cannot-write)
+
+```
+✗ navigation NativePhone: bottom bar item "Menu" has a collection or image icon — the native bottom bar is flat, opens a page, and shows a glyph icon [MDL-NATIVEBAR01]
+
+```
+
+**Cause:** A `NativePhone` profile’s `{ }` block is its bottom bar. It is flat, each item opens a page by name, and its icon is a glyph code. A nested `menu`, a collection or image icon, and an `OnClick` other than `show page` without arguments are refused by exec. Before this check existed, exec named them one at a time, and `check` only warned that items had no icon for a web sidebar (MDL077), which a native profile does not have (ako/mxcli#2561).
+
+**Solution:** List each page as a bottom bar item of its own, write `Icon: glyph <code>` or leave the icon out, and use `OnClick: show page Module.Page`.
+
+### [MDL-NATIVEBAR02: A bottom bar item no user role may see](#mdl-nativebar02-a-bottom-bar-item-no-user-role-may-see)
+
+```
+⚠ navigation NativePhone: no user role may view the page of any bottom bar item ("Menu" (NativeApp.Home_Native)), so every item is hidden and the bottom bar is not shown [MDL-NATIVEBAR02]
+
+```
+
+**Cause:** mxbuild gives each native bottom bar item the roles that may view its page. The native client keeps an item only when the user has one of them, and shows no bottom bar when none is left. Pages just created in a new module have no `grant view`, so the app opened its home page with no bar while `check`, `exec` and `mx check` all passed (ako/mxcli#2565). Reported at security Prototype or Production only, from page access and user roles as the project stores them and the script changes them.
+
+**Solution:** `grant view on page <page> to <Module.Role>`, with that module role in a user role: `alter user role <Role> add module roles (<Module.Role>)`.
+
 ## [mxcli Parser Errors](#mxcli-parser-errors)
 
 ### [MDL-MCPSERVER01: A published MCP service the runtime will not start](#mdl-mcpserver01-a-published-mcp-service-the-runtime-will-not-start)
@@ -45803,6 +45872,66 @@ mxbuild does not read agent documents, so the build is green.
 
 **Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
 like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
+
+### [MDL-BE01..BE07: A consumed business event service that cannot work](#mdl-be01be07-a-consumed-business-event-service-that-cannot-work)
+
+```
+statement 1: business event service Shop.OrdersEventClient: MDL-BE02: `consume OrderPlacedEvent`
+names a message the contract does not define — it declares OrderPlaceEvent. mxbuild reports
+nothing (measured, #2384 §6): the service builds and subscribes to no such event, so the
+handler never runs. Message names are case-sensitive
+
+```
+
+**Severity:** BE01-BE05 are errors, refusing `exec`; BE06 and BE07 are warnings.
+
+| Code | Condition | Severity |
+| --- | --- | --- |
+| `MDL-BE01` | the contract is AsyncAPI 2.x YAML with at least one channel | error |
+| `MDL-BE02` | each `consume` names a message in `components.messages` | error |
+| `MDL-BE03` | the consumed entity is persistent and extends `BusinessEvents.ConsumedBusinessEvent` | error |
+| `MDL-BE03` | it declares an attribute per payload property, of a type that encoding holds | warning |
+| `MDL-BE04` | the handler takes exactly one parameter, accepting the consumed object | error |
+| `MDL-BE05` | the `BusinessEvents` marketplace module is in the project | error |
+| `MDL-BE06` | the app does **not** call `BusinessEvents.StartupBusinessEvents` (Mendix 11.16.1+, where MxBuild starts the module itself) | warning |
+| `MDL-BE07` | `BusinessEvents.ServerUrl` is set, and one of `ChannelName` / `EventBrokerSpace` | warning |
+
+**Cause:** mxbuild validates none of this. Measured on mxbuild 11.16.1 (ako/mxcli#2384 §6), a
+consumer whose `consume` names a message the contract does not contain builds with **0 errors**,
+and the build never looks at the consumed entity, the handler’s signature, the marketplace module
+or the broker constants. What fails is the running app: it consumes nothing, silently, or — for
+BE07 — does not boot at all, because `StartupBusinessEvents` throws in the after-startup action
+(“Resolved value for constant: BusinessEvents.ServerUrl was not found or blank”, then “Constant
+BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set”).
+
+**Solution:** The three-statement recipe — the `CBE_` entity, the handler, then the service — is in
+the `business-events` skill. BE06 is satisfied by **removing** any call to
+`BusinessEvents.StartupBusinessEvents`. Measured on Mendix 11.16.1 with module 3.12.1,
+MxBuild starts the module itself: it writes a microflow `BusinessEvents.ASu_BusinessEvents`
+into the compiled model — present in neither the project nor the module package — and calls
+it from the app’s after-startup microflow, which in turn calls `ConsumeBusinessEvent` (the
+consumers) and `StartupBusinessEvents`. An explicit call is a second start, and
+`HeartbeatService.init` replaces its scheduled thread pool without shutting the old one
+down, so it leaks a pool and leaves two heartbeat schedules running. The symptom is the
+start-up pair logged twice. Event flow does not test the call: consumers come from
+`ConsumeBusinessEvent`, so events keep flowing while metrics, the summary log and the
+heartbeat stop. Below 11.16.1 the rule says nothing — which versions started wiring it in
+is not measured, and on one that does not the call is required.
+
+**BE06 previously demanded this call**, on the premise that nothing else started the module.
+It warned on correctly wired apps and then, once the call was removed, asked for it back
+(ako/mxcli#2384 B1/M4). BE07’s two values are per-environment, which is why
+an empty **default** only warns: supply them with `mxcli constant set BusinessEvents.ServerUrl '<broker>:9092'` or `--constant` for a dev run.
+
+**Why some of it only warns:** BE03’s attribute half is a warning because mxbuild does not
+validate the contract-to-entity mapping at all, so a mismatch is a runtime fact rather than a
+build error. The encodings themselves are now known for every type a business event may carry
+(`businessevents.MendixAttributeTypesFor`), and an encoding Mendix never writes is still not
+judged. The check accepts a **set** per encoding rather than one type: an enumeration travels as
+its key, so a `string` property is as well served by an `Enumeration` attribute as by a `String`,
+and demanding the single type Mendix renders would flag correct models. BE06 and BE07 are project configuration a later
+statement or a deployment may legitimately supply, so refusing `exec` over them would block
+authoring a consumer before the app is wired up.
 
 ### [MDL-LISTOP02: A list operation nested inside another one](#mdl-listop02-a-list-operation-nested-inside-another-one)
 
@@ -46013,6 +46142,25 @@ ignored or the header fails only when a mail is sent.
 **Solution:** `SecurityType: ssl, CheckServerIdentity: true`, or drop
 `CheckServerIdentity`; rename the header, e.g.
 `Headers: ('X-Correlation-Id': 'value')`.
+
+### [MDL-METRIC01 / 02: A metric name or counter increment mxbuild or the runtime refuses](#mdl-metric01--02-a-metric-name-or-counter-increment-mxbuild-or-the-runtime-refuses)
+
+```
+increment counter: metric name "mx.orders" must not start with 'mx', which Mendix reserves for its own metrics [MDL-METRIC01]
+increment counter: a counter cannot be incremented by a negative value [MDL-METRIC02]
+
+```
+
+**Cause:** A metric name written as a string literal must start with a letter,
+hold only letters, digits, dots and underscores, and not start with `mx` in any
+case (MDL-METRIC01) — mxbuild reports the same as CE7040, CE7048 and CE7049. A
+counter only goes up (MDL-METRIC02); mxbuild 11.16.1 accepts `by -1`, so the
+runtime is the first to refuse it. A name given as a constant or another
+expression is not judged.
+
+**Solution:** Use a name like `'acme.orders.placed'`, a prefix for your
+organisation and app followed by dots or underscores. For a value that goes down
+as well as up, use `set gauge … to …`.
 
 ### [MDL-TEMPLATE01: A message written as an expression followed by `with (…)`](#mdl-template01-a-message-written-as-an-expression-followed-by-with-)
 

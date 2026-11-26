@@ -1,3 +1,7 @@
+## 2026-11-26 -- mxcli v0.33.1 @ a581957
+- +152 / -4 lines
+- Sections changed: [Activities NOT Available in Nanoflows](#activities-not-available-in-nanoflows), [Flags](#flags-3), [Metrics](#metrics), [Summary Table](#summary-table), [mxcli Check Errors](#mxcli-check-errors), [mxcli Parser Errors](#mxcli-parser-errors), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
+
 ## 2026-11-25 -- mxcli v0.33.1 @ 7ec3d1c
 - +78 / -42 lines
 - Sections changed: [Bundled Starlark Rules](#bundled-starlark-rules), [How mxcli stays version-correct](#how-mxcli-stays-version-correct), [How tests execute](#how-tests-execute), [What it does](#what-it-does), [`@throws`](#throws)
