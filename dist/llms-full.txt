@@ -1,8 +1,8 @@
 # mxcli Documentation — Full Reference
 
 Source:    https://www.mxcli.org/print.html
-Version:   mxcli v0.33.1 @ a581957
-Generated: 2026-11-26T10:21:14Z
+Version:   mxcli v0.33.1 @ 90b5994
+Generated: 2026-11-27T10:27:02Z
 
 ---
 
@@ -35872,7 +35872,7 @@ ALTER PUBLISHED MCP SERVICE Shop.OrdersMCP
 
 ```
 CREATE [ OR MODIFY ] AGENT module.Name (
-    UsageType: { Task | Conversational },
+    UsageType: { Task | Chat },
     model: module.ModelName,
     SelectedModel: 'model id',
     SystemPrompt: 'prompt' | $$ multi-line prompt $$,
@@ -35915,8 +35915,10 @@ At startup Agent Editor copies each agent into Agent Commons entities with fixed
 
 | Value | Description |
 | --- | --- |
-| `Task` | Single-turn task completion |
-| `Conversational` | Multi-turn conversational agent |
+| `Task` | Single-turn task completion (Agent Commons’ `Single_Call`) |
+| `Chat` | Multi-turn conversational agent (Agent Commons’ `Conversational`) |
+
+Agent Editor’s import reads the value case-insensitively and accepts only these two: `Conversational`, the Agent Commons name, is refused (“Usage Type is not valid for the Agent”), and so is an agent with none (“Usage Type is missing for the Agent”). The build does not read it, so `mxcli check` warns on either (MDL-AGENT05).
 
 ### [Prompts](#prompts)
 
@@ -35950,7 +35952,7 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 [`module.Name`](#modulename-31)
 The qualified name of the agent document.
 [`UsageType`](#usagetype)
-Whether the agent is `Task` (single-turn) or `Conversational` (multi-turn).
+Whether the agent is `Task` (single-turn) or `Chat` (multi-turn). Any other value, or none, fails Agent Editor’s import at startup (MDL-AGENT05).
 [`model: module.ModelName`](#model-modulemodelname)
 Qualified reference to the model document the agent uses.
 [`SelectedModel`](#selectedmodel)
@@ -36061,7 +36063,7 @@ Provide specific, actionable feedback.$$,
 
 ```
 CREATE AGENT MyModule."ResearchAssistant" (
-    UsageType: Conversational,
+    UsageType: Chat,
     description: 'Research assistant with web search and documentation',
     model: MyModule.GPT4Model,
     SelectedModel: 'eu.anthropic.claude-sonnet-5',
@@ -45872,6 +45874,42 @@ mxbuild does not read agent documents, so the build is green.
 
 **Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
 like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
+
+### [MDL-AGENT05: An agent UsageType Agent Editor does not import](#mdl-agent05-an-agent-usagetype-agent-editor-does-not-import)
+
+```
+agent Helpdesk.HelpdeskAgent: UsageType "Conversational" is not one Agent Editor imports
+(Task or Chat): at startup the import refuses the agent [MDL-AGENT05]
+
+```
+
+**Cause:** At startup `AgentEditorCommons.AgentFromModel_Validate` reads the usage type through
+`UsageType_StringToENUM`, which accepts `task` and `chat` in any case and nothing else (Agent
+Editor 2.7.0). Any other value fails with “Usage Type is not valid for the Agent”, and an agent
+with none with “Usage Type is missing for the Agent”; the agent is not imported. mxbuild does not
+read agent documents, so the build is green.
+
+**Solution:** Write `UsageType: Task` or `UsageType: Chat`. `Conversational` is Agent Commons’
+name for Chat and is refused. It is a warning, like MDL-AGENT01, because a newer Agent Editor
+may add usage types.
+
+### [MDL-CDC01: A tracked association mxbuild cannot capture](#mdl-cdc01-a-tracked-association-mxbuild-cannot-capture)
+
+```
+change data capture service Shop.OrdersCdc tracks association Shop.Order_Primary (owner Both)
+from Shop.Order only: both sides own it, and mxbuild refuses it until Shop.Tag tracks it too
+(CE1583) [MDL-CDC01]
+
+```
+
+**Cause:** mxbuild requires the entity at the other end of a tracked association to be a
+source of the service, and an association both sides own (`owner Both`) to be tracked from
+both: Studio Pro’s CDC editor offers it on both entities. Either gap is CE1583, “For an
+association to function correctly in data to capture, the associated entity … must also be
+included”. `check` and `exec` passed both before (measured on 11.17.0).
+
+**Solution:** Add the other entity to the service, and for an `owner Both` association name it
+in that entity’s member list too, or make the association `owner Default`.
 
 ### [MDL-BE01..BE07: A consumed business event service that cannot work](#mdl-be01be07-a-consumed-business-event-service-that-cannot-work)
 

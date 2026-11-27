@@ -1,3 +1,7 @@
+## 2026-11-27 -- mxcli v0.33.1 @ 90b5994
+- +43 / -5 lines
+- Sections changed: [Description](#description-61), [Examples](#examples-73), [Parameters](#parameters-61), [Synopsis](#synopsis-61), [mxcli Parser Errors](#mxcli-parser-errors)
+
 ## 2026-11-26 -- mxcli v0.33.1 @ a581957
 - +152 / -4 lines
 - Sections changed: [Activities NOT Available in Nanoflows](#activities-not-available-in-nanoflows), [Flags](#flags-3), [Metrics](#metrics), [Summary Table](#summary-table), [mxcli Check Errors](#mxcli-check-errors), [mxcli Parser Errors](#mxcli-parser-errors), [“My edit didn’t show up” — it’s usually a stale process, not a cache](#my-edit-didnt-show-up--its-usually-a-stale-process-not-a-cache)
