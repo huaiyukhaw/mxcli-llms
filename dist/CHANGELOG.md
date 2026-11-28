@@ -1,3 +1,7 @@
+## 2026-11-28 -- mxcli v0.34.0 @ 71b7612
+- +86 / -24 lines
+- Sections changed: [Blog](#blog), [Release: mxcli v0.34.0](#release-mxcli-v0340), [Feature Availability Matrix](#feature-availability-matrix), [Parameters](#parameters-1), [Parameters](#parameters-38), [Upgrading](#upgrading), [Upgrading](#upgrading-1), [Upgrading](#upgrading-2) (+16 more)
+
 ## 2026-11-27 -- mxcli v0.33.1 @ 90b5994
 - +43 / -5 lines
 - Sections changed: [Description](#description-61), [Examples](#examples-73), [Parameters](#parameters-61), [Synopsis](#synopsis-61), [mxcli Parser Errors](#mxcli-parser-errors)
